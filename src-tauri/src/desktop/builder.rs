@@ -1092,6 +1092,10 @@ pub fn build_main_window(app: &tauri::AppHandle<Wry>) -> tauri::Result<tauri::We
         // “源码”按钮在桌面端因此无法跳转（浏览器里正常）。
         // 这里把 http(s) 链接交给系统浏览器打开，其余协议一律拒绝。
         .on_new_window(move |url, features| on_new_window(app_handle.clone(), url, features))
+        .on_permission_request(|_, kind| match kind {
+            tauri::webview::PermissionKind::Microphone => tauri::webview::PermissionResponse::Allow,
+            _ => tauri::webview::PermissionResponse::Default,
+        })
         .on_download(on_download);
 
     #[cfg(windows)]
@@ -1211,6 +1215,10 @@ pub fn build_shell_window(
     let webview_builder = webview_builder
         .disable_drag_drop_handler()
         .on_new_window(move |url, features| on_new_window(app_handle.clone(), url, features))
+        .on_permission_request(|_, kind| match kind {
+            tauri::webview::PermissionKind::Microphone => tauri::webview::PermissionResponse::Allow,
+            _ => tauri::webview::PermissionResponse::Default,
+        })
         .on_download(on_download);
 
     #[cfg(windows)]
@@ -1655,6 +1663,7 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::bridge::get_desktop_about,
         crate::bridge::open_external_url,
         crate::bridge::read_clipboard_image,
+        crate::bridge::read_clipboard_files,
         crate::bridge::read_clipboard_text,
         crate::bridge::write_clipboard_text,
         crate::desktop::window::create_app_window,

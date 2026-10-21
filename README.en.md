@@ -78,9 +78,11 @@ Setup offers the following community plugins for installation on demand.
 
 - [DSH Better Sidebar](https://github.com/omdsh-dev/DSH-better-sidebar) — Per-session editor sidebar
 - [Billion Context](https://github.com/ranxianglei/billion-context) — Context compression and history restoration
+- [DSH Office Kit](https://github.com/hairyf/dsh-office-kit) — Office documents, PDF, presentations and spreadsheets
 - [DSH Market](https://github.com/dsh-market/dsh-market) — Community plugin market
 - [DSH Rewind](https://github.com/SiriLee/dsh-rewind) — Conversation rewind and workspace backups
 - [DSH IM](https://github.com/xmanrui/dsh-im) — IM channels and bot management
+- [DSH OPS](https://github.com/T-Auto/dsh-ops) — Low-level operations tools to reduce token usage and task execution time
 
 Request new or updated presets via [Issues](https://github.com/dsh-tauri/deepseek-harness-desktop/issues). Available versions follow the manifest's core compatibility rules.
 

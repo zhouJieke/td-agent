@@ -21,7 +21,7 @@ use tauri::AppHandle;
 
 use super::cancel::terminate_owned_install;
 use super::install::install_internal;
-use super::installed::{deprecated_plugins_at, installed_name, profile_dir, ProfilePackageJson};
+use super::installed::{installed_name, profile_dir, ProfilePackageJson};
 use super::preset::{
     bundled_dep_spec, bundled_plugin_dir, bundled_plugin_dir_from, load_presets,
     presets_from_manifest, PreinstallPluginInfo,
@@ -249,7 +249,7 @@ fn repair_loader_state(
                 return Err(format!("{code}: {}: {error}", patch_path.display()));
             }
         };
-        let mut patch = serde_yaml::from_str::<serde_yaml::Value>(&raw).map_err(|e| {
+        let mut patch = super::parse_patch_layer(&raw).map_err(|e| {
             format!(
                 "INTERNAL_PLUGIN_PATCH_PARSE_FAILED: {}: {e}",
                 patch_path.display()
@@ -260,7 +260,7 @@ fn repair_loader_state(
                 pending = true;
                 continue;
             }
-            let rendered = serde_yaml::to_string(&patch)
+            let rendered = super::render_patch_layer(&patch)
                 .map_err(|e| format!("INTERNAL_PLUGIN_PATCH_RENDER_FAILED: {e}"))?;
             super::atomic_write::write_patch_layer_atomically(&patch_path, &rendered).map_err(
                 |e| {
@@ -356,8 +356,6 @@ async fn ensure_scoped(app_handle: &AppHandle) -> Result<(), String> {
     crate::service::workflow::early::wait_preparation().await?;
     let lock = ensure_lock(&crate::service::profile::active_profile(app_handle));
     let presets = load_presets(app_handle);
-    // 被核心吸收的内置插件（当前核心已超出其声明的全部核心版本区间）自愈不再装回，
-    // 与 `uninstall_deprecated_plugins` 的退役判定同源，避免两边互相拉扯。
     let core_version = crate::service::core::active_version(app_handle);
     let internal: Vec<_> = presets
         .into_iter()
@@ -815,22 +813,15 @@ pub(crate) fn prepare_early_plugins(
         return Ok(EarlyPluginState::Defer);
     };
     let presets = presets_from_manifest(manifest, resources);
-    let deprecated = manifest.plugins.deprecated.iter().cloned().collect();
-    prepare_early_plugins_from(
-        profile,
-        dsh_home,
-        &presets,
-        &deprecated,
-        core_version,
-        |id| bundled_plugin_dir_from(resources, id),
-    )
+    prepare_early_plugins_from(profile, dsh_home, &presets, core_version, |id| {
+        bundled_plugin_dir_from(resources, id)
+    })
 }
 
 fn prepare_early_plugins_from(
     profile: &Path,
     dsh_home: &Path,
     presets: &[PreinstallPluginInfo],
-    deprecated: &HashSet<String>,
     core_version: Option<&str>,
     resolve_bundle: impl Fn(&str) -> Option<PathBuf>,
 ) -> Result<EarlyPluginState, String> {
@@ -885,12 +876,7 @@ fn prepare_early_plugins_from(
     {
         return Ok(EarlyPluginState::Defer);
     }
-    let (names, known) = deprecated_plugins_at(profile, parsed, presets, deprecated, core_version)?;
-    Ok(if known && names.is_empty() {
-        EarlyPluginState::Ready
-    } else {
-        EarlyPluginState::Defer
-    })
+    Ok(EarlyPluginState::Ready)
 }
 
 async fn ensure_inner(
@@ -913,9 +899,6 @@ async fn ensure_inner(
         true,
         |id| bundled_plugin_dir(app_handle, id),
     )?;
-    // 卸载孤儿内置插件：best-effort、离线精准，不依赖 node/pnpm（其源目录已
-    // 不存在，走 `dsh plugin remove` 也没有可安装的本地链接可删）。与弃用插件
-    // 自动卸载同一模式：任何失败只记告警，绝不阻断本轮其余重装或整体启动。
     if !orphans.is_empty() {
         log::info!("Uninstalling orphaned internal preset plugins: {orphans:?}");
         for name in &orphans {
@@ -1426,6 +1409,43 @@ mod tests {
     }
 
     #[test]
+    fn loader_repair_keeps_js_expressions_in_patch_layers() {
+        let temp = tempfile::tempdir().unwrap();
+        let profile = temp.path().join("profiles/tauri");
+        std::fs::create_dir_all(&profile).unwrap();
+        let patch = profile.join("cordis.patch.yml");
+        std::fs::write(
+            &patch,
+            "- insert:\n  - id: builtin\n  - id: user-plugin\n    config:\n      token: !!js process.env.TOKEN\n",
+        )
+        .unwrap();
+        let builtin = PreinstallPluginInfo {
+            id: "builtin".into(),
+            spec: "builtin".into(),
+            internal: true,
+            package: None,
+            version: None,
+            name: "builtin".into(),
+            description: String::new(),
+            repo_url: String::new(),
+            recommended: false,
+            fix: false,
+            default_checked: false,
+            default_unchecked: false,
+            win_only: false,
+        };
+
+        assert_eq!(
+            repair_loader_state(&profile, temp.path(), &[&builtin], &mut None, true),
+            Ok(false)
+        );
+        assert_eq!(
+            std::fs::read_to_string(&patch).unwrap(),
+            "- insert:\n  - id: user-plugin\n    config:\n      token: !!js process.env.TOKEN\n"
+        );
+    }
+
+    #[test]
     fn early_prepare_uses_normal_kernel_and_defers_repairs_without_installing() {
         let root = tempfile::tempdir().unwrap();
         let profile = root.path().join("profiles/web");
@@ -1451,7 +1471,6 @@ mod tests {
             win_only: false,
         };
         let presets = vec![preset("builtin", true), preset("community", false)];
-        let deprecated = HashSet::from(["old-plugin".to_string()]);
         let path = profile.join("package.json");
         let healthy = serde_json::json!({
             "dependencies": {"builtin": bundled_dep_spec(&source)},
@@ -1459,7 +1478,7 @@ mod tests {
         });
         let check = |manifest: &serde_json::Value| {
             std::fs::write(&path, manifest.to_string()).unwrap();
-            prepare_early_plugins_from(&profile, root.path(), &presets, &deprecated, None, |_| {
+            prepare_early_plugins_from(&profile, root.path(), &presets, None, |_| {
                 Some(source.clone())
             })
         };
@@ -1479,7 +1498,7 @@ mod tests {
             .unwrap()
             .contains("user-plugin"));
         assert_eq!(
-            prepare_early_plugins_from(&profile, root.path(), &presets, &deprecated, None, |_| {
+            prepare_early_plugins_from(&profile, root.path(), &presets, None, |_| {
                 Some(source.clone())
             })
             .unwrap(),
@@ -1534,10 +1553,7 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&path).unwrap(), healthy.to_string());
         assert_eq!(check(&healthy).unwrap(), EarlyPluginState::Ready);
         assert_eq!(
-            prepare_early_plugins_from(&profile, root.path(), &presets, &deprecated, None, |_| {
-                None
-            })
-            .unwrap(),
+            prepare_early_plugins_from(&profile, root.path(), &presets, None, |_| None).unwrap(),
             EarlyPluginState::Defer
         );
         std::fs::remove_file(source.join("package.json")).unwrap();
@@ -1559,24 +1575,29 @@ mod tests {
         let mut dangling = healthy.clone();
         dangling["dependencies"]["removed"] = serde_json::json!("link:missing-source");
         assert_eq!(check(&dangling).unwrap(), EarlyPluginState::Defer);
-        std::fs::create_dir_all(profile.join("node_modules/old-plugin")).unwrap();
-        assert_eq!(check(&healthy).unwrap(), EarlyPluginState::Defer);
-        assert!(profile.join("node_modules/old-plugin").is_dir());
-        std::fs::remove_dir(profile.join("node_modules/old-plugin")).unwrap();
+        let old_plugin = profile.join("node_modules/old-plugin");
+        std::fs::create_dir_all(&old_plugin).unwrap();
+        std::fs::write(old_plugin.join("data.json"), "user data").unwrap();
+        let mut with_old_plugin = migrated.clone();
+        with_old_plugin["dependencies"]["old-plugin"] = serde_json::json!("1.0.0");
+        with_old_plugin["dsh"]["profile"]["bundles"] = serde_json::json!(["builtin", "old-plugin"]);
+        assert_eq!(check(&with_old_plugin).unwrap(), EarlyPluginState::Ready);
+        let preserved: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(preserved, with_old_plugin);
+        assert_eq!(
+            std::fs::read_to_string(old_plugin.join("data.json")).unwrap(),
+            "user data"
+        );
         std::fs::remove_file(entry.join("package.json")).unwrap();
         assert_eq!(check(&healthy).unwrap(), EarlyPluginState::Defer);
         assert!(!entry.join("package.json").exists());
         std::fs::write(&path, "{").unwrap();
-        assert!(prepare_early_plugins_from(
-            &profile,
-            root.path(),
-            &presets,
-            &deprecated,
-            None,
-            |_| None
-        )
-        .unwrap_err()
-        .starts_with("INTERNAL_PLUGIN_MANIFEST_PARSE_FAILED:"));
+        assert!(
+            prepare_early_plugins_from(&profile, root.path(), &presets, None, |_| None)
+                .unwrap_err()
+                .starts_with("INTERNAL_PLUGIN_MANIFEST_PARSE_FAILED:")
+        );
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "{");
         assert_eq!(
             prepare_early_plugins(&profile, root.path(), None, None, None).unwrap(),
