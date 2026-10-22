@@ -3,7 +3,13 @@ import { MOBILE_MEDIA_QUERIES } from 'dsh-tauri/client'
 
 const { c } = cssr
 
-export default c(`@media ${MOBILE_MEDIA_QUERIES.join(' and ')}`, [
+// keep: The keyboard does not resize the layout viewport on iOS, so the page height is pinned to the
+// height reported while a text field is focused; iPad landscape uses the desktop layout, hence no media query.
+const keyboardFit = c(':root', {
+  height: 'var(--dsh-mobile-viewport-height, 100%)',
+})
+
+export default c([c(`@media ${MOBILE_MEDIA_QUERIES.join(' and ')}`, [
   c('html[data-dsh-mobile-sidebar], html[data-dsh-mobile-sidebar] body', {
     overflow: 'hidden',
   }),
@@ -40,6 +46,11 @@ export default c(`@media ${MOBILE_MEDIA_QUERIES.join(' and ')}`, [
     display: 'none !important',
   }),
   c('[data-slot="conversation.header"] [class$="_header"]', {
+    display: 'none !important',
+  }),
+  // 会话头连同视图切换环一起隐藏后，工具行的「查看」只能进轨迹页、回不了会话；它靠 hover 显形，
+  // 触屏点过就常驻，因此在移动布局里整个去掉入口。
+  c('[class$="_inspectButton"]', {
     display: 'none !important',
   }),
   // 第三方插件（dsh-better-sidebar）的空白会话兜底入口 `[data-dsh-dock-fallback]` 是
@@ -254,4 +265,4 @@ export default c(`@media ${MOBILE_MEDIA_QUERIES.join(' and ')}`, [
       transition: 'none !important',
     }),
   ]),
-])
+]), keyboardFit])

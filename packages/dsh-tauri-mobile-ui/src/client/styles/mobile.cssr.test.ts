@@ -237,6 +237,18 @@ describe('mobile conversation layout', () => {
     expect(rules).toHaveLength(1)
   })
 
+  it('hides the tool-row inspect pill whose trajectory view has no way back on phones', () => {
+    expect(declarations('[class$="_inspectButton"]')).toEqual({ display: 'none !important' })
+    const rules: unknown[] = []
+    root.walkRules('[class$="_inspectButton"]', (rule) => {
+      rules.push(rule)
+      expect(rule.parent?.type).toBe('atrule')
+      if (rule.parent?.type === 'atrule')
+        expect(rule.parent.params).toBe(MOBILE_MEDIA)
+    })
+    expect(rules).toHaveLength(1)
+  })
+
   it('overrides conversation scroll bottom padding to zero inside the mobile media query', () => {
     const declarations: unknown[] = []
     root.walkRules('[data-slot="main"] [data-conversation-scroll]', (rule) => {
@@ -249,5 +261,16 @@ describe('mobile conversation layout', () => {
       })
     })
     expect(declarations).toEqual([['padding-bottom', '0', true]])
+  })
+
+  it('pins the page to the keyboard-free height reported by the shell, outside the mobile layout', () => {
+    const values: unknown[] = []
+    root.walkRules(':root', (rule) => {
+      expect(rule.parent?.type).toBe('root')
+      rule.walkDecls((decl) => {
+        values.push([decl.prop, decl.value, decl.important])
+      })
+    })
+    expect(values).toEqual([['height', 'var(--dsh-mobile-viewport-height, 100%)', undefined]])
   })
 })
