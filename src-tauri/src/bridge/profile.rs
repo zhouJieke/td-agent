@@ -197,11 +197,6 @@ mod tests {
                 "pub fn quit_app(",
             ),
             (
-                include_str!("remote.rs"),
-                "pub async fn remote_open_window(",
-                "#[cfg(test)]",
-            ),
-            (
                 include_str!("lifecycle.rs"),
                 "pub async fn enter_safe_mode(",
                 "pub async fn quarantine_broken_patch_layers(",

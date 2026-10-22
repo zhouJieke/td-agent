@@ -125,7 +125,7 @@ const NAVIGATION_GLOBAL: &str = "__DSH_NAVIGATION__";
 ///
 /// 传入 `session_id` 时把跳转目标注入新窗口的全部 frame，由 dsh-tauri 插件在启动后接收并
 /// 打开该会话。注入而不是拼 `index.html#...`：hash 只有壳层可读，内嵌 dsh 的插件拿不到，
-/// 只能退回壳层轮询转发，并把新窗口误当成 remote 视图。
+/// 只能退回壳层轮询转发。
 ///
 /// 异步命令（不占用主线程）是唯一安全的调用侧：`WebviewWindowBuilder::build()`
 /// 需要主线程事件循环回包，主线程调用会死锁）。

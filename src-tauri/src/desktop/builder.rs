@@ -1447,18 +1447,6 @@ mod security_tests {
     }
 
     #[test]
-    fn remote_popup_windows_are_scoped_by_glob_and_stay_loopback() {
-        let capability = include_str!("../../capabilities/default.json");
-        // 弹窗窗口 label 为 remote-<machineId>（machineId 是 uuid），只能以
-        // glob 覆盖；不接受裸 "remote-" 或 "*" 之类的过度放宽。
-        assert!(capability.contains("\"remote-*\""));
-        assert!(!capability.contains("\"*\""));
-        // remote URL 面仍然只有 loopback 通配（弹窗与主窗口同一约束）。
-        let wildcard_loopback = ["http://127.0.0.1:", "*"].concat();
-        assert!(capability.contains(wildcard_loopback.as_str()));
-    }
-
-    #[test]
     fn webview_security_features_are_not_disabled() {
         let source = include_str!("builder.rs");
         let smart_screen = ["ms", "SmartScreen", "Protection"].concat();
@@ -1624,9 +1612,6 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::desktop::window::quit_app,
         crate::desktop::window::toggle_devtools,
         crate::bridge::log_frontend,
-        crate::bridge::remote::remote,
-        crate::bridge::remote_bridge_ping,
-        crate::bridge::remote_open_window,
     ]
 }
 

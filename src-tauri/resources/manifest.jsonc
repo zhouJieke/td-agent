@@ -77,7 +77,8 @@
       "dsh-tauri-bridge",
       "dsh-tauri-running-changes",
       "dsh-tauri-kernel",
-      "dsh-tauri-pet"
+      "dsh-tauri-pet",
+      "dsh-tauri-remote"
     ],
     "built-in": [
       {
@@ -133,12 +134,6 @@
         "spec": "dsh-tauri-model",
         "name": "DSH Tauri Model",
         "repo": "https://github.com/dsh-tauri-desk/dsh-tauri-plugins/tree/main/packages/dsh-tauri-model"
-      },
-      {
-        "id": "dsh-tauri-remote",
-        "spec": "dsh-tauri-remote",
-        "name": "DSH Tauri Remote",
-        "repo": "https://github.com/dsh-tauri-desk/deepseek-harness-desktop/tree/main/packages/dsh-tauri-remote"
       },
       {
         "id": "dsh-tauri-notification",

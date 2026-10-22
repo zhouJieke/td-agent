@@ -865,6 +865,13 @@ mod tests {
     }
 
     #[test]
+    fn deprecated_manifest_lists_the_retired_remote() {
+        // 远程能力（局域网监听 / 公网隧道 / SSH 机器）整体移除，内置清单条目一并删掉：
+        // 升级用户档案里的 link: 依赖与 bundle 引用只能靠弃用名单兜底卸载。
+        assert!(shipped_deprecated_ids().contains("dsh-tauri-remote"));
+    }
+
+    #[test]
     fn deprecated_manifest_lists_absorbed_running_changes() {
         // dsh-tauri-running-changes 已并入 dsh-tauri-experimental，并从内置清单移除
         // 条目：升级用户的残留副本仍从 dsh-tauri 导入 1.0.0 已移出的符号，启动即

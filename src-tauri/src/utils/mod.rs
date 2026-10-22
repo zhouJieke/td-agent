@@ -76,9 +76,9 @@ pub fn show_window<R: Runtime>(window: &WebviewWindow<R>) {
 /// 若窗口确实不存在（非预期路径），仅记录日志，不重建。
 pub fn shell_window<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<R>> {
     app.get_webview_window("main").or_else(|| {
-        app.webview_windows().into_values().find(|window| {
-            window.label().starts_with("window-") || window.label().starts_with("remote-")
-        })
+        app.webview_windows()
+            .into_values()
+            .find(|window| window.label().starts_with("window-"))
     })
 }
 
@@ -89,7 +89,7 @@ pub fn operation_window<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<
         .filter(|window| instances::window_uses_profile(window.label(), &profile))
         .or_else(|| {
             app.webview_windows().into_values().find(|window| {
-                (window.label().starts_with("window-") || window.label().starts_with("remote-"))
+                window.label().starts_with("window-")
                     && instances::window_uses_profile(window.label(), &profile)
             })
         })
@@ -293,19 +293,17 @@ mod tests {
         let app = tauri::test::mock_builder()
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
             .unwrap();
-        for label in ["main", "window-operation-test", "remote-operation-test"] {
+        for label in ["main", "window-operation-test"] {
             tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::default())
                 .build()
                 .unwrap();
         }
         instances::bind_window("main", "operation-main-profile");
         instances::bind_window("window-operation-test", "operation-extra-profile");
-        instances::bind_window("remote-operation-test", "operation-remote-profile");
         assert!(super::operation_window(app.handle()).is_none());
         for (profile, expected) in [
             ("operation-main-profile", Some("main")),
             ("operation-extra-profile", Some("window-operation-test")),
-            ("operation-remote-profile", Some("remote-operation-test")),
             ("operation-missing-profile", None),
         ] {
             instances::scope(profile.into(), async {
@@ -314,7 +312,7 @@ mod tests {
             })
             .await;
         }
-        for label in ["main", "window-operation-test", "remote-operation-test"] {
+        for label in ["main", "window-operation-test"] {
             instances::release_window(label);
         }
     }
