@@ -153,7 +153,7 @@ fn collect_entry_ids(doc: &serde_yaml::Value, names: &[String], ids: &mut Vec<St
 ///
 /// 来源是插件自带的 bundle patch 与 profile patch 里手工插入的同模块条目；只收
 /// `name` 等于包名或以 `包名/` 开头的条目，避免把顺带插入的其它模块算进来
-/// （`dsh-tauri-pet` 还会插入 skill-filesystem）。
+/// （插件还会插入 skill-filesystem）。
 fn plugin_entry_ids(profile: &Path, id: &str) -> Vec<String> {
     let names = plugin_target_names(profile, id);
     let mut ids = Vec::new();
@@ -701,7 +701,7 @@ mod tests {
         let profile = build_profile("patch-strip", "d");
         write_patch(
             &profile,
-            "- id: dsh-better-sidebar\n  disabled: true\n- id: dshmarket\n  disabled: true\n- id: dsh-tauri-pet\n  foo: bar\n",
+            "- id: dsh-better-sidebar\n  disabled: true\n- id: dshmarket\n  disabled: true\n- id: dsh-tauri-scheduler\n  foo: bar\n",
         );
         enable_plugin_at(&profile, "dsh-better-sidebar").unwrap();
 
@@ -770,12 +770,12 @@ mod tests {
         let profile = build_profile("patch-collect", "i");
         write_patch(
             &profile,
-            "- id: dshmarket\n  disabled: true\n- id: dsh-better-sidebar\n  disabled: false\n- id: dsh-tauri-pet\n  config: 1\n- plain-string\n",
+            "- id: dshmarket\n  disabled: true\n- id: dsh-better-sidebar\n  disabled: false\n- id: dsh-tauri-scheduler\n  config: 1\n- plain-string\n",
         );
         let targets = load_patch_disabled(&profile);
         assert!(targets.contains("dshmarket"));
         assert!(!targets.contains("dsh-better-sidebar"));
-        assert!(!targets.contains("dsh-tauri-pet"));
+        assert!(!targets.contains("dsh-tauri-scheduler"));
 
         assert!(load_patch_disabled(&std::env::temp_dir()).is_empty());
         let broken = build_profile("patch-broken", "j");
@@ -854,7 +854,7 @@ mod tests {
     }
 
     /// 一个包可能插入多个条目（`dsh-ops/*`）：禁用要覆盖全部，且不误伤同包顺带
-    /// 插入的其它模块（`dsh-tauri-pet` 的 skill-filesystem）。
+    /// 插入的其它模块（插件自带的 skill-filesystem）。
     #[test]
     fn disable_covers_every_package_entry_and_ignores_foreign_inserts() {
         let profile = build_bundle_profile(
@@ -866,9 +866,9 @@ mod tests {
                     "- insert:\n    - id: dsh-ops-shell\n      name: dsh-ops/shell\n    - id: dsh-ops-file\n      name: dsh-ops/file\n",
                 ),
                 (
-                    "dsh-tauri-pet",
-                    "dsh-tauri-pet",
-                    "- insert:\n    - id: dsh-tauri-pet-skills\n      name: '@deepseek-ai/dsh-skill-filesystem'\n    - id: dsh-tauri-pet\n      name: dsh-tauri-pet\n",
+                    "dsh-tauri-scheduler",
+                    "dsh-tauri-scheduler",
+                    "- insert:\n    - id: dsh-tauri-scheduler-skills\n      name: '@deepseek-ai/dsh-skill-filesystem'\n    - id: dsh-tauri-scheduler\n      name: dsh-tauri-scheduler\n",
                 ),
             ],
         );
@@ -878,7 +878,7 @@ mod tests {
         assert!(ids.contains(&"dsh-ops-shell".to_string()));
         assert!(ids.contains(&"dsh-ops-file".to_string()));
         assert!(has_patch_disable(&profile, "dsh-ops"));
-        assert!(!has_patch_disable(&profile, "dsh-tauri-pet"));
+        assert!(!has_patch_disable(&profile, "dsh-tauri-scheduler"));
 
         enable_plugin_at(&profile, "dsh-ops").unwrap();
         assert!(!read_patch(&profile).contains("dsh-ops-shell"));

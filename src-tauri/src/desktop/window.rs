@@ -128,7 +128,7 @@ const NAVIGATION_GLOBAL: &str = "__DSH_NAVIGATION__";
 /// 只能退回壳层轮询转发，并把新窗口误当成 remote 视图。
 ///
 /// 异步命令（不占用主线程）是唯一安全的调用侧：`WebviewWindowBuilder::build()`
-/// 需要主线程事件循环回包，主线程调用会死锁（与 `pet::ensure_pet_window` 同约束）。
+/// 需要主线程事件循环回包，主线程调用会死锁）。
 #[tauri::command]
 pub async fn create_app_window(
     app_handle: AppHandle<Wry>,

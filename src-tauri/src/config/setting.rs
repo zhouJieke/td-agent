@@ -78,27 +78,12 @@ pub struct Setting {
     /// 备份是否包含凭据文件（`.credentials.yaml`）。
     #[serde(default)]
     pub backup_include_credentials: bool,
-    /// 桌宠能力是否永久启用；临时隐藏不能改动此字段。
-    #[serde(default)]
-    pub pet_enabled: bool,
-    /// 当前选中的桌宠模型包（预设 id，或 `chat:` / `codex:` 来源限定 id）；
-    /// `None` = 从未选择，对外回落清单里的第一只预设宠物；空串 = 用户显式取消选择。
-    #[serde(default)]
-    pub active_pet: Option<String>,
-    /// 桌宠精灵图的显示宽度（逻辑像素）；`None` = 沿用窗口侧默认值。
-    #[serde(default)]
-    pub pet_size: Option<f64>,
-    /// 是否允许抛射桌宠（拖拽甩出后带速度飞行、撞到屏幕边缘回弹）。
-    ///
-    /// 默认关闭：飞行/回弹会打断「把宠物拖到某处」这一主要用途（issue #930），
-    /// 需要该效果的用户显式开启。拖拽本身不受此字段影响。
-    #[serde(default)]
-    pub throw_enabled: bool,
     /// 强制以 XWayland 运行（默认关闭，下次启动生效）。
     ///
-    /// 影响的是整个应用而非只有桌宠：原生 Wayland 下桌宠既不能置顶也不能定位
+    /// 影响的是整个应用而非某个窗口：原生 Wayland 下 GTK 的置顶与绝对定位是 no-op
     /// （issue #649），把应用拉到 XWayland 是在 GNOME 上恢复这两项能力的唯一办法，
-    /// 代价是主窗口也一并经 XWayland 渲染。默认关闭，由用户显式开启。
+    /// 代价是所有窗口一并经 XWayland 渲染。开关的入口已随桌宠下线，但已开启的用户
+    /// 档案里的值继续生效，因此字段与启动读取必须保留。
     #[serde(default)]
     pub force_xwayland: bool,
     /// 本地插件热重载：把已挂载的本地路径插件源码目录交给核心 HMR 监听，
@@ -228,10 +213,6 @@ impl Default for Setting {
             close_action: default_close_action(),
             backup_retention_count: default_backup_retention_count(),
             backup_include_credentials: false,
-            pet_enabled: false,
-            active_pet: None,
-            pet_size: None,
-            throw_enabled: false,
             force_xwayland: false,
             local_plugin_hmr: default_local_plugin_hmr(),
         }
@@ -395,16 +376,12 @@ fn preserve_persisted_fields(mut replacement: Setting, current: &Setting) -> Set
     replacement.harness_max_heap_mb = normalize_harness_max_heap_mb(current.harness_max_heap_mb);
     replacement.close_action = normalize_close_action(&current.close_action);
     replacement.auto_update = current.auto_update;
-    replacement.pet_enabled = current.pet_enabled;
-    replacement.active_pet.clone_from(&current.active_pet);
-    replacement.pet_size = current.pet_size;
-    replacement.throw_enabled = current.throw_enabled;
     replacement.force_xwayland = current.force_xwayland;
     replacement.local_plugin_hmr = current.local_plugin_hmr;
     replacement
 }
 
-/// 兼容旧调用方的整对象写入，但始终保留锁内读到的最新缩放、关窗动作、桌宠与本地
+/// 兼容旧调用方的整对象写入，但始终保留锁内读到的最新缩放、关窗动作与本地
 /// 插件热重载等持久字段，避免长流程用陈旧 `Setting` 覆盖精确更新路径刚写入的值（丢更新）。
 pub fn set_store_dat_setting<R: Runtime>(app_handle: &AppHandle<R>, mut setting: Setting) {
     let value = {
@@ -750,7 +727,7 @@ mod tests {
                     close_action: "quit".to_string(),
                     backup_retention_count: retention,
                     backup_include_credentials: true,
-                    active_pet: Some(String::new()),
+                    preset_hash: Some("hash-before-normalize".to_string()),
                     ..Default::default()
                 };
                 normalize_setting(&mut setting);
@@ -761,7 +738,10 @@ mod tests {
                 assert_eq!(setting.language, "custom-language");
                 assert_eq!(setting.port, 4099);
                 assert!(setting.backup_include_credentials);
-                assert_eq!(setting.active_pet.as_deref(), Some(""));
+                assert_eq!(
+                    setting.preset_hash.as_deref(),
+                    Some("hash-before-normalize")
+                );
             }
         }
         for heap_mb in [0, 1023, 32769, u32::MAX] {
@@ -816,10 +796,6 @@ mod tests {
             zoom_factor: 0.8,
             close_action: "quit".to_string(),
             auto_update: false,
-            pet_enabled: false,
-            active_pet: Some("chat:stale".to_string()),
-            pet_size: Some(80.0),
-            throw_enabled: false,
             force_xwayland: false,
             local_plugin_hmr: false,
             ..Default::default()
@@ -838,10 +814,6 @@ mod tests {
             harness_max_heap_mb: Some(4096),
             zoom_factor: 1.6,
             close_action: "tray".to_string(),
-            pet_enabled: true,
-            active_pet: Some("codex:latest".to_string()),
-            pet_size: Some(140.0),
-            throw_enabled: true,
             force_xwayland: true,
             local_plugin_hmr: true,
             ..Default::default()
@@ -861,14 +833,6 @@ mod tests {
         assert_eq!(merged.appearance, current.appearance);
         assert_eq!(merged.close_action, "tray");
         assert!(merged.auto_update, "整对象写入不得覆盖最新的自动更新开关");
-        assert!(merged.pet_enabled);
-        assert_eq!(merged.active_pet.as_deref(), Some("codex:latest"));
-        assert_eq!(
-            merged.pet_size,
-            Some(140.0),
-            "整对象写入不得覆盖最新桌宠字段"
-        );
-        assert!(merged.throw_enabled, "整对象写入不得覆盖最新的抛射开关");
         assert!(
             merged.force_xwayland,
             "整对象写入不得覆盖最新的 XWayland 开关"
@@ -988,21 +952,5 @@ mod tests {
             "quit",
             "写入 store 再读回后关闭行为应保持不变"
         );
-    }
-
-    #[test]
-    fn pet_defaults_closed_and_legacy_enabled_value_survives() {
-        assert!(!Setting::default().pet_enabled, "新安装必须默认关闭桌宠");
-
-        let legacy: Setting = serde_json::from_value(serde_json::json!({
-            "installed": true,
-            "port": 3080,
-            "auto_start": true,
-            "language": "zh-CN",
-            "pet_enabled": true,
-            "pet_visible": false
-        }))
-        .expect("legacy setting should deserialize");
-        assert!(legacy.pet_enabled, "旧版临时隐藏字段不得关闭永久启用状态");
     }
 }

@@ -1613,16 +1613,16 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         std::fs::write(root.path().join("package.json"), serde_json::json!({
             "dependencies": {"dsh-tauri": "link:/resources/dsh-tauri", "dsh-tauri-ui": "link:/resources/dsh-tauri-ui"},
-            "dsh": {"profile": {"bundles": ["dsh-tauri", "dsh-tauri-pet", "community-plugin"]}}
+            "dsh": {"profile": {"bundles": ["dsh-tauri", "dsh-tauri-scheduler", "community-plugin"]}}
         }).to_string()).unwrap();
         assert_eq!(
             presets_missing_from_manifest(
                 root.path(),
-                &need_entries(&["dsh-tauri", "dsh-tauri-ui", "dsh-tauri-pet"])
+                &need_entries(&["dsh-tauri", "dsh-tauri-ui", "dsh-tauri-scheduler"])
             ),
             Some(vec![
                 "dsh-tauri-ui".to_string(),
-                "dsh-tauri-pet".to_string()
+                "dsh-tauri-scheduler".to_string()
             ])
         );
         assert_eq!(
