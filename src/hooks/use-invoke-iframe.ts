@@ -29,11 +29,7 @@ interface InvokeBridgeRequest {
 
 /**
  * 允许 iframe 桥调用的 Tauri command 白名单。凡新增可经桥调用的 command 必须在此登记，
- * 防止 iframe 内其他插件借道桥执行任意 Tauri command（越权）。另一类是
- * SSH 远端机器桥契约（C-BRIDGE）：`remote_bridge_ping` 无参探测（S4 面板
- * 据此判定桌面环境，纯 web 超时隐藏弹窗按钮）、`remote_open_window`
- * 打开/聚焦 `remote-<machineId>` 弹窗窗口（URL 由插件传入，命令侧仅接受
- * 回环 http——见 src-tauri/src/bridge/remote.rs）。
+ * 防止 iframe 内其他插件借道桥执行任意 Tauri command（越权）。
  */
 const ALLOWED_INVOKE_CMDS = new Set([
   // 只读布尔量，供 dsh-tauri-ui 决定是否挂载仅 dev 可见的调试面板。
@@ -41,8 +37,6 @@ const ALLOWED_INVOKE_CMDS = new Set([
   // dsh-tauri 客户端接管官方登录：账号流进入 waiting-browser 时把授权地址交给系统浏览器
   // （命令自身只放行 http(s)，见 bridge/system_os.rs）。
   'open_external_url',
-  'remote_bridge_ping',
-  'remote_open_window',
   'create_app_window',
   // 右键菜单「粘贴」的原生读取：WKWebView 的 navigator.clipboard.readText() 拿不到授权，
   // 帧内据此命令读取系统剪贴板纯文本（命令侧无参、只读，见 bridge/clipboard.rs）。

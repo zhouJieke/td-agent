@@ -30,6 +30,4 @@ export const queryKeys = {
   dataDir: ['data_dir'] as const,
   /** 数据目录下的一级子项体积（issue #871） */
   dataDirEntries: ['data_dir_entries'] as const,
-  remoteMachines: ['remote_machines'] as const,
-  remoteEvents: ['remote_events'] as const,
 } as const
