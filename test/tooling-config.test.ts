@@ -111,10 +111,7 @@ describe('tooling configuration contracts', () => {
       ['archive/contract.test.ts', []],
       ['source/contract.test.ts', []],
       ['packages/dsh-tauri/node_modules/copy/index.test.ts', []],
-      ['packages/dsh-tauri-remote/src/client/components/panel.test.tsx', ['unit']],
-      ['packages/dsh-tauri-remote/src/client/index.test.ts', ['unit']],
-      ['src/layout/components/remote-switcher.test.tsx', ['unit']],
-      ['src/layout/components/connect-dialog.test.tsx', ['unit']],
+      ['src/layout/components/iframe.test.tsx', ['unit']],
     ] as const
     for (const [relative, projects] of cases) {
       expect(runtime.projects.filter(project => project.matchesTestGlob(path.join(root, relative))).map(project => project.name), relative).toEqual(projects)
@@ -124,10 +121,8 @@ describe('tooling configuration contracts', () => {
     expect(specs.filter(spec => spec.moduleId.endsWith('/test/e2e/desktop/boot.e2e.ts')).map(spec => spec.project.name)).toEqual(['desktop'])
     expect(specs.filter(spec => spec.moduleId.endsWith('/test/e2e/plugins/dsh-tauri.e2e.ts')).map(spec => spec.project.name)).toEqual(['plugin'])
     for (const file of [
-      'packages/dsh-tauri-remote/src/client/components/machines-section.test.tsx',
-      'packages/dsh-tauri-remote/src/client/index.test.ts',
-      'src/layout/components/remote-switcher.test.tsx',
-      'src/layout/components/connect-dialog.test.tsx',
+      'src/layout/components/iframe.test.tsx',
+      'packages/dsh-tauri/src/host/apply.test.ts',
     ]) {
       expect(specs.filter(spec => spec.moduleId.replaceAll('\\', '/').endsWith(`/${file}`)).map(spec => spec.project.name), file).toEqual(['unit'])
     }

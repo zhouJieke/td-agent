@@ -34,7 +34,7 @@ describe('window close capability', () => {
     const capability = closeCapabilities.find(capability => capability.identifier === 'window-close')
     expect(capability).toMatchObject({
       local: true,
-      windows: ['window-*', 'remote-*'],
+      windows: ['window-*'],
       permissions: ['core:window:allow-close'],
     })
     expect(capability).not.toHaveProperty('webviews')
