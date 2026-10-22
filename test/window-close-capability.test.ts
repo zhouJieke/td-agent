@@ -30,7 +30,7 @@ describe('window close capability', () => {
       expect(enabled).toContain('window-close')
   })
 
-  it('limits close to local attached shell windows without granting it to main or pet', () => {
+  it('limits close to local attached shell windows without granting it to main or extra windows', () => {
     const capability = closeCapabilities.find(capability => capability.identifier === 'window-close')
     expect(capability).toMatchObject({
       local: true,

@@ -66,7 +66,6 @@ Plugins propios distribuidos con los recursos del escritorio:
 - [DSH Tauri Extension](https://github.com/dsh-tauri/deepseek-harness-desktop/tree/main/packages/dsh-tauri-extension) — Gestor oficial de plugins, mercado de plugins, Skills y MCP
 - [DSH Tauri Scheduler](https://github.com/dsh-tauri/deepseek-harness-desktop/tree/main/packages/dsh-tauri-scheduler) — Tareas programadas e historial
 - [DSH Tauri Archive](https://github.com/dsh-tauri/deepseek-harness-desktop/tree/main/packages/dsh-tauri-archive) — Archivo y restauración de chats
-- [DSH Tauri Pet](https://github.com/dsh-tauri/deepseek-harness-desktop/tree/main/packages/dsh-tauri-pet) — Ajustes de mascotas y estados de actividad
 - [DSH Tauri Rightclick Menu](https://github.com/dsh-tauri/deepseek-harness-desktop/tree/main/packages/dsh-tauri-rightclick) — Menús contextuales de sesiones, workspaces y texto
 - [DSH Tauri Model](https://github.com/dsh-tauri/deepseek-harness-desktop/tree/main/packages/dsh-tauri-model) — Selección de modelos, parámetros y configuración automática
 - [DSH Tauri Remote](https://github.com/dsh-tauri/deepseek-harness-desktop/tree/main/packages/dsh-tauri-remote) — Conexiones Harness remotas y sincronización por SSH, además de compartir el Harness local por LAN o túnel público
@@ -102,7 +101,7 @@ brew install dsh-tauri/desktop/deepseek-harness
 
 - Los instaladores normales necesitan red en el primer arranque para descargar los componentes faltantes del runtime y del núcleo. Las funciones Git necesitan un Git disponible.
 - Los nombres con sufijo `Bundle` son instaladores sin conexión (`_Bundle_*.exe`, `_Bundle_*.deb` y dos `_Bundle_*.dmg`).
-- Ejecutar localmente no significa estar totalmente sin conexión: modelos, instalación de plugins, actualizaciones y recursos de mascotas predefinidas pueden usar red.
+- Ejecutar localmente no significa estar totalmente sin conexión: modelos, instalación de plugins, actualizaciones pueden usar red.
 - Para problemas de pantalla, Wayland, AppImage y permisos en Linux, consultá la [documentación de instalación y solución de problemas](https://dshtauri.mintlify.site).
 
 ### Proxy del escritorio
@@ -174,8 +173,6 @@ Consultá la [guía en inglés](<./docs/DEVELOPMENT.md>) o la [guía en chino](<
 
 - [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) — plataforma agent `dsh` oficial
 - [deepseek-harness-pkg](https://github.com/dsh-tauri/deepseek-harness-pkg) — distribuciones Harness prearmadas y fuente de descarga
-- [dsh-pet](https://github.com/PC2005-cloud/dsh-pet) · [dsh-pet-mov](https://github.com/dsh-tauri/dsh-pet-mov) · [dsh-pet-component](https://github.com/dsh-tauri/dsh-pet-component) — recursos y render de mascotas
-- [dsh-plugin-codex-pets](https://github.com/Skylarking/dsh-plugin-codex-pets) · [BongoCat](https://github.com/ayangweb/BongoCat) · [dsh-dafeiyu](https://github.com/QCYTSN/dsh-dafeiyu) · [codex-to-dsh-pet](https://github.com/Signalight/codex-to-dsh-pet) — proyectos de referencia de mascotas
 
 ## Contributors
 

@@ -26,7 +26,6 @@ const expectedPlugins = [
   'dsh-tauri-mobile-ui',
   'dsh-tauri-model',
   'dsh-tauri-notification',
-  'dsh-tauri-pet',
   'dsh-tauri-remote',
   'dsh-tauri-rightclick',
   'dsh-tauri-scheduler',

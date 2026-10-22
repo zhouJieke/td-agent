@@ -67,8 +67,8 @@ describe('编排骨架', () => {
     const manifest = readProfileManifest(home)
     const bundles = manifest.dsh?.profile?.bundles ?? []
 
-    // globalSetup 的共享宿主默认挂载 dsh-tauri-pet + also(dsh-tauri, dsh-tauri-rightclick)。
-    expect(bundles).toContain('dsh-tauri-pet')
+    // globalSetup 的共享宿主默认挂载 dsh-tauri-notification + also(dsh-tauri, dsh-tauri-rightclick)。
+    expect(bundles).toContain('dsh-tauri-notification')
     expect(bundles).toContain('dsh-tauri')
     expect(new Set(bundles).size, 'bundles 不允许重复项').toBe(bundles.length)
 
@@ -92,16 +92,16 @@ describe('编排骨架', () => {
     mkdirSync(profileDir, { recursive: true })
     writeFileSync(
       join(profileDir, 'package.json'),
-      `${JSON.stringify({ name: 'dsh-profile-web', dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-tauri-pet'] } } }, null, 2)}\n`,
+      `${JSON.stringify({ name: 'dsh-profile-web', dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-tauri-notification'] } } }, null, 2)}\n`,
     )
 
     try {
       expect(
-        () => assertMountRegistered(profileDir, ['dsh-tauri-pet']),
+        () => assertMountRegistered(profileDir, ['dsh-tauri-notification']),
         '已登记的包不得误报',
       ).not.toThrow()
       expect(
-        () => assertMountRegistered(profileDir, ['dsh-tauri-pet', 'dsh-tauri']),
+        () => assertMountRegistered(profileDir, ['dsh-tauri-notification', 'dsh-tauri']),
         '缺失的包名必须列出，且只列缺失的那个',
       ).toThrowError(/^挂载未注册到 dsh\.profile\.bundles：dsh-tauri$/)
     }
@@ -123,7 +123,7 @@ describe('编排骨架', () => {
 
   it('验证环境变量边界：DSH_E2E_KEEP_HOME 控制 scratch 去留', async () => {
     // 「默认清理」那一半由 TC-HOST-L2-01-001 的 stop() 断言覆盖，这里只验保留分支。
-    const kept = await startDshHost({ plugin: 'dsh-tauri-pet', keepHome: true })
+    const kept = await startDshHost({ plugin: 'dsh-tauri-notification', keepHome: true })
     try {
       await kept.stop()
       expect(existsSync(kept.home), 'KEEP_HOME 必须保留 scratch 目录').toBe(true)
@@ -163,8 +163,8 @@ describe('编排骨架', () => {
   })
 })
 
-/** 只声明 GET 的代表路由（`packages/dsh-tauri-pet/src/host/server/index.ts`）。 */
-const GET_ONLY_PATH = '/api/tauri/pet/session/stream'
+/** 只声明 GET 的代表路由（`packages/dsh-tauri-notification/src/host/server/index.ts`）。 */
+const GET_ONLY_PATH = '/api/tauri/notification/turn-end'
 
 /** 只声明 POST 的代表路由（`packages/dsh-tauri-rightclick/src/host/server/index.ts`）。 */
 const POST_ONLY_PATH = '/api/tauri/rightclick/open/url'

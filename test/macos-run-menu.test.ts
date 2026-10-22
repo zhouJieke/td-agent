@@ -135,7 +135,6 @@ describe('macOS native menu', () => {
     expect(builderSource).not.toContain('PredefinedMenuItem::fullscreen(')
     expect(builderSource).toMatch(/MenuItem::with_id\(\s*app,\s*"desktop-fullscreen",\s*&fullscreen_label,\s*true,\s*Some\("Ctrl\+Super\+F"\)/)
     const handler = builderSource.slice(builderSource.indexOf('"desktop-fullscreen" =>'))
-    expect(handler).toContain('window.label() != crate::desktop::pet::PET_WINDOW_LABEL')
     expect(handler).toContain('window.is_focused().unwrap_or(false)')
     expect(handler).toContain('.and_then(|is_fullscreen| window.set_fullscreen(!is_fullscreen))')
     expect(builderSource).toMatch(/tauri::WindowEvent::Focused\(true\) => sync_macos_fullscreen_menu\(window\)/)
@@ -148,7 +147,6 @@ describe('macOS native menu', () => {
 
   it('routes View actions only to the focused shell window', () => {
     const handler = builderSource.slice(builderSource.indexOf('"desktop-toggle-sidebar"\n'))
-    expect(handler).toContain('window.label() != crate::desktop::pet::PET_WINDOW_LABEL')
     expect(handler).toContain('window.is_focused().unwrap_or(false)')
     expect(handler).toMatch(/app\.emit_to\(\s*window.label\(\),\s*"macos-menu-action",\s*event.id\(\).as_ref\(\),?\s*\)/)
   })

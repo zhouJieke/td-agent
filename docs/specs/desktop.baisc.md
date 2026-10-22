@@ -37,11 +37,6 @@ cargo check && cargo test   # Rust 检查与单元测试 (src-tauri 目录下)
 * 启动时幂等剥离历史遗留的 `dsh-win-terminal-inspector` 注入行（`cordis.patch.yml`）。
 * Git Bash 的 bin 目录（`<git>\bin` 与 `<git>\usr\bin`）注入服务 PATH。
 
-* **桌宠模块 (`src/pet` + `dsh-tauri-pet`)**：
-* 预设宠物**不下载不安装**，由 `preset-pets.json` 登记远端 URL 并直连播放，落 IndexedDB 缓存。
-* `src/pet/main.tsx` 使用 `@tauri-apps/plugin-http` 的 `fetch` 实现绕过 CORS。
-* macOS 自动使用 `.mov` (HEVC-alpha) 格式。
-
 ---
 
 ## 3. 前端编码规范 (Frontend Specifications)

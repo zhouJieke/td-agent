@@ -15,18 +15,8 @@
 
 | 本项目实现模块 | 上游仓库 / 对应逻辑 | 本地路径 | 已采纳基线 | 包内同步日志 |
 | --- | --- | --- | --- | --- |
-| `dsh-tauri-pet` | [`PC2005-cloud/dsh-pet`](https://github.com/PC2005-cloud/dsh-pet) | `source/dsh-pet` | `v0.2.6` (`e1ff8c1`) | [`sync-log.md`](https://www.google.com/search?q=../packages/dsh-tauri-pet/docs/sync-log.md) |
-| └─ 气泡文案 / 状态优先级 | [`QCYTSN/dsh-dafeiyu`](https://github.com/QCYTSN/dsh-dafeiyu) | `source/dsh-dafeiyu` | `v0.1.9` (`f4f4482`) | 同上 |
-| └─ Codex 图集 / 会话状态 | [`Skylarking/dsh-plugin-codex-pets`](https://github.com/Skylarking/dsh-plugin-codex-pets) | `source/dsh-plugin-codex-pets` | `22e93f4` | 同上 |
-| └─ 原生拖动 / DPI / 穿透 | [`ayangweb/BongoCat`](https://github.com/ayangweb/BongoCat) | `source/BongoCat` | `v1.1.0-5` (`44f44bc`) | 同上 |
 | `dsh-tauri-extension` | [`qinyre/dsh-plugin-capabilities`](https://github.com/qinyre/dsh-plugin-capabilities) | `source/dsh-plugin-capabilities` | `v0.3.11` (`52e3f66`) | [`sync-log.md`](../packages/dsh-tauri-extension/docs/sync-log.md) |
 | `dsh-tauri-scheduler` | [`MichengAI/dsh-automation`](https://github.com/MichengAI/dsh-automation) | `source/dsh-automation` | `f1bc91a` (跟进 `c426c3d`) | [`sync-log.md`](https://www.google.com/search?q=../packages/dsh-tauri-scheduler/docs/sync-log.md) |
-
-**连带跟随依赖（非独立上游，须同步提升基线）**
-
-* `preset-pets.json` 预设 `ref`（含 `platforms.macos` 镜像产物 commit）：必须与 `source/dsh-pet` 的 HEAD 保持同步，否则 macOS 端将停留在旧动画集。
-* `hairyf/dsh-pet-component`（npm 渲染层）：走常规依赖升级流程。
-* `Signalight/codex-to-dsh-pet`：Codex v2 图集与状态映射的**文字参考**，按需拉取核对。
 
 ### 1.2 排除范围
 
@@ -70,10 +60,6 @@
 
 ```bash
 # 批量拉取并查看待评估 Commit Log
-git -C source/dsh-pet fetch --all --tags && git -C source/dsh-pet log --oneline e1ff8c1..origin/main
-git -C source/dsh-dafeiyu fetch --all --tags && git -C source/dsh-dafeiyu log --oneline f4f4482..origin/main
-git -C source/dsh-plugin-codex-pets fetch --all && git -C source/dsh-plugin-codex-pets log --oneline 22e93f4..origin/main
-git -C source/BongoCat fetch --all --tags && git -C source/BongoCat log --oneline 44f44bc..origin/main
 git -C source/dsh-automation fetch --all --tags && git -C source/dsh-automation log --oneline f1bc91a..origin/main
 git -C source/dsh-plugin-capabilities fetch --all --tags && git -C source/dsh-plugin-capabilities log --oneline 52e3f66..origin/main
 
@@ -154,10 +140,6 @@ git diff --check
 
 | 实现模块 | 上游仓库 | 本地路径 | 已采纳基线 | 本地最新 Tag/Commit | 待评估项 / 备注 | 包内日志 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `dsh-tauri-pet` | `PC2005-cloud/dsh-pet` | `source/dsh-pet` | `v0.2.12` (`631c531`) | `v0.2.12` (`631c531`) | `v0.2.7`–`v0.2.12` 已评估并采纳 2 项（`db73c36` goal 续跑轮不判成功、`bf7c4fb` 任务文案取末位 in_progress 并按码点截断），其余不采纳（渲染层归 `dsh-pet-component`、helper 专属适配不适用）；**资产 ref 保持 `e1ff8c1`**（区间内 `assets/webm`、`assets/mov` 零新增）；无待评估项 | [日志](https://www.google.com/search?q=../packages/dsh-tauri-pet/docs/sync-log.md) |
-| `dsh-tauri-pet` | `QCYTSN/dsh-dafeiyu` | `source/dsh-dafeiyu` | `v0.1.14` (`9c0588c`) | `v0.1.14` (`9c0588c`) | `v0.1.10`–`v0.1.14` 已评估：零可移植（文案表几无变化；其 `includeSubagents` opt-in 与本仓硬排除子代理会话**有意相反**）；无待评估项 | [日志](https://www.google.com/search?q=../packages/dsh-tauri-pet/docs/sync-log.md) |
-| `dsh-tauri-pet` | `Skylarking/dsh-plugin-codex-pets` | `source/dsh-plugin-codex-pets` | `22e93f4` | - | 未评估 main 分支更新 | [日志](https://www.google.com/search?q=../packages/dsh-tauri-pet/docs/sync-log.md) |
-| 桌宠窗口 | `ayangweb/BongoCat` | `source/BongoCat` | `44f44bc` | `v1.1.0` | HEAD 已超前 Tag 5 个 Commit | [日志](https://www.google.com/search?q=../packages/dsh-tauri-pet/docs/sync-log.md) |
 | `dsh-tauri-extension` | `qinyre/dsh-plugin-capabilities` | `source/dsh-plugin-capabilities` | `v0.3.11` (`52e3f66`) | `v0.3.11` | 暂无待评估项（该上游的 Market 模块确定不移植；扩展面板的市场页改为直接消费 `dshmarket` 的 `market` 服务） | [日志](../packages/dsh-tauri-extension/docs/sync-log.md) |
 | `dsh-tauri-extension`（市场标签页） | `dsh-market/dsh-market` | `source/dsh-market` | `v1.47.0-6` (`53f793e`) | `v1.47.0-6` (`53f793e`) | 非代码移植：消费其 `ctx.provide('market')` 服务。`render()` 尚未发版，故先以 `source` 子模块承载；待上游发版后改为常规 npm 依赖并移除子模块 | - |
 | `dsh-tauri-scheduler` | `MichengAI/dsh-automation` | `source/dsh-automation` | `ecfe1e6` (+`c426c3d`) | `v0.1.51` (`ecfe1e6`) | `v0.1.33`–`v0.1.42` 全部不采纳（2026-09-16）；`v0.1.43`–`v0.1.51` 已评估并采纳 3 项（`116c953`+`a0c4cc6` 增量摘要、`0bde1a4` 插件卸载记 `cancelled`），其余不采纳/归档（2026-09-28）；无待评估项 | [日志](https://www.google.com/search?q=../packages/dsh-tauri-scheduler/docs/sync-log.md) |
@@ -176,12 +158,6 @@ git diff --check
   `ecfe1e6`（`v0.1.51`），不再存在「gitlink 与工作区不一致」的未暂存变更。
 * `dsh-tauri-extension` 文档中引用的上游路径已更正为 `source/dsh-plugin-capabilities`。
 * 修复了 `dsh-tauri-extension/README.md` 中 `soruce` 的拼写错误。
-* **`dsh-tauri-pet` 的「资产 ref 与代码基线解耦」**：`src-tauri/resources/manifest.jsonc` 的素材 URL 内嵌
-  `source/dsh-pet` 的 ref，但它**不必等于已采纳代码基线**。2026 本轮把代码基线推进到 `v0.2.12` 的同时
-  把资产 ref 留在 `e1ff8c1`：`e1ff8c1..v0.2.12` 期间 `assets/webm`、`assets/mov` 零新增，升级只会让
-  `config` 指向含 `whisperImageEnabled`/`chatImageEnabled`/`memes`（本地渲染层不消费）的新 `config.jsonc`。
-  只有出现新 WebM/mov 时才升该 ref。同理，`src-tauri/resources/preset-pets.json` 是**已失效的旧路径**，
-  现为 `manifest.jsonc` 的 `pets.built-in`；`src/host/reducer.ts` 现为 `src/host/service/session-stream.utils.ts`。
 
 
 

@@ -52,7 +52,6 @@
 - 🗂️ **Profile configuration** — Separate plugin/settings configurations, with one-click profile data migration, backup, and cloning.
 - 💽 **Data directory** — Pick where data lives during installation (Windows); migrate or roll it back later in Settings on Windows, macOS, and Linux.
 - ⌨️ **CLI integration** — Managed `dsh` / `pnpm` commands via shims, not a global npm core installation.
-- 🐾 **Desktop pets** — Pets / Codex resources, pack imports, and conversation activity; preset media comes from remote hosts.
 - 🎨 **Personalization** — 8 palettes, local UI scaling, terminal mode, adjustable opacity, and optional frosted blur.
 
 ## Built-in plugins
@@ -66,7 +65,6 @@ First-party plugins distributed with desktop resources:
 - [DSH Tauri Extension](https://dshtauri.mintlify.site/en/built-in-plugins/dsh-tauri-extension) — Official plugin manager, plugin market, Skills, and MCP
 - [DSH Tauri Scheduler](https://dshtauri.mintlify.site/en/built-in-plugins/dsh-tauri-scheduler) — Scheduled tasks and run history
 - [DSH Tauri Archive](https://dshtauri.mintlify.site/en/built-in-plugins/dsh-tauri-archive) — Chat archiving and restoration
-- [DSH Tauri Pet](https://dshtauri.mintlify.site/en/built-in-plugins/dsh-tauri-pet) — Desktop pet and activity state settings
 - [DSH Tauri Rightclick Menu](https://dshtauri.mintlify.site/en/built-in-plugins/dsh-tauri-rightclick) — Session, workspace, and text context menus
 - [DSH Tauri Model](https://dshtauri.mintlify.site/en/built-in-plugins/dsh-tauri-model) — Model selection, parameters, and automatic configuration
 - [DSH Tauri Remote](https://dshtauri.mintlify.site/en/built-in-plugins/dsh-tauri-remote) — Remote Harness connections and sync over SSH, plus sharing the local Harness over LAN or a public tunnel
@@ -102,7 +100,7 @@ brew install dsh-tauri/desktop/deepseek-harness
 
 - Standard installers need network on first launch to download missing runtime/core components. Git features require an available Git.
 - Names with a `Bundle` suffix are offline installers (`_Bundle_*.exe`, `_Bundle_*.deb`, and two `_Bundle_*.dmg`).
-- Local execution is not fully offline: model services, plugin installation, updates, and preset pet media can still use network.
+- Local execution is not fully offline: model services, plugin installation, updates can still use network.
 - For Linux display, Wayland, AppImage, and permission workarounds, see the [installation and troubleshooting docs](https://dshtauri.mintlify.site/en/help/troubleshooting).
 
 ### Desktop proxy
@@ -174,8 +172,6 @@ See the [English development guide](<./docs/DEVELOPMENT.md>) or [Chinese develop
 
 - [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) — upstream `dsh` agent platform
 - [deepseek-harness-pkg](https://github.com/dsh-tauri/deepseek-harness-pkg) — prebuilt Harness distributions and download source
-- [dsh-pet](https://github.com/PC2005-cloud/dsh-pet) · [dsh-pet-mov](https://github.com/dsh-tauri/dsh-pet-mov) · [dsh-pet-component](https://github.com/dsh-tauri/dsh-pet-component) — pet assets and renderer
-- [dsh-plugin-codex-pets](https://github.com/Skylarking/dsh-plugin-codex-pets) · [BongoCat](https://github.com/ayangweb/BongoCat) · [dsh-dafeiyu](https://github.com/QCYTSN/dsh-dafeiyu) · [codex-to-dsh-pet](https://github.com/Signalight/codex-to-dsh-pet) — pet reference projects
 
 ## Contributors
 

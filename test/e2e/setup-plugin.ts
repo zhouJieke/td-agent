@@ -8,7 +8,7 @@ import { startDshHost } from './support/dsh'
  * globalSetup 跑在测试 worker 之外、且早于它们创建，所以这里定义的变量用例读不到；
  * 地址一律经 `project.provide()` 下传，用例用 `inject('dshBaseUrl')` 取。
  *
- * 被挂载的插件由 `DSH_E2E_PLUGIN`（默认 `dsh-tauri-pet`）与 `DSH_E2E_ALSO` 指定。
+ * 被挂载的插件由 `DSH_E2E_PLUGIN`（默认 `dsh-tauri-notification`）与 `DSH_E2E_ALSO` 指定。
  * `also` 的默认值覆盖全部产品可见插件，使各批次的路由用例都能复用这一个宿主，
  * 不必各自再起一个——每次起宿主都会多一个进程与一行日志。
  */
@@ -53,7 +53,7 @@ const DEFAULT_ALSO = [
 ].join(',')
 
 export default async function setup(project: TestProject): Promise<() => Promise<void>> {
-  const plugin = process.env.DSH_E2E_PLUGIN ?? 'dsh-tauri-pet'
+  const plugin = process.env.DSH_E2E_PLUGIN ?? 'dsh-tauri-notification'
   const also = (process.env.DSH_E2E_ALSO ?? DEFAULT_ALSO).split(',').map(item => item.trim()).filter(Boolean)
   const host = await startDshHost({ plugin, also, keepHome: process.env.DSH_E2E_KEEP_HOME === '1' })
 

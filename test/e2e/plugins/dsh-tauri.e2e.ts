@@ -23,7 +23,7 @@ import { isolatedDshEnv, resolveDshCommand, resolveNodeBin, scaffoldDshProfile }
 const EMBEDDED_ENV = 'DSH_TAURI_EMBEDDED'
 
 /** 产品可见的 `/api/**` 路由，用于把「401 被降级」与「路由缺失」区分开。 */
-const PET_STREAM_PATH = '/api/tauri/pet/session/stream'
+const MOUNTED_GET_PATH = '/api/tauri/notification/turn-end'
 
 /** 仓库内不存在的插件 id：注入态下它证明请求已越过鉴权层落到路由层。 */
 const UNMOUNTED_PATH = '/api/tauri/unmounted-probe/ping'
@@ -95,7 +95,7 @@ async function waitForReady(child: ChildProcess, logPath: string): Promise<strin
 async function startGateHost(): Promise<GateHost> {
   const profile = await scaffoldDshProfile({
     plugin: 'dsh-tauri',
-    also: ['dsh-tauri-pet'],
+    also: ['dsh-tauri-notification'],
   })
   const logPath = join(profile.home, 'dsh-web.log')
   const logStream: WriteStream = createWriteStream(logPath, { flags: 'a' })
@@ -173,7 +173,7 @@ describe('桌面载体鉴权适配：非注入态不接管', () => {
           '未接管时 token 交换必须下发会话 Cookie',
         ).not.toBe('')
 
-        const api = await fetch(`${host.baseUrl}${PET_STREAM_PATH}`)
+        const api = await fetch(`${host.baseUrl}${MOUNTED_GET_PATH}`)
         expect(api.status, '未接管时 /api 必须仍然 401').toBe(401)
         const body = await api.json() as { error?: string }
         expect(body.error, '拒绝理由必须来自连接门').toBe('unauthorized')
@@ -216,9 +216,9 @@ describe('桌面载体鉴权适配：注入态接管', () => {
         ).toBe(404)
         expect(unmounted.status, '不得再出现会话拒绝').not.toBe(401)
 
-        const pet = await fetch(`${host.baseUrl}${PET_STREAM_PATH}`)
-        expect(pet.status, '已挂载插件的 /api 也不得再被 401 拦住').not.toBe(401)
-        expect(pet.status, '注入态下请求必须落到路由层').toBeLessThan(500)
+        const mounted = await fetch(`${host.baseUrl}${MOUNTED_GET_PATH}`)
+        expect(mounted.status, '已挂载插件的 /api 也不得再被 401 拦住').not.toBe(401)
+        expect(mounted.status, '注入态下请求必须落到路由层').toBeLessThan(500)
 
         const crossOrigin = await fetch(`${host.baseUrl}${UNMOUNTED_PATH}`, {
           headers: { origin: 'http://evil.example' },
@@ -243,7 +243,7 @@ describe('桌面载体鉴权适配：载体标记严格判等', () => {
         const index = await fetch(`${host.baseUrl}/`)
         expect(index.status, '标记不是 1 时索引必须仍被拒 401').toBe(401)
 
-        const api = await fetch(`${host.baseUrl}${PET_STREAM_PATH}`)
+        const api = await fetch(`${host.baseUrl}${MOUNTED_GET_PATH}`)
         expect(api.status, '/api 的鉴权也不得被改写').toBe(401)
       }
       finally {
