@@ -12,14 +12,6 @@ import { connection } from './index'
 let scanController: AbortController | undefined
 let healthController: AbortController | undefined
 
-function withSavedToken(address: BridgeAddress): BridgeAddress {
-  const normalized = parseQrPayload(address.url)
-  const token = address.token ?? normalized?.token ?? connection.tokens[normalized?.id ?? address.id]
-  if (token)
-    return { ...address, token }
-  return address
-}
-
 export function cancelAutoScan(): void {
   scanController?.abort()
   scanController = undefined
@@ -28,7 +20,7 @@ export function cancelAutoScan(): void {
 
 export function connectAddress(address: BridgeAddress): void {
   cancelAutoScan()
-  connection.accept(withSavedToken(address))
+  connection.accept(address)
 }
 
 export async function startAutoScan({ skipId, historyOnly = false }: { skipId?: string, historyOnly?: boolean } = {}): Promise<void> {
@@ -46,7 +38,7 @@ export async function startAutoScan({ skipId, historyOnly = false }: { skipId?: 
     const history = connection.history.filter(entry => entry.id !== skipId)
     const previous = await Promise.all(history.map(async (entry) => {
       connection.setHealth(entry.id, 'checking')
-      const host = await probeBridge(withSavedToken(entry), controller.signal, HISTORY_PROBE_TIMEOUT_MS)
+      const host = await probeBridge(entry, controller.signal, HISTORY_PROBE_TIMEOUT_MS)
       if (!controller.signal.aborted)
         connection.setHealth(entry.id, host ? 'available' : 'unavailable')
       return host
@@ -85,7 +77,7 @@ export async function startAutoScan({ skipId, historyOnly = false }: { skipId?: 
       onFound(host) {
         if (expired || controller.signal.aborted || generation !== connection.scanGeneration)
           return
-        chosen = withSavedToken(host)
+        chosen = host
         controller.abort()
       },
     })

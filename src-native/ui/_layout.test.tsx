@@ -27,9 +27,6 @@ const native = vi.hoisted(() => ({
   dismissTo: vi.fn<(path: string) => void>(),
   read: vi.fn<(key: string) => Promise<string | null>>(),
   write: vi.fn<(key: string, value: string) => Promise<void>>(),
-  readToken: vi.fn<(key: string) => Promise<string | null>>(),
-  writeToken: vi.fn<(key: string, value: string) => Promise<void>>(),
-  deleteToken: vi.fn<(key: string) => Promise<void>>(),
   fetch: vi.fn<typeof fetch>(),
   getIpAddressAsync: vi.fn<() => Promise<string>>(),
   setNotificationHandler: vi.fn(),
@@ -43,7 +40,6 @@ const native = vi.hoisted(() => ({
 }))
 
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: native.read, setItem: native.write } }))
-vi.mock('expo-secure-store', () => ({ getItemAsync: native.readToken, setItemAsync: native.writeToken, deleteItemAsync: native.deleteToken }))
 vi.mock('expo-network', () => ({ getIpAddressAsync: native.getIpAddressAsync }))
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'root-test-nonce' }))
 vi.mock('expo-notifications', () => ({
@@ -198,7 +194,6 @@ vi.mock('react-native-webview', async () => {
 
 const alpha = { id: 'http://bridge.local:3080', url: 'http://bridge.local:3080/tasks', host: 'bridge.local', port: 3080 }
 const beta = { id: 'https://second.local', url: 'https://second.local/workspaces', host: 'second.local', port: 443 }
-const deviceToken = `v1.1700000000000.0.${'a'.repeat(64)}`
 const snapshot = { version: 1 as const, history: [{ ...alpha, lastConnectedAt: 20 }, { ...beta, lastConnectedAt: 10 }], guidedHosts: ['http://bridge.local:3080', 'https://second.local'] }
 let screen: ReactTestRenderer | undefined
 let store: typeof import('@/store/modules/connection')
@@ -220,11 +215,11 @@ function resetConnection() {
 
 /**
  * 与 `restoreConnections()` 等价的水合：快照经 `parseConnectionSnapshot` 进 state，
- * 令牌单独给出，`hydrated` 由 `markHydrated` 置位（也是 persist 插件开始写盘的前提）。
+ * `hydrated` 由 `markHydrated` 置位（也是 persist 插件开始写盘的前提）。
  */
-function hydrate(data: unknown = { version: 1, history: [], guidedHosts: [] }, tokens: Record<string, string> = {}) {
+function hydrate(data: unknown = { version: 1, history: [], guidedHosts: [] }) {
   connection.$patch(store.parseConnectionSnapshot(data))
-  connection.markHydrated(tokens)
+  connection.markHydrated()
 }
 
 async function refreshCameraPermission() {
@@ -399,9 +394,6 @@ beforeEach(async () => {
   native.dismissTo.mockImplementation(navigate)
   native.read.mockResolvedValue(null)
   native.write.mockResolvedValue(undefined)
-  native.readToken.mockResolvedValue(null)
-  native.writeToken.mockResolvedValue(undefined)
-  native.deleteToken.mockResolvedValue(undefined)
   native.fetch.mockImplementation(async () => Response.json({ name: 'DeepSeek Harness', short_name: 'DSH' }))
   native.getIpAddressAsync.mockResolvedValue('0.0.0.0')
   native.getLastNotificationResponseAsync.mockResolvedValue(null)
@@ -437,11 +429,9 @@ afterEach(async () => {
 })
 
 describe('rendered root hydration', () => {
-  it('waits for history and secure tokens before discovery or persistence and declares the QR modal route', async () => {
+  it('waits for persisted history before discovery or persistence and declares the QR modal route', async () => {
     const historyRead = Promise.withResolvers<string | null>()
-    const tokenRead = Promise.withResolvers<string | null>()
     native.read.mockReturnValue(historyRead.promise)
-    native.readToken.mockReturnValue(tokenRead.promise)
     await mount()
     expect(root().findAll(node => String(node.type) === 'Screen').map(node => node.props)).toEqual([
       { name: 'index' },
@@ -457,29 +447,22 @@ describe('rendered root hydration', () => {
     expect(native.fetch).not.toHaveBeenCalled()
     expect(native.getIpAddressAsync).not.toHaveBeenCalled()
     expect(native.write).not.toHaveBeenCalled()
-    expect(native.writeToken).not.toHaveBeenCalled()
 
     await act(async () => {
       historyRead.resolve(JSON.stringify({ version: 1, history: [{ ...alpha, lastConnectedAt: 20 }], guidedHosts: [] }))
       await vi.advanceTimersByTimeAsync(0)
     })
-    expect(native.readToken).toHaveBeenCalledTimes(1)
-    expect(connection.hydrated).toBe(false)
-    expect(native.fetch).not.toHaveBeenCalled()
+    expect(connection.hydrated).toBe(true)
     expect(native.write).not.toHaveBeenCalled()
-    await act(async () => {
-      tokenRead.resolve(deviceToken)
-      await vi.advanceTimersByTimeAsync(0)
-    })
 
     expect(drawer().props.swipeEnabled).toBe(true)
-    expect(webView().props.source).toEqual({ uri: `http://bridge.local:3080/?auth=${deviceToken}` })
+    expect(webView().props.source).toEqual({ uri: 'http://bridge.local:3080/tasks' })
     expect(texts()).toContain('连接中…')
     expect(native.read).toHaveBeenCalledExactlyOnceWith('dsh-bridge/connections')
     expect(native.getIpAddressAsync).not.toHaveBeenCalled()
     // 磁盘上已是与快照等价的负载，适配器去重后水合本身不写盘（旧实现「持久化字段未变不写盘」的等价断言）。
     expect(native.write).not.toHaveBeenCalled()
-    // 只有持久化字段真的变化（会话落库）才写盘，且负载永远不含令牌。
+    // 只有持久化字段真的变化（会话落库）才写盘，且负载永远不含访问口令。
     await act(async () => {
       runtime.connectAddress(alpha)
       connection.markLoaded(connection.viewGeneration, 30)
@@ -489,7 +472,6 @@ describe('rendered root hydration', () => {
     for (const [key, payload] of native.write.mock.calls) {
       expect(key).toBe('dsh-bridge/connections')
       expect(JSON.parse(payload)).toEqual({ version: 1, history: [{ ...alpha, lastConnectedAt: 30 }], guidedHosts: [] })
-      expect(payload).not.toContain(deviceToken)
     }
   })
 })
@@ -526,7 +508,6 @@ describe('rendered root entry selection', () => {
     expect(connection.history).toEqual([])
     expect(connection.stage).toBe('idle')
     expect(button('自动扫描局域网').props.isDisabled).toBe(false)
-    expect(native.readToken).not.toHaveBeenCalled()
     expect(native.getIpAddressAsync).not.toHaveBeenCalled()
     expect(native.fetch).not.toHaveBeenCalled()
   })
@@ -611,9 +592,7 @@ describe('rendered root entry selection', () => {
 describe('rendered root notification focus', () => {
   it('holds a cold notification until hydration completes, then returns from QR to the saved host and delivers focus after readiness', async () => {
     const historyRead = Promise.withResolvers<string | null>()
-    const tokenRead = Promise.withResolvers<string | null>()
     native.read.mockReturnValue(historyRead.promise)
-    native.readToken.mockReturnValue(tokenRead.promise)
     native.getLastNotificationResponseAsync.mockResolvedValue(response('http://bridge.local:3080', 'cold-session'))
     native.path = '/scan'
     await mount()
@@ -627,18 +606,11 @@ describe('rendered root notification focus', () => {
       historyRead.resolve(JSON.stringify({ version: 1, history: [{ ...alpha, lastConnectedAt: 20 }], guidedHosts: [] }))
       await vi.advanceTimersByTimeAsync(0)
     })
-    expect(native.dismissTo).not.toHaveBeenCalled()
-    expect(native.fetch).not.toHaveBeenCalled()
-    await act(async () => {
-      tokenRead.resolve(deviceToken)
-      await vi.advanceTimersByTimeAsync(0)
-    })
-
     expect(native.dismissTo).toHaveBeenCalledWith('/')
     expect(texts()).not.toContain('扫码连接 DSH Mobile')
     expect(root().findAll(node => String(node.type) === 'CameraView')).toHaveLength(0)
     expect(drawer().props.open).toBe(false)
-    expect(webView().props.source).toEqual({ uri: `http://bridge.local:3080/?auth=${deviceToken}` })
+    expect(webView().props.source).toEqual({ uri: 'http://bridge.local:3080/tasks' })
     expect(native.getIpAddressAsync).not.toHaveBeenCalled()
     expect(connection.pendingFocus?.sessionId).toBe('cold-session')
     const instance = await webViewInstance()
@@ -652,7 +624,7 @@ describe('rendered root notification focus', () => {
   })
 
   it('routes a warm notification for another saved host out of the scanner and waits for that host to become ready', async () => {
-    hydrate(snapshot, { 'http://bridge.local:3080': 'saved-secret' })
+    hydrate(snapshot)
     runtime.connectAddress(beta)
     await mount()
     await ready('https://second.local')
@@ -668,7 +640,7 @@ describe('rendered root notification focus', () => {
     expect(native.dismissTo).toHaveBeenCalledExactlyOnceWith('/')
     expect(root().findAll(node => String(node.type) === 'CameraView')).toHaveLength(0)
     expect(texts()).not.toContain('扫码连接 DSH Mobile')
-    expect(webView().props.source).toEqual({ uri: 'http://bridge.local:3080/tasks?auth=saved-secret' })
+    expect(webView().props.source).toEqual({ uri: 'http://bridge.local:3080/tasks' })
     expect(await webViewInstance()).not.toBe(oldInstance)
     expect(texts()).toContain('连接中…')
     expect(connection.pendingFocus?.sessionId).toBe('warm-session')
@@ -683,7 +655,7 @@ describe('rendered root notification focus', () => {
   })
 
   it('dismisses a hydrated same-origin QR modal without reconnecting the already loaded WebView', async () => {
-    hydrate(snapshot, { 'http://bridge.local:3080': 'saved-secret' })
+    hydrate(snapshot)
     runtime.connectAddress(alpha)
     await mount()
     await ready('http://bridge.local:3080')
@@ -834,7 +806,6 @@ describe('rendered root lifecycle resources', () => {
     const coldResponse = Promise.withResolvers<NotificationResponse | null>()
     native.read.mockReturnValue(historyRead.promise)
     native.getLastNotificationResponseAsync.mockReturnValue(coldResponse.promise)
-    native.readToken.mockResolvedValue('late-token')
     await mount()
     expect(connection.hydrated).toBe(false)
 
@@ -848,7 +819,6 @@ describe('rendered root lifecycle resources', () => {
     expect(native.getIpAddressAsync).not.toHaveBeenCalled()
     expect(native.fetch).not.toHaveBeenCalled()
     expect(native.write).not.toHaveBeenCalled()
-    expect(native.writeToken).not.toHaveBeenCalled()
     expect(native.dismissTo).not.toHaveBeenCalled()
     expect(native.setNotificationHandler).toHaveBeenLastCalledWith(null)
     // 卸载后残留的定时器只可能属于 React Query 的查询缓存回收，清掉查询缓存后再断言没有遗留定时器。
@@ -856,7 +826,7 @@ describe('rendered root lifecycle resources', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
-  it('aborts active discovery and disposes native subscriptions, persistence, focus and health timers on unmount', async () => {
+  it('aborts active discovery and disposes native subscriptions, focus and health timers on unmount', async () => {
     native.getIpAddressAsync.mockResolvedValue('192.168.1.50')
     holdNetwork()
     await mount()
@@ -879,7 +849,6 @@ describe('rendered root lifecycle resources', () => {
     expect(native.responseListeners.size).toBe(0)
     expect(native.routeListeners.size).toBe(0)
     native.write.mockClear()
-    native.writeToken.mockClear()
     native.fetch.mockClear()
     listener(response('http://bridge.local:3080', 'disposed-session'))
     expect(connection.pendingFocus).toBeNull()
@@ -887,11 +856,10 @@ describe('rendered root lifecycle resources', () => {
     connection.markLoaded(connection.viewGeneration, 40)
     connection.queueFocus({ origin: 'http://bridge.local:3080', sessionId: 'unobserved', title: '', tag: '' })
     await vi.advanceTimersByTimeAsync(15000)
-    // 快照落盘归 persist 插件所有（进程级订阅，不随布局卸载释放），布局自己持有的只有 SecureStore 令牌订阅。
+    // 快照落盘归 persist 插件所有（进程级订阅，不随布局卸载释放）。
     expect(native.write.mock.calls.map(([, payload]) => JSON.parse(payload))).toEqual([
       { version: 1, history: [{ ...alpha, lastConnectedAt: 40 }], guidedHosts: [] },
     ])
-    expect(native.writeToken).not.toHaveBeenCalled()
     expect(native.fetch).not.toHaveBeenCalled()
     expect(native.dismissTo).not.toHaveBeenCalled()
   })

@@ -106,10 +106,10 @@ function resetConnection() {
   vi.clearAllMocks()
 }
 
-/** 与 restoreConnections() 等价的水合：快照进 state，令牌单独落 map，hydrated 由 markHydrated 置位。 */
-function hydrate(tokens: Record<string, string> = {}) {
+/** 与 restoreConnections() 等价的水合：快照进 state，hydrated 由 markHydrated 置位。 */
+function hydrate() {
   connection.$patch(store.parseConnectionSnapshot({ version: 1, history: [], guidedHosts: [] }))
-  connection.markHydrated(tokens)
+  connection.markHydrated()
 }
 
 function text(node: ReactTestInstance | string): string {
@@ -331,7 +331,6 @@ describe('rendered scanner QR events', () => {
 
     expect(connection.current).toEqual({ id: 'http://bridge.local:3080', url: 'http://bridge.local:3080/tasks?theme=dark', host: 'bridge.local', port: 3080, token: 'qr-token' })
     expect(connection.stage).toBe('connected')
-    expect(connection.tokens).toEqual({})
     expect(native.back).toHaveBeenCalledExactlyOnceWith()
     expect(camera().props.onBarcodeScanned).toBeUndefined()
     const generation = connection.viewGeneration

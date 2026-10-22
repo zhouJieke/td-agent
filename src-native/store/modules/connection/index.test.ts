@@ -8,7 +8,6 @@ vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem
 
 const alpha: BridgeAddress = { id: 'http://bridge.local:3080', url: 'http://bridge.local:3080/tasks?theme=dark', host: 'bridge.local', port: 3080 }
 const beta: BridgeAddress = { id: 'https://second.local', url: 'https://second.local/workspaces', host: 'second.local', port: 443 }
-const deviceToken = `v1.1700000000000.0.${'a'.repeat(64)}`
 
 function load(address: BridgeAddress, at: number) {
   expect(connection.accept(address)).toBe(true)
@@ -117,24 +116,11 @@ describe('parseConnectionSnapshot trust boundary', () => {
 })
 
 describe('connection editing', () => {
-  it('forgets saved metadata immediately even if cookie clearing is interrupted by a different connection', () => {
+  it('still accepts a forgotten origin once its saved metadata is gone', () => {
     load(alpha, 10)
-    connection.markHydrated({ [alpha.id]: 'secret' })
-    connection.dismissHint()
-    connection.queueFocus({ origin: alpha.id, sessionId: 's1', title: 'Task', tag: 'task' })
-    const generation = connection.viewGeneration
     connection.forget(alpha.id)
-    expect(connection.current).toEqual(alpha)
-    expect(connection.forgettingOrigin).toBe(alpha.id)
-    expect(connection.viewGeneration).toBe(generation)
+    expect(connection.current).toBeNull()
     expect(connection.history).toEqual([])
-    expect(connection.guidedHosts).toEqual([])
-    expect(connection.health).toEqual({})
-    expect(connection.tokens).toEqual({})
-    expect(connection.pendingFocus).toBeNull()
-    expect(connection.accept(alpha)).toBe(false)
-    connection.disconnect()
-    expect(connection.accept(beta)).toBe(true)
     expect(connection.accept(alpha)).toBe(true)
     expect(connection.current).toEqual(alpha)
     expect(connection.history).toEqual([])
@@ -154,19 +140,17 @@ describe('connection editing', () => {
     expect(connection.history[0]?.name).toBe('我的电脑')
   })
 
-  it('removes the active connection and invalidates late view callbacks while returning to idle', () => {
+  it('forgets the active connection and invalidates late view callbacks while returning to idle', () => {
     load(alpha, 10)
-    connection.markHydrated({ [alpha.id]: 'secret' })
     connection.dismissHint()
     connection.setDrawerOpen(true)
     connection.queueFocus({ origin: alpha.id, sessionId: 's1', title: 'Task', tag: 'task' })
     const generation = connection.viewGeneration
-    connection.remove(alpha.id)
+    connection.forget(alpha.id)
     connection.markLoaded(generation, 20)
     expect(connection.current).toBeNull()
     expect(connection.stage).toBe('idle')
     expect(connection.history).toEqual([])
-    expect(connection.tokens).toEqual({})
     expect(connection.health).toEqual({})
     expect(connection.guidedHosts).toEqual([])
     expect(connection.pendingFocus).toBeNull()
@@ -174,11 +158,11 @@ describe('connection editing', () => {
     expect(connection.viewGeneration).toBeGreaterThan(generation)
   })
 
-  it('removes an inactive entry without interrupting the current connection', () => {
+  it('forgets an inactive entry without interrupting the current connection', () => {
     load(alpha, 10)
     load(beta, 20)
     const generation = connection.viewGeneration
-    connection.remove(alpha.id)
+    connection.forget(alpha.id)
     expect(connection.current).toEqual(beta)
     expect(connection.viewGeneration).toBe(generation)
     expect(connection.stage).toBe('connected')
@@ -202,7 +186,6 @@ describe('connection hydration', () => {
       stage: 'idle',
       current: null,
       history: [],
-      tokens: {},
       health: {},
       guidedHosts: [],
       drawerOpen: false,
@@ -214,7 +197,6 @@ describe('connection hydration', () => {
       viewGeneration: 0,
       pendingFocus: null,
       focusGeneration: 0,
-      forgettingOrigin: null,
     })
     connection.setHealth('http://bridge.local:3080', 'unavailable')
     expect(connection.health).toEqual({ 'http://bridge.local:3080': 'unavailable' })
@@ -228,12 +210,11 @@ describe('connection hydration', () => {
       guidedHosts: ['http://bridge.local:3080'],
     }
     connection.$patch(parseConnectionSnapshot(snapshot))
-    connection.markHydrated({ 'http://bridge.local:3080': 'secure-secret' })
-    connection.markHydrated({})
+    connection.markHydrated()
+    connection.markHydrated()
     expect(connection.hydrated).toBe(true)
     expect(connection.history).toEqual([{ id: 'http://bridge.local:3080', url: 'http://bridge.local:3080/tasks?theme=dark', host: 'bridge.local', port: 3080, lastConnectedAt: 10 }])
     expect(connection.guidedHosts).toEqual(['http://bridge.local:3080'])
-    expect(connection.tokens).toEqual({ 'http://bridge.local:3080': 'secure-secret' })
     expect(connection.current).toBeNull()
     expect(connection.stage).toBe('idle')
     expect(connection.scanGeneration).toBe(0)
@@ -281,9 +262,8 @@ describe('connection scan and view generations', () => {
     expect(connection.notice).toBeNull()
   })
 
-  it('beginScan clears transient view state while retaining successful history and tokens', () => {
+  it('beginScan clears transient view state while retaining successful history', () => {
     load(alpha, 10)
-    connection.rememberDeviceSession(alpha.id, deviceToken, connection.viewGeneration)
     connection.setDrawerOpen(true)
     connection.setNotice('old notice')
     connection.markLoadFailed(connection.viewGeneration, 'old error')
@@ -297,7 +277,6 @@ describe('connection scan and view generations', () => {
     expect(connection.drawerOpen).toBe(false)
     expect(connection.swipeHintVisible).toBe(false)
     expect(connection.history).toEqual([{ ...alpha, lastConnectedAt: 10 }])
-    expect(connection.tokens).toEqual({ 'http://bridge.local:3080': deviceToken })
   })
 
   it('ignores stale loaded and failed callbacks after accepting another origin', () => {
@@ -320,7 +299,6 @@ describe('connection acceptance and successful history', () => {
   it('rejects invalid addresses without storing their token or advancing generations', () => {
     expect(connection.accept({ id: 'https://forged.local', url: 'ftp://bad.local', host: 'forged.local', port: 3080, token: 'secret' })).toBe(false)
     expect(connection.current).toBeNull()
-    expect(connection.tokens).toEqual({})
     expect(connection.scanGeneration).toBe(0)
     expect(connection.viewGeneration).toBe(0)
   })
@@ -328,31 +306,15 @@ describe('connection acceptance and successful history', () => {
   it('normalizes the URL instead of trusting id, host and port supplied by a caller', () => {
     expect(connection.accept({ id: 'https://evil.local', url: 'http://BRIDGE.local:80/tasks?token=url-secret&theme=dark#fragment', host: 'evil.local', port: 9, token: 'explicit-secret' })).toBe(true)
     expect(connection.current).toEqual({ id: 'http://bridge.local', url: 'http://bridge.local/tasks?theme=dark', host: 'bridge.local', port: 80, token: 'explicit-secret' })
-    expect(connection.tokens).toEqual({})
     expect(connection.history).toEqual([])
     expect(connection.health).toEqual({ 'http://bridge.local': 'available' })
-  })
-
-  it('reuses a secure token only for the exact normalized origin', () => {
-    connection.markHydrated({ 'http://bridge.local:3080': 'saved' })
-    connection.accept(alpha)
-    expect(connection.current).toEqual({ ...alpha, token: 'saved' })
-    connection.accept({ ...alpha, id: 'http://bridge.local:3082', url: 'http://bridge.local:3082/tasks', port: 3082 })
-    expect(connection.current).toEqual({ id: 'http://bridge.local:3082', url: 'http://bridge.local:3082/tasks', host: 'bridge.local', port: 3082 })
-    expect(connection.tokens).toEqual({ 'http://bridge.local:3080': 'saved' })
   })
 
   it('uses a token extracted from the accepted URL transiently without persisting it', () => {
     connection.accept({ ...alpha, url: 'http://bridge.local:3080/tasks?auth=fresh&theme=dark' })
     expect(connection.current).toEqual({ ...alpha, token: 'fresh' })
-    expect(connection.tokens).toEqual({})
-  })
-
-  it('prefers a newly scanned URL token over an older saved token for that origin', () => {
-    connection.markHydrated({ 'http://bridge.local:3080': 'old' })
-    connection.accept({ ...alpha, url: 'http://bridge.local:3080/tasks?auth=fresh&theme=dark' })
-    expect(connection.current).toEqual({ ...alpha, token: 'fresh' })
-    expect(connection.tokens).toEqual({ 'http://bridge.local:3080': 'old' })
+    connection.markLoaded(connection.viewGeneration, 10)
+    expect(connection.serialize()).toEqual({ version: 1, history: [{ ...alpha, lastConnectedAt: 10 }], guidedHosts: [] })
   })
 
   it('records history only after a successful view load', () => {
@@ -453,9 +415,8 @@ describe('connection hints, disconnect and serialization', () => {
     expect(connection.swipeHintVisible).toBe(false)
   })
 
-  it('disconnect clears transient UI and invalidates callbacks while preserving history, secure tokens and guides', () => {
+  it('disconnect clears transient UI and invalidates callbacks while preserving history and guides', () => {
     load(alpha, 10)
-    connection.rememberDeviceSession(alpha.id, deviceToken, connection.viewGeneration)
     connection.dismissHint()
     connection.setDrawerOpen(true)
     connection.setNotice('offline')
@@ -475,7 +436,6 @@ describe('connection hints, disconnect and serialization', () => {
     expect(connection.swipeHintVisible).toBe(false)
     expect(connection.pendingFocus).toBeNull()
     expect(connection.history).toEqual([{ ...alpha, lastConnectedAt: 10 }])
-    expect(connection.tokens).toEqual({ 'http://bridge.local:3080': deviceToken })
     expect(connection.guidedHosts).toEqual(['http://bridge.local:3080'])
   })
 

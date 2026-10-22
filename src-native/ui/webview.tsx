@@ -18,7 +18,7 @@ import { Uniwind } from 'uniwind'
 import { useStore } from 'valtio-define'
 import { BreathingLight } from '@/components/breathing-light'
 import { Logo, Wordmark } from '@/components/icons'
-import { ACCESS_LOGIN_PATH, ACCESS_TEAM_DOMAIN_SUFFIX, SESSION_FORGET_TIMEOUT_MS, WEBVIEW_LOAD_TIMEOUT_MS } from '@/config/constants'
+import { ACCESS_LOGIN_PATH, ACCESS_TEAM_DOMAIN_SUFFIX, WEBVIEW_LOAD_TIMEOUT_MS } from '@/config/constants'
 import { useAppState } from '@/hooks/use-app-state'
 import { requestNotificationAccess, sendNativeNotification } from '@/hooks/use-notifications'
 import { connection } from '@/store/modules/connection'
@@ -31,7 +31,7 @@ export function BridgeWebView({ address, generation }: { address: BridgeAddress,
   const { t } = useTranslation()
   const [nonce] = useState(randomUUID)
   const [source] = useState(() => ({
-    uri: !address.token && !connection.tokens[address.id] && !connection.history.some(entry => entry.id === address.id)
+    uri: !address.token && !connection.history.some(entry => entry.id === address.id)
       ? new URL('/?pair=1', address.id).toString()
       : buildConnectUrl(address),
   }))
@@ -95,17 +95,6 @@ export function BridgeWebView({ address, generation }: { address: BridgeAddress,
     const timeout = setTimeout(setLoadingTimedOut, WEBVIEW_LOAD_TIMEOUT_MS, true)
     return () => clearTimeout(timeout)
   }, [authenticating, documentGeneration, documentReady, state.loadError])
-  // keep:effect Bound cookie clearing to this WebView's lifetime before removing its connection.
-  useEffect(() => {
-    if (state.forgettingOrigin !== address.id)
-      return
-    ref.current?.injectJavaScript(nativeMessageScript(address.id, nonce, { type: 'dsh://forget-session' }))
-    const timeout = setTimeout(() => {
-      if (generation === connection.viewGeneration && connection.forgettingOrigin === address.id)
-        connection.remove(address.id)
-    }, SESSION_FORGET_TIMEOUT_MS)
-    return () => clearTimeout(timeout)
-  }, [address.id, generation, nonce, state.forgettingOrigin])
   // keep:effect Route Android back to WebView history without consuming an open drawer's back event.
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -161,13 +150,6 @@ export function BridgeWebView({ address, generation }: { address: BridgeAddress,
     const message = parseNativeMessage(nativeEvent.data, nativeEvent.url, address.id, nonce)
     if (!message || generation !== connection.viewGeneration)
       return
-    if (message.type === 'dsh://session-forgotten') {
-      if (connection.forgettingOrigin === address.id)
-        connection.remove(address.id)
-      return
-    }
-    if (connection.forgettingOrigin === address.id)
-      return
     if (message.type === 'dsh://bridge-ready') {
       if (connection.loadError)
         return
@@ -179,10 +161,6 @@ export function BridgeWebView({ address, generation }: { address: BridgeAddress,
     }
     if (!documentReadyRef.current || connection.loadError)
       return
-    if (message.type === 'dsh://device-session') {
-      connection.rememberDeviceSession(address.id, message.token, generation)
-      return
-    }
     if (message.type === 'dsh://theme-state') {
       Uniwind.setTheme(message.theme)
       return
