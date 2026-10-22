@@ -51,7 +51,6 @@
     "@tauri-apps/plugin-http": "catalog:tauri",
     "@tauri-apps/plugin-os": "catalog:",
     "@tauri-apps/plugin-store": "catalog:",
-    "dsh-pet-component": "catalog:runtime",
     "expo": "catalog:native",
     "expo-blur": "catalog:native",
     "expo-build-properties": "catalog:native",

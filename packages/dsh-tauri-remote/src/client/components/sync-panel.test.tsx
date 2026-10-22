@@ -119,12 +119,12 @@ describe('syncPanel', () => {
     store.machines.commitList({
       machines: [machineA],
       discovered: [],
-      statuses: { a: { ...connectedStatus, progress: { phase: 'syncing', attempt: 3, total: 5, item: 'dsh-tauri-pet' } } },
+      statuses: { a: { ...connectedStatus, progress: { phase: 'syncing', attempt: 3, total: 5, item: 'dsh-tauri-scheduler' } } },
     })
     render(<SyncPanel t={t} />)
     await waitFor(() => expect(screen.getByTestId('sync-progress')).toBeTruthy())
     expect(screen.getByTestId('sync-progress').textContent).toContain('3/5')
-    expect(screen.getByTestId('sync-progress').textContent).toContain('dsh-tauri-pet')
+    expect(screen.getByTestId('sync-progress').textContent).toContain('dsh-tauri-scheduler')
     const fill = screen.getByTestId('sync-progress').querySelector('[class~="bg-brand"]') as HTMLElement
     expect(fill.style.width).toBe('40%')
     expect(screen.getByTestId('sync-apply').textContent).toContain('Syncing')

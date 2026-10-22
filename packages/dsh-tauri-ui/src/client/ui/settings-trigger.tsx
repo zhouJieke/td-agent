@@ -72,7 +72,7 @@ export function SettingsTrigger({ wide, useSessions }: SettingsTriggerProps): Re
   const [menuOpen, setMenuOpen] = useState(false)
   locale.useLocale()
   // 官方账号菜单占据设置座位时它就是「设置菜单」；座位缺席（更老核心 / 浏览器直开）时
-  // 由壳层自己给菜单——两者条目结构一致，宠物等插件按「含『设置』条目」补条目。
+  // 由壳层自己给菜单——两者条目结构一致，插件按「含『设置』条目」补条目。
   const menuItems: MenuEntry[] = [
     { id: 'settings', label: locale.text('settings'), icon: <Gear width={16} height={16} /> },
   ]

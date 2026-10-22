@@ -13,7 +13,7 @@ interface ToastProviderProps {
 }
 
 /**
- * 应用共用的 HeroUI queue/provider。桌宠窗口通过 custom 渲染精简气泡，
+ * 应用共用的 HeroUI queue/provider。外置窗口可通过 custom 渲染精简气泡，
  * 主窗口保留 HeroUI 默认的操作和关闭按钮。
  *
  * 非 custom 分支必须传 `undefined`：HeroUI 以 `typeof children === 'undefined'`

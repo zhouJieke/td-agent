@@ -241,7 +241,7 @@ export const notifyFeature = defineRegister<ClientContext>((controller, ctx, ada
       notify(
         sessionId,
         kind,
-        // 标题放会话 title、正文放「动作 · 摘要」：与会话列表、桌宠气泡一致，用户一眼能认出
+        // 标题放会话 title、正文放「动作 · 摘要」：与会话列表一致，用户一眼能认出
         // 是哪个会话、要做什么（系统通知的宽度只够一行摘要）。
         sessionTitle(sessionId),
         `${label} · ${detail || fallback}`,
@@ -316,7 +316,7 @@ export const notifyFeature = defineRegister<ClientContext>((controller, ctx, ada
     const entries = new Map<string, SessionObservation>()
     for (const sessionId of list.ids) {
       const summary = list.byId[sessionId]
-      // 子代理会话由父会话驱动，与桌宠（use-bubble-tracker）一致：不进观察集，也就不发通知。
+      // 子代理会话由父会话驱动：不进观察集，也就不发通知。
       if (summary?.origin === 'subagent')
         continue
       const status = statuses?.get(sessionId)
