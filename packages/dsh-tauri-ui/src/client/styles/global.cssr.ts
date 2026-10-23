@@ -90,6 +90,9 @@ export default c([
   c('[data-dsh-dock-fallback]', {
     display: 'none !important',
   }),
+  c('[data-agent-preset-id="minimal"], [data-agent-preset-id="cordis"]', {
+    display: 'none !important',
+  }),
   c('[data-dsh-toggle-cluster], .nArs4W_toggleCluster', {
     top: '6px !important',
     right: '6px !important',
