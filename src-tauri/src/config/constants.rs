@@ -9,9 +9,9 @@ pub const NODE_BASE_URL: &str = "https://nodejs.org/dist/";
 /// Node.js 镜像下载地址（npmmirror，302 重定向至 cdn.npmmirror.com）
 pub const NODE_MIRROR_BASE_URL: &str = "https://npmmirror.com/mirrors/node/";
 
-/// 打包的 DeepSeek Harness 发行版下载地址（GitHub Release，默认首选源）
 pub const DSH_CORE_URL: &str =
     "https://github.com/dsh-tauri-desk/deepseek-harness-pkg/releases/latest/download/";
+pub const DSH_CORE_OSS_URL: &str = "https://ethan-zmj.oss-cn-beijing.aliyuncs.com/";
 
 /// GitHub Release 的代理镜像前缀列表（透传官方 URL，下载内容一致、
 /// 仍可做 SHA-256 完整性校验），按实测延迟从低到高排列，官方直连失败时依次兜底。

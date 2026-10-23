@@ -50,7 +50,6 @@ fn node_base_url(region: Region) -> &'static str {
 /// Node.js 官方发行包文件名（按平台与架构）
 ///
 /// 抽成纯函数以便单元测试覆盖所有平台（与宿主操作系统无关），
-/// 生产代码用 `env::consts::OS` / `env::consts::ARCH` 调用。
 fn node_pkg_filename(os: &str, arch: &str) -> Result<String, String> {
     match (os, arch) {
         ("macos", "aarch64") => Ok(format!("node-{}-darwin-arm64.tar.gz", NODE_VERSION)),
@@ -62,9 +61,29 @@ fn node_pkg_filename(os: &str, arch: &str) -> Result<String, String> {
     }
 }
 
+fn download_arch() -> &'static str {
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    {
+        static APPLE_SILICON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        if *APPLE_SILICON.get_or_init(|| {
+            std::process::Command::new("/usr/sbin/sysctl")
+                .args(["-n", "hw.optional.arm64"])
+                .output()
+                .is_ok_and(|output| output.status.success() && output.stdout.trim_ascii() == b"1")
+        }) {
+            return "aarch64";
+        }
+    }
+    env::consts::ARCH
+}
+
+pub fn use_oss_dsh_core() -> bool {
+    cfg!(target_os = "macos") && download_arch() == "aarch64"
+}
+
 /// Node.js 运行时下载地址
 pub fn get_node_download_url() -> Result<String, String> {
-    let filename = node_pkg_filename(env::consts::OS, env::consts::ARCH)?;
+    let filename = node_pkg_filename(env::consts::OS, download_arch())?;
     Ok(format!(
         "{}/{}/{}",
         node_base_url(detect_region()),
@@ -85,18 +104,26 @@ fn dsh_pkg_asset_filename(os: &str, arch: &str) -> Result<String, String> {
     }
 }
 
-/// 打包的 DeepSeek Harness 发行版下载地址（GitHub 官方直连，首选源）
 pub fn get_dsh_download_url() -> Result<String, String> {
     Ok(format!(
         "{}{}",
-        DSH_CORE_URL,
-        dsh_pkg_asset_filename(env::consts::OS, env::consts::ARCH)?
+        if use_oss_dsh_core() {
+            DSH_CORE_OSS_URL
+        } else {
+            DSH_CORE_URL
+        },
+        dsh_pkg_asset_filename(env::consts::OS, download_arch())?
     ))
 }
 
 /// 为任意 GitHub Release 资产 URL 生成全部镜像兜底地址
 /// （透传原 URL，下载内容一致，仍可做 SHA-256 完整性校验）。
 pub fn mirror_download_urls(asset_url: &str) -> Vec<String> {
+    if !reqwest::Url::parse(asset_url)
+        .is_ok_and(|url| url.scheme() == "https" && url.host_str() == Some("github.com"))
+    {
+        return Vec::new();
+    }
     DSH_MIRROR_PREFIXES
         .iter()
         .map(|prefix| format!("{prefix}{asset_url}"))
@@ -116,7 +143,7 @@ pub fn get_dsh_download_url_for_tag(tag: &str) -> Result<String, String> {
     Ok(format!(
         "{}{}",
         base,
-        dsh_pkg_asset_filename(env::consts::OS, env::consts::ARCH)?
+        dsh_pkg_asset_filename(env::consts::OS, download_arch())?
     ))
 }
 
@@ -1103,6 +1130,45 @@ mod tests {
         assert_eq!(urls.len(), DSH_MIRROR_PREFIXES.len());
         for (url, prefix) in urls.iter().zip(DSH_MIRROR_PREFIXES) {
             assert_eq!(url, &format!("{prefix}{asset}"));
+        }
+    }
+
+    #[test]
+    fn oss_downloads_are_direct_and_scoped_to_macos_arm64() {
+        let asset =
+            "https://ethan-zmj.oss-cn-beijing.aliyuncs.com/deepseek-harness-pkg-macos-arm64.zip";
+        assert!(mirror_download_urls(asset).is_empty());
+        assert!(mirror_download_urls("https://example.com/file.zip").is_empty());
+        if use_oss_dsh_core() {
+            assert_eq!(get_dsh_download_url().unwrap(), asset);
+        } else {
+            assert!(get_dsh_download_url().unwrap().starts_with(DSH_CORE_URL));
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn apple_silicon_uses_arm64_downloads_even_when_built_for_x64() {
+        let output = std::process::Command::new("/usr/sbin/sysctl")
+            .args(["-n", "hw.optional.arm64"])
+            .output()
+            .expect("hardware architecture probe");
+        if output.status.success() && output.stdout.trim_ascii() == b"1" {
+            assert!(use_oss_dsh_core());
+            assert_eq!(
+                get_dsh_download_url().unwrap(),
+                "https://ethan-zmj.oss-cn-beijing.aliyuncs.com/deepseek-harness-pkg-macos-arm64.zip"
+            );
+            assert!(get_node_download_url()
+                .unwrap()
+                .ends_with("-darwin-arm64.tar.gz"));
+        } else {
+            assert!(!use_oss_dsh_core());
+            assert!(get_dsh_download_url().unwrap().starts_with(DSH_CORE_URL));
+            assert!(get_dsh_download_url().unwrap().ends_with("-macos-x64.zip"));
+            assert!(get_node_download_url()
+                .unwrap()
+                .ends_with("-darwin-x64.tar.gz"));
         }
     }
 

@@ -6,6 +6,8 @@ Tauri 2 + React 19: UI in [`src/`](<../src/>), Rust backend in [`src-tauri/`](<.
 
 Read [AGENTS.md](<../AGENTS.md>) and the [routed specifications](<./specs/devlopment.md>) before changes. Do not inspect the restricted archive directory or run builds during plugin work.
 
+Apple Silicon Macs download the managed core directly from `https://ethan-zmj.oss-cn-beijing.aliyuncs.com/deepseek-harness-pkg-macos-arm64.zip` and require its adjacent `.zip.sha256` file. Download architecture follows the hardware, so x64 desktop builds running through Rosetta also use the ARM64 core and managed Node. The checksum identifies each published build, including replacements with the same core version; missing or invalid checksums stop installation. This fixed URL exposes only the current build, not downloadable history. Its core version must match `engines.dsh.recommend` in `src-tauri/resources/manifest.jsonc`; update the ZIP, checksum, and recommendation together when changing versions. Other platforms use the existing GitHub source.
+
 ## Requirements
 
 | Tool | Requirement / source |

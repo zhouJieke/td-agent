@@ -6,6 +6,8 @@ Tauri 2 + React 19：前端位于 [`src/`](<../src/>)，Rust 后端位于 [`src-
 
 修改前先读 [AGENTS.md](<../AGENTS.md>) 与[路由规范](<./specs/devlopment.md>)。禁止查看受限归档目录，插件改动期间禁止执行构建。
 
+Apple Silicon Mac 的托管内核直接从 `https://ethan-zmj.oss-cn-beijing.aliyuncs.com/deepseek-harness-pkg-macos-arm64.zip` 下载，并要求相邻的 `.zip.sha256` 校验文件。架构按本机芯片识别，x64 桌面程序通过 Rosetta 运行时也使用 ARM64 内核与托管 Node。校验值用于区分每次发布，包括同版本替换；校验文件缺失或无效时停止安装。此固定地址只提供当前构建，不提供远端历史版本下载；内核版本必须与 `src-tauri/resources/manifest.jsonc` 的 `engines.dsh.recommend` 一致，升级版本时需同步更新 ZIP、校验文件和推荐版本。其他平台继续使用既有 GitHub 来源。
+
 ## 环境要求
 
 | 工具 | 要求 / 来源 |

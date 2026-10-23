@@ -249,10 +249,13 @@ async fn download_attempt<'a, R: Runtime>(
 
 fn validate_download_url(url: &str) -> Result<(), String> {
     let parsed = reqwest::Url::parse(url).map_err(|e| format!("DOWNLOAD_URL_INVALID: {e}"))?;
-    let trusted_host = matches!(
-        parsed.host_str(),
-        Some(
-            "nodejs.org"
+    let trusted_oss = reqwest::Url::parse(crate::config::DSH_CORE_OSS_URL)
+        .is_ok_and(|source| source.origin() == parsed.origin());
+    let trusted_host = trusted_oss
+        || matches!(
+            parsed.host_str(),
+            Some(
+                "nodejs.org"
                 | "registry.npmjs.org"
                 | "github.com"
                 | "release-assets.githubusercontent.com"
@@ -266,8 +269,8 @@ fn validate_download_url(url: &str) -> Result<(), String> {
                 | "gh.llkk.cc"
                 | "ghfast.top"
                 | "ghproxy.net"
-        )
-    );
+            )
+        );
     if parsed.scheme() != "https" || !trusted_host {
         return Err(format!("DOWNLOAD_SOURCE_UNTRUSTED: {url}"));
     }
@@ -294,7 +297,10 @@ pub fn verify_sha256(buffer: &[u8], expected: &str) -> Result<(), String> {
 }
 
 /// 从 Node.js 官方同版本 SHASUMS256.txt 中读取当前平台包的摘要。
-pub async fn fetch_node_sha256(app_handle: &tauri::AppHandle, download_url: &str) -> Result<String, String> {
+pub async fn fetch_node_sha256(
+    app_handle: &tauri::AppHandle,
+    download_url: &str,
+) -> Result<String, String> {
     let (base, filename) = download_url.rsplit_once('/').ok_or_else(|| {
         "INTEGRITY_METADATA_INVALID: Node.js download URL has no filename".to_string()
     })?;
@@ -590,6 +596,24 @@ mod tests {
 
     #[test]
     fn download_sources_are_https_and_allowlisted() {
+        assert!(validate_download_url(
+            "https://ethan-zmj.oss-cn-beijing.aliyuncs.com/deepseek-harness-pkg-macos-arm64.zip"
+        )
+        .is_ok());
+        assert!(
+            validate_download_url("https://other.oss-cn-beijing.aliyuncs.com/file.zip").is_err()
+        );
+        assert!(
+            validate_download_url("http://ethan-zmj.oss-cn-beijing.aliyuncs.com/file.zip").is_err()
+        );
+        assert!(validate_download_url(
+            "https://ethan-zmj.oss-cn-beijing.aliyuncs.com.evil.invalid/file.zip"
+        )
+        .is_err());
+        assert!(validate_download_url(
+            "https://ethan-zmj.oss-cn-beijing.aliyuncs.com:8443/file.zip"
+        )
+        .is_err());
         assert!(validate_download_url("https://nodejs.org/dist/v22/file.zip").is_ok());
         assert!(validate_download_url("https://registry.npmjs.org/pnpm/-/pnpm.tgz").is_ok());
         assert!(validate_download_url(
