@@ -52,6 +52,7 @@ export function ConfigDebug() {
   // 初值不写入 state（避免渲染期副作用），用户一旦输入即以输入值为准。
   const [portInput, setPortInput] = useState<number>()
   const [proxyInput, setProxyInput] = useState<string>()
+  const [backendInput, setBackendInput] = useState<string>()
   const [heapInput, setHeapInput] = useState<string>()
 
   const { data: info, refetch: refreshInfo } = useQuery({
@@ -64,9 +65,10 @@ export function ConfigDebug() {
     void refreshInfo()
   })
 
-  const { port: savedPort, proxy_url: savedProxy, harness_max_heap_mb: savedHeapMb } = useStore(store.setting)
+  const { port: savedPort, proxy_url: savedProxy, model_backend_url: savedBackend, harness_max_heap_mb: savedHeapMb } = useStore(store.setting)
   const port = portInput ?? savedPort
   const proxy = proxyInput ?? savedProxy
+  const backend = backendInput ?? savedBackend
   const heapValue = heapInput ?? String(savedHeapMb ?? '')
   /** 空输入代表自动值（null），其余按数字解析，非法值交给保存前的整数校验拦下 */
   const parsedHeap = heapValue.trim() === '' ? null : Number(heapValue)
@@ -191,6 +193,39 @@ export function ConfigDebug() {
     },
     onError: (error: unknown) => {
       toast(t(String(error).includes('PROXY_INVALID') ? 'network.invalid' : 'network.save_failed'), { variant: 'danger' })
+    },
+  })
+
+  const { mutate: onSaveBackend, isPending: savingBackend } = useMutation({
+    mutationFn: async (value: string) => {
+      const typed = value.trim()
+      // 与宿主 normalize_model_backend_url 同一套判定：缺省协议按 https 补齐后再校验
+      const candidate = typed.length === 0 || typed.includes('://') ? typed : `https://${typed}`
+      if (candidate) {
+        let url: URL
+        try {
+          url = new URL(candidate)
+        }
+        catch {
+          throw new Error('MODEL_BACKEND_INVALID')
+        }
+        if (/\s/.test(candidate)
+          || !['http:', 'https:'].includes(url.protocol)
+          || !url.hostname || url.port === '0' || url.search || url.hash) {
+          throw new Error('MODEL_BACKEND_INVALID')
+        }
+      }
+      await store.setting.update({ modelBackendUrl: candidate })
+      return candidate
+    },
+    onSuccess: (submitted) => {
+      setBackendInput(current => (current !== undefined && current.trim() !== submitted ? current : undefined))
+      toast(t('network.model_backend_saved'))
+    },
+    onError: (error: unknown) => {
+      toast(t(String(error).includes('MODEL_BACKEND_INVALID')
+        ? 'network.model_backend_invalid'
+        : 'network.model_backend_save_failed'), { variant: 'danger' })
     },
   })
 
@@ -426,6 +461,41 @@ export function ConfigDebug() {
               onPress={() => onSaveProxy(proxy)}
               isDisabled={proxy === savedProxy}
               data-testid="dsh-proxy-save"
+            >
+              {t('buttons.save')}
+            </Button>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-1 text-xs font-medium text-ink">
+            {t('network.model_backend')}
+            <Tooltip delay={0}>
+              <Button isIconOnly size="sm" variant="ghost" className="size-5 text-muted" aria-label={t('network.model_backend_hint')}>
+                <CircleInfo className="size-3.5" />
+              </Button>
+              <Tooltip.Content className="max-w-[320px]">{t('network.model_backend_hint')}</Tooltip.Content>
+            </Tooltip>
+          </span>
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              variant="secondary"
+              value={backend}
+              placeholder="https://gateway.example.com"
+              onChange={e => setBackendInput(e.target.value)}
+              className="w-52 h-8"
+              aria-label={t('network.model_backend')}
+              data-testid="dsh-model-backend-url"
+            />
+            <Button
+              size="sm"
+              variant="primary"
+              className="h-8"
+              onPress={() => onSaveBackend(backend)}
+              isDisabled={savingBackend || backend === savedBackend}
+              data-testid="dsh-model-backend-save"
             >
               {t('buttons.save')}
             </Button>

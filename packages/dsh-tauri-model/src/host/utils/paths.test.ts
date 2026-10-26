@@ -1,7 +1,7 @@
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { resolvePresetCachePath, resolveSettingsFilePath } from './paths'
+import { resolveGatewayCachePath, resolvePresetCachePath, resolveSettingsFilePath } from './paths'
 
 describe('resolveSettingsFilePath', () => {
   it('uses a non-blank DSH_HOME', () => {
@@ -25,5 +25,12 @@ describe('resolvePresetCachePath', () => {
   it('keeps the cache under the plugin directory in DSH_HOME', () => {
     expect(resolvePresetCachePath({ DSH_HOME: 'D:\\harness' } as NodeJS.ProcessEnv))
       .toBe(resolve('D:\\harness', 'dsh-tauri-model', 'model-presets.json'))
+  })
+})
+
+describe('resolveGatewayCachePath', () => {
+  it('keeps the granted model cache under the plugin directory in DSH_HOME', () => {
+    expect(resolveGatewayCachePath({ DSH_HOME: 'D:\\harness' } as NodeJS.ProcessEnv))
+      .toBe(resolve('D:\\harness', 'dsh-tauri-model', 'gateway-models.json'))
   })
 })

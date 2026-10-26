@@ -4,6 +4,7 @@ mod constants;
 pub mod dependencies;
 pub mod i18n;
 pub mod manifest;
+pub mod model_backend;
 pub mod proxy;
 mod region;
 mod runtime;

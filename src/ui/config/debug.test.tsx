@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   toast: vi.fn(),
   update: vi.fn(),
   build: vi.fn(),
-  settingState: { proxy_url: '', port: 3080, zoom_factor: 1, harness_max_heap_mb: null } as Record<string, unknown>,
+  settingState: { proxy_url: '', model_backend_url: '', port: 3080, zoom_factor: 1, harness_max_heap_mb: null } as Record<string, unknown>,
   harnessState: { serviceRunning: true, busyAction: null } as Record<string, unknown>,
   harnessUpdaterState: { updateInfo: null } as Record<string, unknown>,
   proxyTestResult: { ok: true, reason: null, status: 200, latency_ms: 12 } as Record<string, unknown>,
@@ -62,6 +62,7 @@ vi.mock('@/store', () => ({
 
 const SAVED = 'socks5h://127.0.0.1:1080'
 const EDITED = 'http://127.0.0.1:7897'
+const SAVED_BACKEND = 'https://gw.example.com'
 
 /** 让 `store.setting.update` 挂起，模拟「保存仍在途」。 */
 function deferUpdate() {
@@ -86,9 +87,14 @@ function proxyInput(): HTMLInputElement {
   return screen.getByTestId('dsh-proxy-url') as HTMLInputElement
 }
 
+function backendInput(): HTMLInputElement {
+  return screen.getByTestId('dsh-model-backend-url') as HTMLInputElement
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.settingState.proxy_url = SAVED
+  mocks.settingState.model_backend_url = SAVED_BACKEND
   mocks.settingState.port = 3080
   mocks.settingState.zoom_factor = 1
   mocks.settingState.harness_max_heap_mb = null
@@ -243,5 +249,40 @@ describe('配置面板代理连通性测试', () => {
     fireEvent.change(proxyInput(), { target: { value: '   ' } })
 
     expect((screen.getByTestId('dsh-proxy-test') as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
+describe('配置面板模型后台域名保存', () => {
+  it('未带协议头的域名按 https 补齐后提交', async () => {
+    mocks.update.mockResolvedValue(undefined)
+    renderDebug()
+
+    await waitFor(() => expect(backendInput().value).toBe(SAVED_BACKEND))
+
+    fireEvent.change(backendInput(), { target: { value: 'gw.internal' } })
+    fireEvent.click(screen.getByTestId('dsh-model-backend-save'))
+
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith({ modelBackendUrl: 'https://gw.internal' }))
+    expect(mocks.toast).toHaveBeenCalledWith('network.model_backend_saved')
+  })
+
+  it('带查询参数的域名被拦下，不写入配置', async () => {
+    renderDebug()
+
+    await waitFor(() => expect(backendInput().value).toBe(SAVED_BACKEND))
+
+    fireEvent.change(backendInput(), { target: { value: 'https://gw.example.com?token=1' } })
+    fireEvent.click(screen.getByTestId('dsh-model-backend-save'))
+
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith('network.model_backend_invalid', { variant: 'danger' }))
+    expect(mocks.update).not.toHaveBeenCalled()
+  })
+
+  it('输入与已保存域名一致时禁用保存按钮', async () => {
+    renderDebug()
+
+    await waitFor(() => expect(backendInput().value).toBe(SAVED_BACKEND))
+
+    expect((screen.getByTestId('dsh-model-backend-save') as HTMLButtonElement).disabled).toBe(true)
   })
 })

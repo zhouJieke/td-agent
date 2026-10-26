@@ -988,6 +988,12 @@ pub(super) async fn launch_prepared(
     // 最佳努力：空值返回空 map，不覆盖用户已有的同名环境变量。
     envs.extend(config::proxy::proxy_child_env(&setting.proxy_url));
 
+    // 模型后台域名：核心内的 dsh-tauri-model 宿主据此拉取被授权的模型并下放进
+    // 配置。空值返回空 map，开发态可直接用同名环境变量接管。
+    envs.extend(config::model_backend::model_backend_child_env(
+        &setting.model_backend_url,
+    ));
+
     // 内嵌 WebView 是 `tauri.localhost` 下的跨源沙箱 iframe，`SameSite=Strict` 的
     // browser-session Cookie 不会被携带。载体标记交给 dsh-tauri 插件（载体鉴权适配）：
     // 只有该标记在场时它才覆写 connection 的鉴权闸门，因此同一 profile 下独立运行

@@ -2,6 +2,7 @@ import type { Appearance } from '../../../../../packages/dsh-tauri/src/shared/ap
 
 export interface AppSettingUpdate {
   proxyUrl?: string
+  modelBackendUrl?: string
   appearance?: Appearance
   port?: number
   zoomFactor?: number

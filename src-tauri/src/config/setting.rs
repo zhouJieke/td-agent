@@ -9,6 +9,10 @@ use tauri_plugin_store::StoreExt;
 pub struct Setting {
     #[serde(default)]
     pub proxy_url: String,
+    /// 模型后台域名：插件宿主据此拉取该设备被授权的模型并下放进核心配置。
+    /// 留空表示不使用后台，模型仍由用户在设置页自行配置。
+    #[serde(default)]
+    pub model_backend_url: String,
     #[serde(default)]
     pub appearance: super::Appearance,
     pub installed: bool,
@@ -173,6 +177,9 @@ pub fn normalize_backup_retention(retention_count: u32) -> u32 {
 
 fn normalize_setting(setting: &mut Setting) {
     setting.proxy_url = super::proxy::normalize_proxy_url(&setting.proxy_url).unwrap_or_default();
+    setting.model_backend_url =
+        super::model_backend::normalize_model_backend_url(&setting.model_backend_url)
+            .unwrap_or_default();
     setting.appearance.normalize();
     setting.zoom_factor = normalize_zoom_factor(setting.zoom_factor);
     setting.harness_max_heap_mb = normalize_harness_max_heap_mb(setting.harness_max_heap_mb);
@@ -193,6 +200,7 @@ impl Default for Setting {
     fn default() -> Self {
         Self {
             proxy_url: String::new(),
+            model_backend_url: String::new(),
             appearance: super::Appearance::default(),
             installed: false,
             port: default_port(),

@@ -13,6 +13,7 @@ let zoomQueue = Promise.resolve()
 export const setting = defineStore({
   state: () => ({
     proxy_url: '',
+    model_backend_url: '',
     appearance: normalizeAppearance(APPEARANCE_DEFAULTS),
     installed: false,
     port: 3080,
