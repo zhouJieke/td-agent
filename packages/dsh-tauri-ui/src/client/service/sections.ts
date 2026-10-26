@@ -4,9 +4,6 @@ import { isEqual, orderBy } from 'dsh-tauri/client'
 import { SETTINGS_ONBOARDING_SLOT, SETTINGS_SECTION_SLOT } from '../constants'
 import { sections } from '../store/modules/sections'
 
-/** 模型一律由后台下放，手动配置分区与官方 API-key 引导都不进设置导航。 */
-const CONCEALED_SECTION_IDS = new Set(['models', 'deepseek-official'])
-
 export async function loadSections(slots: SlotRegistry): Promise<SettingsRow[]> {
   const rows = projectRows(slots, SETTINGS_SECTION_SLOT)
   if (!isEqual(sections.rows, rows))
@@ -29,7 +26,7 @@ function projectRows(slots: SlotRegistry, slotKey: string): SettingsRow[] {
       order: entry.options.order ?? 0,
       label: resolveLabel(entry.options.label),
     }))
-    .filter(row => row.id !== '' && !CONCEALED_SECTION_IDS.has(row.id))
+    .filter(row => row.id !== '')
 
   return orderBy(rows, 'order')
 }

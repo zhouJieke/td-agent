@@ -1,6 +1,6 @@
 import type { PresetTable } from '../../shared/model-presets'
 import type { GatewayCache, GatewayCredentialsService, GatewayGrant, GatewaySettingsService, GatewayStatus, GatewaySyncResult } from './gateway.types'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import process from 'node:process'
 import { getServerContext } from 'dsh-h3/utils'
@@ -9,6 +9,7 @@ import { server } from '../server'
 import { resolveGatewayCachePath } from '../utils/paths'
 import {
   backendOf,
+  carriesEmptyGrant,
   fillFromPresets,
   grantOf,
   modelsUrlOf,
@@ -18,6 +19,8 @@ import {
 import { modelPresets } from './model-presets'
 
 const SETTINGS_NS = 'llm-pi-ai'
+
+const DEFAULT_MODEL_NS = 'agent-default-model'
 
 const PROVIDER_ROUTE = 'dsh-backend'
 
@@ -37,26 +40,24 @@ let lastError: string | undefined
 
 let status: GatewayStatus = { enabled: false, provisioned: false, models: 0 }
 
+let inflight: Promise<unknown> = Promise.resolve()
+
 export const gateway = defineService({
   start(tickMs: number = DEFAULT_TICK_MS): () => void {
     if (backendOf(process.env) === undefined)
       return () => {}
     status = { ...status, enabled: true }
-    const cached = readCache()
-    if (cached !== undefined) {
-      cache = cached
-      void provision(cached.grant, false).catch(() => undefined)
-    }
-    void gateway.sync().catch(() => undefined)
     const interval = tickMs > 0 ? tickMs : DEFAULT_TICK_MS
+    inflight = boot()
     const timer = setInterval(() => {
-      void gateway.sync().catch(() => undefined)
+      inflight = inflight.then(() => gateway.sync()).catch(() => undefined)
     }, interval)
     return () => {
       clearInterval(timer)
       applied = ''
       cache = undefined
       lastError = undefined
+      inflight = Promise.resolve()
       status = { enabled: false, provisioned: false, models: 0 }
     }
   },
@@ -76,11 +77,22 @@ export const gateway = defineService({
         headers: await requestHeaders(),
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       })
-      if (!response.ok)
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          await revoke(`${url} answered ${response.status}`)
+          return { ok: false, applied: true, models: 0, error: `${url} answered ${response.status}` }
+        }
         throw new Error(`${url} answered ${response.status}`)
-      const grant = grantOf(await response.json(), backend)
-      if (grant === undefined)
+      }
+      const body = await response.json()
+      const grant = grantOf(body, backend)
+      if (grant === undefined) {
+        if (carriesEmptyGrant(body)) {
+          await revoke()
+          return { ok: true, applied: true, models: 0 }
+        }
         throw new Error(`${url} carried no usable models`)
+      }
       const payload: GatewayCache = { source: url, fetchedAt: new Date().toISOString(), grant }
       cache = payload
       writeCache(payload)
@@ -94,6 +106,35 @@ export const gateway = defineService({
   },
 })
 
+async function boot(): Promise<void> {
+  const cached = readCache()
+  if (cached !== undefined) {
+    cache = cached
+    await provision(cached.grant, false).catch(() => undefined)
+  }
+  await gateway.sync().catch(() => undefined)
+}
+
+/**
+ * 权威撤销：后台明确回答「这个用户没有可用模型」或未授权时摘掉下发，
+ * 与拉取失败不同，这里不能保留旧清单，否则退出登录的客户端还能继续用。
+ */
+async function revoke(error?: string): Promise<void> {
+  lastError = error
+  const ours = currentSelection()?.provider === PROVIDER_ROUTE
+  await settings().mutate(SETTINGS_NS, [{ op: 'unset', path: ['providers', PROVIDER_ROUTE] }])
+  applied = ''
+  if (ours) {
+    await settings().mutate(DEFAULT_MODEL_NS, [
+      { op: 'unset', path: ['provider'] },
+      { op: 'unset', path: ['model'] },
+    ])
+  }
+  cache = undefined
+  removeCache()
+  status = publish(0)
+}
+
 async function provision(grant: GatewayGrant, refreshPresets: boolean): Promise<GatewaySyncResult> {
   const filled = fillFromPresets(grant, await presetTable(refreshPresets))
   const profile = profileOf(filled, KEY_REF)
@@ -105,9 +146,58 @@ async function provision(grant: GatewayGrant, refreshPresets: boolean): Promise<
     await settings().mutate(SETTINGS_NS, [{ op: 'set', path: ['providers', PROVIDER_ROUTE], value: profile }])
     applied = shape
   }
+  await pinDefaultModel(filled)
   lastError = undefined
   status = publish(profile.models.length)
   return { ok: true, applied: changed, models: profile.models.length }
+}
+
+/**
+ * 后台钦定默认模型：只在当前默认不在授权清单内时改写，用户自己切过的模型不动。
+ * 默认项写失败只降级为告警，不能让模型清单下发跟着一起失败。
+ */
+async function pinDefaultModel(grant: GatewayGrant): Promise<void> {
+  if (grant.defaultModel.length === 0)
+    return
+  try {
+    const current = currentSelection()
+    if (current !== undefined && grant.models.some(model => model.id === current.model))
+      return
+    await settings().mutate(DEFAULT_MODEL_NS, [
+      { op: 'set', path: ['provider'], value: PROVIDER_ROUTE },
+      { op: 'set', path: ['model'], value: grant.defaultModel },
+    ])
+  }
+  catch (error) {
+    console.warn(`[model gateway] default model pin failed: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+function currentSelection(): { provider?: string, model?: string } | undefined {
+  try {
+    const section = effectiveSection(DEFAULT_MODEL_NS)
+    if (section === null || typeof section !== 'object' || Array.isArray(section))
+      return undefined
+    const selection = section as { provider?: unknown, model?: unknown }
+    return {
+      ...typeof selection.provider === 'string' ? { provider: selection.provider } : {},
+      ...typeof selection.model === 'string' ? { model: selection.model } : {},
+    }
+  }
+  catch {
+    return undefined
+  }
+}
+
+/** 必须读合并后的生效值：`get(ns)` 只给 bundle/base 层，看不到写进 profile 的配置。 */
+function effectiveSection(ns: string): unknown {
+  const service = settings()
+  if (typeof service.describe === 'function') {
+    const entry = service.describe().find(item => item.ns === ns)
+    if (entry !== undefined)
+      return entry.value
+  }
+  return service.get(ns)
 }
 
 function publish(models: number): GatewayStatus {
@@ -165,10 +255,36 @@ function readCache(): GatewayCache | undefined {
     const parsed = JSON.parse(readFileSync(resolveGatewayCachePath(), 'utf8')) as Partial<GatewayCache>
     if (typeof parsed.source !== 'string' || typeof parsed.fetchedAt !== 'string' || parsed.grant === undefined)
       return undefined
-    return { source: parsed.source, fetchedAt: parsed.fetchedAt, grant: parsed.grant }
+    return { source: parsed.source, fetchedAt: parsed.fetchedAt, grant: cachedGrantOf(parsed.grant) }
   }
   catch {
     return undefined
+  }
+}
+
+/** 旧版本缓存没有 `defaultModel`：从清单首条补出来，缺事实的缓存一律不认。 */
+function cachedGrantOf(raw: Partial<GatewayGrant>): GatewayGrant {
+  const models = Array.isArray(raw.models)
+    ? raw.models.filter((model): model is Record<string, unknown> =>
+        typeof model === 'object' && model !== null && typeof (model as { id?: unknown }).id === 'string')
+    : []
+  const declared = typeof raw.defaultModel === 'string' ? raw.defaultModel.trim() : ''
+  return {
+    baseURL: typeof raw.baseURL === 'string' ? raw.baseURL : '',
+    api: typeof raw.api === 'string' ? raw.api : 'openai-completions',
+    displayName: typeof raw.displayName === 'string' ? raw.displayName : 'AI Gateway',
+    models,
+    defaultModel: declared.length > 0 ? declared : String(models[0]?.id ?? ''),
+    ...typeof raw.apiKey === 'string' ? { apiKey: raw.apiKey } : {},
+    ...raw.headers !== undefined && typeof raw.headers === 'object' ? { headers: raw.headers } : {},
+  }
+}
+
+function removeCache(): void {
+  try {
+    rmSync(resolveGatewayCachePath(), { force: true })
+  }
+  catch {
   }
 }
 

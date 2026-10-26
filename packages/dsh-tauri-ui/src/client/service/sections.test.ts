@@ -44,6 +44,7 @@ describe('loadSections', () => {
       { options: { id: 'dsh-tauri-archive', order: 220 } },
       { options: { id: 'account', order: -10 } },
       { options: { id: 'general', order: 0 } },
+      { options: { id: 'models', order: 10 } },
       { options: { id: 'dsh-bridge', order: 10 } },
       { options: { id: 'plugins', order: 15 } },
     ]))
@@ -51,6 +52,7 @@ describe('loadSections', () => {
     expect(rows.map(row => row.id)).toEqual([
       'account',
       'general',
+      'models',
       'dsh-bridge',
       'plugins',
       'dsh-tauri-archive',
@@ -76,34 +78,16 @@ describe('loadSections', () => {
 
     expect(rows.map(row => row.label)).toEqual(['账号与余额', '通用设置'])
   })
-
-  it('conceals the manual model section because models come from the backend grant', async () => {
-    const rows = await loadSections(registry([
-      { options: { id: 'general', order: 0 } },
-      { options: { id: 'models', order: 10 } },
-    ]))
-
-    expect(rows.map(row => row.id)).toEqual(['general'])
-  })
 })
 
 describe('loadOnboardingSteps', () => {
   it('projects the onboarding steps by their own order', async () => {
     const rows = await loadOnboardingSteps(registry([], [
-      { options: { id: 'vendor-signin', order: 0, label: '登录' } },
+      { options: { id: 'deepseek-official', order: 0, label: '登录' } },
       { options: { id: 'account', order: -5, label: '账号' } },
     ]))
 
-    expect(rows.map(row => row.id)).toEqual(['account', 'vendor-signin'])
+    expect(rows.map(row => row.id)).toEqual(['account', 'deepseek-official'])
     expect(sections.onboarding).toEqual(rows)
-  })
-
-  it('conceals the official API-key onboarding step from the first-run guidance', async () => {
-    const rows = await loadOnboardingSteps(registry([], [
-      { options: { id: 'deepseek-official', order: 0 } },
-      { options: { id: 'account', order: -5 } },
-    ]))
-
-    expect(rows.map(row => row.id)).toEqual(['account'])
   })
 })

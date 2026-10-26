@@ -170,11 +170,14 @@ export function grantOf(payload: unknown, backend: string): GatewayGrant | undef
     : Array.isArray(body.data) ? body.data : []
   const seen = new Set<string>()
   const models: Record<string, unknown>[] = []
+  let flagged: string | undefined
   for (const candidate of rawModels) {
     const model = modelEntry(candidate)
     if (model === undefined || seen.has(String(model.id)))
       continue
     seen.add(String(model.id))
+    if (flagged === undefined && (candidate as { default?: unknown }).default === true)
+      flagged = String(model.id)
     models.push(model)
   }
   if (models.length === 0)
@@ -189,9 +192,28 @@ export function grantOf(payload: unknown, backend: string): GatewayGrant | undef
     api: api !== undefined && PROTOCOLS.has(api) ? api : DEFAULT_API,
     displayName,
     models,
+    defaultModel: defaultModelOf(body, models.map(model => String(model.id)), flagged),
     ...apiKey === undefined ? {} : { apiKey },
     ...headers === undefined ? {} : { headers },
   }
+}
+
+/** 后台钦定的默认模型：顶层声明优先，其次首个 `default: true`，都没有就用第一条。 */
+function defaultModelOf(body: Record<string, unknown>, ids: readonly string[], flagged: string | undefined): string {
+  const declared = trimmedText(body.defaultModel) ?? trimmedText(body.default)
+  if (declared !== undefined && ids.includes(declared))
+    return declared
+  return flagged ?? String(ids[0] ?? '')
+}
+
+/** 后台明确回答「一个模型都没有」，与载荷畸形要区分开：前者是权威撤销。 */
+export function carriesEmptyGrant(payload: unknown): boolean {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload))
+    return false
+  const body = payload as Record<string, unknown>
+  if (Array.isArray(body.models))
+    return body.models.length === 0
+  return Array.isArray(body.data) && body.data.length === 0
 }
 
 export function profileOf(grant: GatewayGrant, keyRef: string): GatewayProfile {

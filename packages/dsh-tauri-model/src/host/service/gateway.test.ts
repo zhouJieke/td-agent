@@ -1,5 +1,5 @@
 import type { AddressInfo } from 'node:net'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -31,8 +31,12 @@ let bindHost: () => void
 let home: string
 let writes: ProfileWrite[]
 let stored: Record<string, string>
+let defaultSelection: Record<string, string>
 let credentialSets: string[]
 let httpServers: ReturnType<typeof createServer>[]
+
+const profileWrites = () => writes.filter(write => write.ns === 'llm-pi-ai')
+const defaultWrites = () => writes.filter(write => write.ns === 'agent-default-model')
 
 async function loadModule(): Promise<void> {
   vi.resetModules()
@@ -42,10 +46,22 @@ async function loadModule(): Promise<void> {
   credentialSets = []
   httpServers = []
   stored = { DSH_ACCESS_TOKEN: 'admin-token' }
+  defaultSelection = { provider: 'deepseek-official', model: 'deepseek-flash' }
   bindHost = () => {
     const settingsService = {
+      get: (ns: string) => ns === 'agent-default-model' ? { ...defaultSelection } : {},
+      describe: () => [
+        { ns: 'llm-pi-ai', value: {} },
+        { ns: 'agent-default-model', value: { ...defaultSelection } },
+      ],
       mutate: async (ns: string, ops: ProfileWrite['ops']) => {
         writes.push({ ns, ops })
+        if (ns !== 'agent-default-model')
+          return
+        for (const op of ops) {
+          if (op.op === 'set' && typeof op.value === 'string')
+            defaultSelection[String(op.path[0])] = op.value
+        }
       },
     }
     const credentialsService = {
@@ -113,8 +129,7 @@ describe('gateway.sync', () => {
     process.env.DSH_MODEL_BACKEND_URL = backend
     bindHost()
     await expect(gateway.sync()).resolves.toEqual({ ok: true, applied: true, models: 2 })
-    expect(writes[0]?.ns).toBe('llm-pi-ai')
-    expect(writes[0]?.ops[0]).toMatchObject({
+    expect(profileWrites()[0]?.ops[0]).toMatchObject({
       op: 'set',
       path: ['providers', 'dsh-backend'],
       value: {
@@ -129,6 +144,10 @@ describe('gateway.sync', () => {
       },
     })
     expect(credentialSets).toEqual(['DSH_BACKEND_API_KEY'])
+    expect(defaultWrites()[0]?.ops).toEqual([
+      { op: 'set', path: ['provider'], value: 'dsh-backend' },
+      { op: 'set', path: ['model'], value: 'deepseek-v3' },
+    ])
     expect(gateway.peek()).toMatchObject({ enabled: true, provisioned: true, models: 2 })
   })
 
@@ -154,7 +173,8 @@ describe('gateway.sync', () => {
     bindHost()
     await expect(gateway.sync()).resolves.toMatchObject({ applied: true })
     await expect(gateway.sync()).resolves.toMatchObject({ applied: false, models: 1 })
-    expect(writes).toHaveLength(1)
+    expect(profileWrites()).toHaveLength(1)
+    expect(defaultWrites()).toHaveLength(1)
   })
 
   it('keeps the last grant when the backend refuses and reports the failure', async () => {
@@ -168,7 +188,39 @@ describe('gateway.sync', () => {
     expect(result.ok).toBe(false)
     expect(result.error).toContain('answered 503')
     expect(gateway.peek()).toMatchObject({ provisioned: true, error: expect.stringContaining('answered 503') })
-    expect(writes).toHaveLength(1)
+    expect(profileWrites()).toHaveLength(1)
+  })
+
+  it('revokes the grant when the backend grants this user nothing', async () => {
+    const backend = await listen({ models: [{ id: 'm' }] })
+    process.env.DSH_MODEL_BACKEND_URL = backend
+    bindHost()
+    await expect(gateway.sync()).resolves.toMatchObject({ ok: true })
+    expect(existsSync(resolveGatewayCachePath())).toBe(true)
+
+    const empty = await listen({ models: [] })
+    process.env.DSH_MODEL_BACKEND_URL = empty
+    await expect(gateway.sync()).resolves.toEqual({ ok: true, applied: true, models: 0 })
+    expect(profileWrites().at(-1)?.ops).toEqual([{ op: 'unset', path: ['providers', 'dsh-backend'] }])
+    expect(defaultWrites().at(-1)?.ops).toEqual([
+      { op: 'unset', path: ['provider'] },
+      { op: 'unset', path: ['model'] },
+    ])
+    expect(existsSync(resolveGatewayCachePath())).toBe(false)
+    expect(gateway.peek()).toMatchObject({ enabled: true, provisioned: false, models: 0 })
+  })
+
+  it('drops everything on an unauthorized answer so a logged-out client keeps no models', async () => {
+    const backend = await listen({ models: [{ id: 'm' }] })
+    process.env.DSH_MODEL_BACKEND_URL = backend
+    bindHost()
+    await expect(gateway.sync()).resolves.toMatchObject({ ok: true })
+
+    const denied = await listen({}, 401)
+    process.env.DSH_MODEL_BACKEND_URL = denied
+    await expect(gateway.sync()).resolves.toMatchObject({ ok: false, applied: true, models: 0 })
+    expect(profileWrites().at(-1)?.ops).toEqual([{ op: 'unset', path: ['providers', 'dsh-backend'] }])
+    expect(gateway.peek()).toMatchObject({ provisioned: false, error: expect.stringContaining('answered 401') })
   })
 
   it('writes nothing when no backend domain is configured', async () => {
@@ -191,12 +243,26 @@ describe('gateway.start', () => {
     process.env.DSH_MODEL_BACKEND_URL = dead
     bindHost()
     const stop = gateway.start(60_000)
-    await vi.waitFor(() => expect(writes).toHaveLength(1), { timeout: 4_000 })
-    expect(writes[0]?.ops[0]?.value).toMatchObject({
+    await vi.waitFor(() => expect(profileWrites()).toHaveLength(1), { timeout: 4_000 })
+    expect(profileWrites()[0]?.ops[0]?.value).toMatchObject({
       baseURL: `${dead}/api/v1`,
       models: [{ id: 'cached-model', contextWindow: 32_000 }],
     })
+    expect(defaultWrites()[0]?.ops).toEqual([
+      { op: 'set', path: ['provider'], value: 'dsh-backend' },
+      { op: 'set', path: ['model'], value: 'cached-model' },
+    ])
     stop()
+  })
+
+  it('leaves the default alone once the session picked another granted model', async () => {
+    const backend = await listen({ models: [{ id: 'm-a' }, { id: 'm-b' }] })
+    process.env.DSH_MODEL_BACKEND_URL = backend
+    bindHost()
+    defaultSelection.provider = 'dsh-backend'
+    defaultSelection.model = 'm-b'
+    await expect(gateway.sync()).resolves.toMatchObject({ ok: true, models: 2 })
+    expect(defaultWrites()).toHaveLength(0)
   })
 
   it('stays idle without a configured domain', async () => {

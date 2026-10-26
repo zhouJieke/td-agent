@@ -1,8 +1,7 @@
 import type { ClientContext } from 'dsh-tauri/client'
 import { PLUGIN_ID } from '../shared/constants'
-import { LOCALE_EFFECT, MODELS_PAGE_EFFECT, STYLES_EFFECT } from './constants'
+import { LOCALE_EFFECT, STYLES_EFFECT } from './constants'
 import { locale } from './locales'
-import { registerModelsPage } from './register/models'
 import { registerStyles } from './register/styles'
 import { configureOpenInApp } from './service/open-in-app'
 
@@ -29,13 +28,4 @@ export function apply(ctx: ClientContext): void {
   configureOpenInApp(ctx)
   ctx.effect(locale.registerLocale, LOCALE_EFFECT)
   ctx.effect(registerStyles, STYLES_EFFECT)
-  let started = false
-  const start = (): void => {
-    if (started)
-      return
-    started = true
-    ctx.effect(registerModelsPage, MODELS_PAGE_EFFECT)
-  }
-  ctx.inject(['configForms'], start)
-  ctx.inject(['settingsScope'], start)
 }

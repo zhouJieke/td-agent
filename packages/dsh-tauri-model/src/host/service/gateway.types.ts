@@ -3,6 +3,7 @@ export interface GatewayGrant {
   readonly api: string
   readonly displayName: string
   readonly models: readonly Record<string, unknown>[]
+  readonly defaultModel: string
   readonly apiKey?: string
   readonly headers?: Record<string, string>
 }
@@ -41,7 +42,14 @@ export type GatewaySettingsOp
   = | { op: 'set', path: readonly string[], value: unknown }
     | { op: 'unset', path: readonly string[] }
 
+export interface GatewaySettingsEntry {
+  readonly ns: string
+  readonly value?: unknown
+}
+
 export interface GatewaySettingsService {
+  get: (ns: string) => unknown
+  describe?: () => readonly GatewaySettingsEntry[]
   mutate: (ns: string, ops: readonly GatewaySettingsOp[], expectedRevision?: number) => Promise<void>
 }
 

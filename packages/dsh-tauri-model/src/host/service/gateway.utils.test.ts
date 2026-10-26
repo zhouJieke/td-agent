@@ -2,6 +2,7 @@ import type { GatewayGrant } from './gateway.types'
 import { describe, expect, it } from 'vitest'
 import {
   backendOf,
+  carriesEmptyGrant,
   fillFromPresets,
   grantOf,
   modelsUrlOf,
@@ -38,6 +39,7 @@ describe('grantOf', () => {
       baseURL: 'https://gw.example.com/api/v1',
       api: 'openai-completions',
       displayName: 'AI Gateway',
+      defaultModel: 'deepseek-chat',
       models: [{ id: 'deepseek-chat' }],
     })
   })
@@ -60,6 +62,7 @@ describe('grantOf', () => {
       baseURL: 'https://gw.example.com/v1',
       api: 'anthropic-messages',
       apiKey: 'sk-key',
+      defaultModel: 'a',
       headers: { 'x-tenant': 'tc' },
     })
     expect(grant?.models).toHaveLength(1)
@@ -82,12 +85,34 @@ describe('grantOf', () => {
 describe('profileOf', () => {
   it('names the credential reference only when the grant carries a key', () => {
     const keyed = profileOf(
-      { baseURL: 'https://gw/v1', api: 'openai-completions', displayName: 'n', models: [{ id: 'm' }], apiKey: 'k' },
+      { baseURL: 'https://gw/v1', api: 'openai-completions', displayName: 'n', models: [{ id: 'm' }], defaultModel: 'm', apiKey: 'k' },
       'DSH_BACKEND_API_KEY',
     )
     expect(keyed.apiKeyEnv).toBe('DSH_BACKEND_API_KEY')
-    const bare = profileOf({ baseURL: 'https://gw/v1', api: 'openai-completions', displayName: 'n', models: [{ id: 'm' }] }, 'DSH_BACKEND_API_KEY')
+    const bare = profileOf({ baseURL: 'https://gw/v1', api: 'openai-completions', displayName: 'n', models: [{ id: 'm' }], defaultModel: 'm' }, 'DSH_BACKEND_API_KEY')
     expect('apiKeyEnv' in bare).toBe(false)
+  })
+})
+
+describe('grantOf default model', () => {
+  it('prefers a top-level default over the model order', () => {
+    expect(grantOf({ defaultModel: 'second', models: [{ id: 'first' }, { id: 'second' }] }, BACKEND)?.defaultModel)
+      .toBe('second')
+  })
+
+  it('takes the first model flagged default when no top-level name is given', () => {
+    expect(grantOf({ models: [{ id: 'first' }, { id: 'second', default: true }] }, BACKEND)?.defaultModel)
+      .toBe('second')
+  })
+
+  it('ignores a declared default the endpoint does not actually grant', () => {
+    expect(grantOf({ defaultModel: 'not-granted', models: [{ id: 'first' }] }, BACKEND)?.defaultModel)
+      .toBe('first')
+  })
+
+  it('drops the default marker from the projected model entry', () => {
+    const grant = grantOf({ models: [{ id: 'first', default: true, name: '首个' }] }, BACKEND)
+    expect(grant?.models[0]).toEqual({ id: 'first', name: '首个' })
   })
 })
 
@@ -96,6 +121,7 @@ describe('fillFromPresets', () => {
     baseURL: 'https://gw.example.com/api/v1',
     api: 'openai-completions',
     displayName: 'AI Gateway',
+    defaultModel: 'deepseek-v3',
     models: [{ id: 'DeepSeek-V3' }, { id: 'kimi-k2', contextWindow: 4096 }],
   }
 
@@ -110,6 +136,16 @@ describe('fillFromPresets', () => {
 
   it('returns the grant untouched when the catalog is unavailable', () => {
     expect(fillFromPresets(grant, undefined)).toBe(grant)
+  })
+})
+
+describe('carriesEmptyGrant', () => {
+  it('tells an authoritative empty grant apart from a malformed payload', () => {
+    expect(carriesEmptyGrant({ models: [] })).toBe(true)
+    expect(carriesEmptyGrant({ data: [] })).toBe(true)
+    expect(carriesEmptyGrant({ models: [{ name: 'no id' }] })).toBe(false)
+    expect(carriesEmptyGrant({ models: 'deepseek-chat' })).toBe(false)
+    expect(carriesEmptyGrant(null)).toBe(false)
   })
 })
 
