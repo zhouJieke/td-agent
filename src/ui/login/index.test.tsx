@@ -2,97 +2,307 @@
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import QRCode from 'qrcode'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { auth } from '@/store/modules/auth'
+import { toast } from '@/utils/toast'
 import { DesktopEntry, Login } from './index'
 
-const runtime = vi.hoisted(() => ({ native: true }))
+const ipc = vi.hoisted(() => ({ native: true, invoke: vi.fn() }))
 const appRender = vi.hoisted(() => vi.fn())
-
-vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => runtime.native }))
-vi.mock('@/layout', () => ({
-  App: () => {
-    appRender()
-    return <div data-testid="running-harness" />
-  },
-}))
+vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => ipc.native, invoke: ipc.invoke }))
+vi.mock('@/layout', () => ({ App: () => {
+  appRender()
+  return <div data-testid="running-harness" />
+} }))
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string) => key,
-    i18n: { resolvedLanguage: 'zh-CN', changeLanguage: vi.fn() },
-  }),
+  useTranslation: () => ({ t: (key: string) => key, i18n: { resolvedLanguage: 'zh-CN', changeLanguage: vi.fn() } }),
 }))
 vi.mock('@/utils/toast', () => ({ toast: vi.fn() }))
 
+const clients: QueryClient[] = []
+const session = { employeeNumber: 'TD000001', employeeName: '张三', expiresAt: 1800000000000 }
+const qr = { loginId: 1, authUrl: 'https://login.dingtalk.com/oauth2/auth?state=one&client_id=desktop' }
+
 function renderPage(children: ReactNode = <Login onContinue={vi.fn()} />) {
-  return render(<QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>)
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  clients.push(client)
+  return render(<QueryClientProvider client={client}>{children}</QueryClientProvider>)
 }
 
-afterEach(() => {
-  cleanup()
-  vi.useRealTimers()
-  vi.restoreAllMocks()
-  appRender.mockClear()
-  runtime.native = true
+beforeEach(() => {
+  ipc.native = true
+  auth.session = null
+  auth.ticket = null
+  auth.expired = false
+  ipc.invoke.mockReset()
+  ipc.invoke.mockImplementation(async (command) => {
+    if (command === 'desktop_auth_begin')
+      return qr
+    if (command === 'desktop_auth_claim')
+      return { status: 'pending' }
+    return null
+  })
 })
 
-describe('启动登录页', () => {
-  it('选择本地模式之前不挂载工作台，选择后进入工作台', async () => {
-    renderPage(<DesktopEntry />)
-    expect(screen.getByTestId('dsh-login-page')).not.toBeNull()
-    expect(appRender).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'login.continue_local' }))
-    expect(screen.queryByTestId('dsh-login-page')).toBeNull()
-    await waitFor(() => expect(screen.getByTestId('running-harness')).not.toBeNull())
-    expect(appRender).toHaveBeenCalled()
-  })
+afterEach(async () => {
+  cleanup()
+  await auth.cancel()
+  for (const client of clients.splice(0))
+    client.clear()
+  auth.session = null
+  appRender.mockClear()
+  vi.clearAllTimers()
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+  vi.mocked(toast).mockClear()
+})
 
-  it('浏览器预览禁用本地模式，不调用桌面入口', () => {
-    runtime.native = false
-    const onContinue = vi.fn()
-    renderPage(<Login onContinue={onContinue} />)
-    const button = screen.getByRole('button', { name: 'login.continue_local' }) as HTMLButtonElement
-    expect(button.disabled).toBe(true)
-    fireEvent.click(button)
-    expect(onContinue).not.toHaveBeenCalled()
-    expect(screen.getByText('login.browser_notice')).not.toBeNull()
-  })
-
-  it('切换企业微信后更新二维码与面板标签，方向键可以切回钉钉', () => {
+describe('桌面钉钉扫码登录', () => {
+  it('切换企业微信仅展示待开放面板，切回钉钉保留原二维码与票据', async () => {
     renderPage()
+    const image = await screen.findByRole('img', { name: 'login.qr_alt' })
+    const source = image.getAttribute('src')
     const dingTalk = screen.getByRole('tab', { name: 'login.dingtalk' })
     const weCom = screen.getByRole('tab', { name: 'login.wecom' })
+    const calls = ipc.invoke.mock.calls.length
     expect(dingTalk.getAttribute('aria-selected')).toBe('true')
     fireEvent.click(weCom)
     expect(weCom.getAttribute('aria-selected')).toBe('true')
     expect(dingTalk.getAttribute('aria-selected')).toBe('false')
     expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('login-tab-wecom')
-    expect(screen.getByRole('img', { name: 'login.qr_alt' }).getAttribute('src')).toBe('/login/wecom-preview-1.svg')
+    expect(screen.getByText('login.wecom_pending')).not.toBeNull()
+    expect(screen.queryByRole('img', { name: 'login.qr_alt' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'login.refresh_qr' })).toBeNull()
+    expect(auth.ticket).toEqual(qr)
+    fireEvent.click(dingTalk)
+    expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('login-tab-dingtalk')
+    expect(screen.getByRole('img', { name: 'login.qr_alt' }).getAttribute('src')).toBe(source)
+    expect(ipc.invoke.mock.calls).toHaveLength(calls)
+  })
+
+  it('方向键和 Home End 切换平台时同步选中状态与键盘焦点', () => {
+    ipc.native = false
+    renderPage()
+    const dingTalk = screen.getByRole('tab', { name: 'login.dingtalk' })
+    const weCom = screen.getByRole('tab', { name: 'login.wecom' })
+    fireEvent.keyDown(dingTalk, { key: 'ArrowRight' })
+    expect(document.activeElement).toBe(weCom)
+    expect(weCom.getAttribute('aria-selected')).toBe('true')
+    expect(weCom.tabIndex).toBe(0)
+    expect(dingTalk.tabIndex).toBe(-1)
     fireEvent.keyDown(weCom, { key: 'ArrowLeft' })
-    expect(dingTalk.getAttribute('aria-selected')).toBe('true')
     expect(document.activeElement).toBe(dingTalk)
+    expect(dingTalk.getAttribute('aria-selected')).toBe('true')
+    fireEvent.keyDown(dingTalk, { key: 'End' })
+    expect(document.activeElement).toBe(weCom)
+    fireEvent.keyDown(weCom, { key: 'Home' })
+    expect(document.activeElement).toBe(dingTalk)
+    expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('login-tab-dingtalk')
+    expect(ipc.invoke).not.toHaveBeenCalled()
   })
 
-  it('刷新切换预览二维码并明确显示尚未连接认证服务', () => {
-    renderPage()
-    expect(screen.getByRole('img', { name: 'login.qr_alt' }).getAttribute('src')).toBe('/login/dingtalk-preview-0.svg')
-    expect(screen.getByRole('status').textContent).toBe('login.preview_notice')
-    fireEvent.click(screen.getByRole('button', { name: 'login.refresh' }))
-    expect(screen.getByRole('img', { name: 'login.qr_alt' }).getAttribute('src')).toBe('/login/dingtalk-preview-1.svg')
-    expect(screen.getByRole('status').textContent).toBe('login.preview_refreshed')
-  })
-
-  it('二维码三分钟后过期，刷新后重新计时', () => {
+  it('企业微信面板显示期间钉钉仍按两秒领取并在成功后进入工作台', async () => {
     vi.useFakeTimers()
+    ipc.invoke.mockImplementation(async (command) => {
+      if (command === 'desktop_auth_begin')
+        return qr
+      if (command === 'desktop_auth_claim')
+        return { status: 'authenticated', session }
+      return null
+    })
+    renderPage(<DesktopEntry />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100)
+    })
+    fireEvent.click(screen.getByRole('tab', { name: 'login.wecom' }))
+    expect(screen.getByText('login.wecom_pending')).not.toBeNull()
+    expect(auth.ticket).toEqual(qr)
+    expect(ipc.invoke.mock.calls.filter(([name]) => name === 'desktop_auth_cancel')).toHaveLength(0)
+    expect(ipc.invoke.mock.calls.filter(([name]) => name === 'desktop_auth_claim')).toHaveLength(0)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000)
+    })
+    expect(ipc.invoke.mock.calls.filter(([name]) => name === 'desktop_auth_begin')).toHaveLength(1)
+    expect(ipc.invoke.mock.calls.filter(([name]) => name === 'desktop_auth_claim')).toEqual([['desktop_auth_claim', { loginId: 1 }]])
+    expect(auth.session).toEqual(session)
+    expect(screen.getByTestId('running-harness')).not.toBeNull()
+  })
+
+  it('使用真实 qrcode 库编码 authUrl，浏览器不发起登录网络请求', async () => {
+    const encode = vi.spyOn(QRCode, 'toString')
+    const fetch = vi.spyOn(globalThis, 'fetch')
     renderPage()
-    act(() => vi.advanceTimersByTime(179_999))
-    expect(screen.queryByText('login.expired')).toBeNull()
-    act(() => vi.advanceTimersByTime(1))
-    expect(screen.getByText('login.expired')).not.toBeNull()
-    fireEvent.click(screen.getAllByRole('button', { name: 'login.refresh' })[0])
-    expect(screen.queryByText('login.expired')).toBeNull()
-    act(() => vi.advanceTimersByTime(179_999))
-    expect(screen.queryByText('login.expired')).toBeNull()
-    act(() => vi.advanceTimersByTime(1))
-    expect(screen.getByText('login.expired')).not.toBeNull()
+    const image = await screen.findByRole('img', { name: 'login.qr_alt' })
+    expect(encode).toHaveBeenCalledWith(qr.authUrl, expect.objectContaining({ type: 'svg', margin: 4, errorCorrectionLevel: 'M' }))
+    expect(decodeURIComponent(image.getAttribute('src')!)).toContain('<svg xmlns="http://www.w3.org/2000/svg"')
+    expect(screen.queryAllByRole('link')).toHaveLength(0)
+    expect(fetch).not.toHaveBeenCalled()
+    expect(screen.getByText('login.scan_waiting')).not.toBeNull()
+  })
+
+  it('浏览器环境显示桌面提示且不调用原生命令', async () => {
+    ipc.native = false
+    renderPage()
+    expect(screen.getByText('login.desktop_required')).not.toBeNull()
+    expect((screen.getByRole('button', { name: 'login.continue_local' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(ipc.invoke).not.toHaveBeenCalled()
+  })
+
+  it('缺失 authUrl 时显示后端字段提示，不显示替代二维码', async () => {
+    ipc.invoke.mockImplementation(async (command) => {
+      if (command === 'desktop_auth_begin')
+        throw new Error('DESKTOP_AUTH_AUTH_URL_MISSING')
+      return null
+    })
+    renderPage()
+    await screen.findByText('login.auth_url_missing')
+    expect(screen.queryByRole('img', { name: 'login.qr_alt' })).toBeNull()
+    expect(ipc.invoke.mock.calls.filter(([name]) => name === 'desktop_auth_claim')).toHaveLength(0)
+  })
+
+  it('重新生成二维码时替换旧票据', async () => {
+    renderPage()
+    await screen.findByRole('img', { name: 'login.qr_alt' })
+    ipc.invoke.mockImplementation(async (command) => {
+      if (command === 'desktop_auth_begin')
+        return { loginId: 2, authUrl: 'https://login.dingtalk.com/oauth2/auth?state=two' }
+      return null
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'login.refresh_qr' }))
+    await waitFor(() => expect(auth.ticket?.loginId).toBe(2))
+    await screen.findByRole('img', { name: 'login.qr_alt' })
+  })
+
+  it('二维码每两秒领取结果，410 后提示并自动重新 begin', async () => {
+    vi.useFakeTimers()
+    let begins = 0
+    ipc.invoke.mockImplementation(async (command) => {
+      if (command === 'desktop_auth_begin') {
+        begins++
+        return { ...qr, loginId: begins, authUrl: `${qr.authUrl}&attempt=${begins}` }
+      }
+      if (command === 'desktop_auth_claim' && begins === 1)
+        return { status: 'expired' }
+      if (command === 'desktop_auth_claim')
+        return { status: 'pending' }
+      return null
+    })
+    renderPage()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100)
+    })
+    expect(screen.getByRole('img', { name: 'login.qr_alt' })).not.toBeNull()
+    expect(ipc.invoke.mock.calls.filter(([name]) => name === 'desktop_auth_claim')).toHaveLength(0)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000)
+    })
+    expect(begins).toBe(2)
+    expect(toast).toHaveBeenCalledWith('login.qr_expired', { variant: 'warning' })
+    expect(auth.ticket?.loginId).toBe(2)
+    expect(screen.getByRole('img', { name: 'login.qr_alt' })).not.toBeNull()
+  })
+
+  it('领取成功后使用员工信息进入工作台', async () => {
+    vi.useFakeTimers()
+    ipc.invoke.mockImplementation(async (command) => {
+      if (command === 'desktop_auth_begin')
+        return qr
+      if (command === 'desktop_auth_claim')
+        return { status: 'authenticated', session }
+      return null
+    })
+    renderPage(<DesktopEntry />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100)
+    })
+    expect(appRender).not.toHaveBeenCalled()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100)
+    })
+    expect(screen.getByTestId('running-harness')).not.toBeNull()
+    expect(auth.session).toEqual(session)
+    expect(screen.queryByTestId('dsh-login-page')).toBeNull()
+  })
+
+  it('恢复 Rust 内存中的有效会话时直接进入工作台', async () => {
+    ipc.invoke.mockImplementation(async command => command === 'desktop_auth_session' ? session : null)
+    renderPage(<DesktopEntry />)
+    await screen.findByTestId('running-harness')
+    expect(ipc.invoke.mock.calls.filter(([name]) => name === 'desktop_auth_begin')).toHaveLength(0)
+  })
+
+  it('进入本地工作台时取消未完成的扫码票据', async () => {
+    renderPage(<DesktopEntry />)
+    await screen.findByRole('img', { name: 'login.qr_alt' })
+    fireEvent.click(screen.getByRole('button', { name: 'login.continue_local' }))
+    await screen.findByTestId('running-harness')
+    expect(ipc.invoke).toHaveBeenCalledWith('desktop_auth_cancel')
+    expect(auth.ticket).toBeNull()
+  })
+  it('进入工作台后在 access token 到期前静默续期', async () => {
+    vi.useFakeTimers()
+    const now = Date.now()
+    let reads = 0
+    ipc.invoke.mockImplementation(async (command) => {
+      if (command === 'desktop_auth_session') {
+        reads++
+        if (reads === 1)
+          return { ...session, expiresAt: now + 60_000 }
+        return { ...session, expiresAt: now + 7_200_000 }
+      }
+      return null
+    })
+    renderPage(<DesktopEntry />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100)
+    })
+    expect(screen.getByTestId('running-harness')).not.toBeNull()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(29_000)
+    })
+    expect(reads).toBe(1)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_100)
+    })
+    expect(reads).toBe(2)
+    expect(auth.session?.expiresAt).toBe(now + 7_200_000)
+    expect(screen.getByTestId('running-harness')).not.toBeNull()
+  })
+
+  it('静默续期失效后退出企业工作台并重新显示二维码', async () => {
+    vi.useFakeTimers()
+    let reads = 0
+    ipc.invoke.mockImplementation(async (command) => {
+      if (command === 'desktop_auth_session') {
+        reads++
+        if (reads === 1)
+          return { ...session, expiresAt: Date.now() + 20_000 }
+        return null
+      }
+      if (command === 'desktop_auth_begin')
+        return qr
+      return null
+    })
+    renderPage(<DesktopEntry />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100)
+    })
+    expect(screen.getByTestId('running-harness')).not.toBeNull()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000)
+    })
+    expect(screen.queryByTestId('running-harness')).toBeNull()
+    expect(screen.getByRole('img', { name: 'login.qr_alt' })).not.toBeNull()
+    expect(auth.session).toBeNull()
+  })
+
+  it('凭据库读取失败时提供可重试提示', async () => {
+    ipc.invoke.mockRejectedValueOnce('DESKTOP_AUTH_VAULT_UNAVAILABLE')
+    renderPage()
+    await screen.findByText('login.vault_failed')
+    expect(ipc.invoke.mock.calls.filter(([name]) => name === 'desktop_auth_begin')).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: 'login.refresh_qr' }))
+    await screen.findByRole('img', { name: 'login.qr_alt' })
   })
 })

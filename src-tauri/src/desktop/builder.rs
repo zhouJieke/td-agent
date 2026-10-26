@@ -1569,6 +1569,12 @@ mod macos_bundle_tests {
 // configure invoke handler
 pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
+        crate::bridge::desktop_auth_begin,
+        crate::bridge::desktop_auth_claim,
+        crate::bridge::desktop_auth_cancel,
+        crate::bridge::desktop_auth_session,
+        crate::bridge::desktop_auth_access_token,
+        crate::bridge::desktop_auth_request,
         crate::bridge::install_dependencies,
         crate::bridge::check_dsh_update,
         crate::bridge::launch_harness,
@@ -1730,6 +1736,7 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
     }
 
     let builder = builder
+        .manage(crate::service::auth::AuthService::default())
         .manage(crate::desktop::pet_mouse::PetMouseStreamState::default())
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -1916,6 +1923,17 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
                 let _ = window.hide();
             }
             tauri::WindowEvent::Destroyed => {
+                let app = window.app_handle().clone();
+                let label = window.label().to_owned();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(error) = app
+                        .state::<crate::service::auth::AuthService>()
+                        .cancel(&label)
+                        .await
+                    {
+                        log::warn!("{error}");
+                    }
+                });
                 if let Some(profile) =
                     crate::service::workflow::instances::release_window(window.label())
                 {

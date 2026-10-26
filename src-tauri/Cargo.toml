@@ -74,6 +74,12 @@ arboard = { version = "3", features = [ "wayland-data-control" ] }
 base64 = "0.22"
 serde = { version = "1", features = [ "derive" ] }
 serde_json = "1"
+keyring = { version = "3.6.3", default-features = false, features = [
+  "apple-native",
+  "windows-native",
+  "sync-secret-service",
+  "crypto-rust"
+] }
 serde_yaml = "0.9"
 regex = "1"
 sha2 = "0.10"

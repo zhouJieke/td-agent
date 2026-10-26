@@ -1,13 +1,17 @@
-import { ArrowRight, ArrowRotateRight, CircleQuestion, Lock, Minus, ShieldCheck, Square, Xmark } from '@gravity-ui/icons'
+import { ArrowRight, CircleQuestion, Lock, Minus, ShieldCheck, Square, Xmark } from '@gravity-ui/icons'
 import { Button } from '@heroui/react'
-import { useTimeoutFn } from '@reause/core'
-import { useMutation } from '@tanstack/react-query'
+import { useIntervalFn, useUnmount, useWatch } from '@reause/core'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { isTauri } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import QRCode from 'qrcode'
 import { lazy, Suspense, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { tv } from 'tailwind-variants'
+import { useStore } from 'valtio-define'
+import { queryKeys } from '@/config/query-keys'
+import { auth } from '@/store/modules/auth'
 import { toast } from '@/utils/toast'
 import './login.css'
 
@@ -20,17 +24,38 @@ const providerStyles = tv({
     selected: { true: { tab: 'login-provider-selected' } },
   },
 })
-
 const providers = ['dingtalk', 'wecom'] as const
 type Provider = typeof providers[number]
 const App = lazy(async () => ({ default: (await import('@/layout')).App }))
 
 export function DesktopEntry() {
   const { t } = useTranslation()
-  const [localMode, setLocalMode] = useState(false)
+  const native = isTauri()
+  const { session } = useStore(auth)
+  const [workspaceMode, setWorkspaceMode] = useState<'login' | 'local' | 'authenticated'>('login')
+  const { mutate: refreshSession, isPending: refreshing } = useMutation({ mutationFn: async () => auth.initialize(), retry: false })
+  const renewal = useIntervalFn(() => {
+    if (session && Date.now() >= session.expiresAt - 30_000 && !refreshing)
+      refreshSession()
+  }, 15_000, { immediate: false })
+  const showWorkspace = workspaceMode === 'local' || (workspaceMode === 'authenticated' && session !== null)
+
+  useWatch([native, session !== null], () => {
+    if (native && session)
+      renewal.resume()
+    else
+      renewal.pause()
+  }, { immediate: true })
+
+  function continueToWorkspace() {
+    if (auth.session)
+      setWorkspaceMode('authenticated')
+    else
+      setWorkspaceMode('local')
+  }
 
   return (
-    <If cond={localMode} else={<Login onContinue={() => setLocalMode(true)} />}>
+    <If cond={showWorkspace} else={<Login onContinue={continueToWorkspace} />}>
       <Suspense fallback={(
         <div className="grid h-screen place-items-center bg-startup" role="status" aria-label={t('status.loading_plugins')}>
           <span className="h-5 w-5 animate-load-spin rounded-full border-2 border-load-ring border-t-load-ink" />
@@ -45,26 +70,85 @@ export function DesktopEntry() {
 
 export function Login({ onContinue }: { onContinue: () => void }) {
   const { t, i18n } = useTranslation()
-  const [provider, setProvider] = useState<Provider>('dingtalk')
-  const [revision, setRevision] = useState(0)
-  const [expired, setExpired] = useState(false)
-  const { start: restartExpiry } = useTimeoutFn(() => setExpired(true), 180_000)
-  const providerName = t(`login.${provider}`)
   const native = isTauri()
-  const qrSource = `/login/${provider}-preview-${revision % 2}.svg`
+  const { session, ticket, expired } = useStore(auth)
+  const initialization = useQuery({
+    queryKey: queryKeys.authSession,
+    queryFn: async () => {
+      await auth.initialize()
+      return true
+    },
+    enabled: native,
+    retry: false,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  })
+  const [provider, setProvider] = useState<Provider>('dingtalk')
+  const qr = useQuery({
+    queryKey: queryKeys.authQr(ticket?.loginId),
+    queryFn: async () => {
+      if (!ticket)
+        throw new Error('DESKTOP_AUTH_SESSION_MISSING')
+      const svg = await QRCode.toString(ticket.authUrl, { type: 'svg', margin: 4, errorCorrectionLevel: 'M' })
+      return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+    },
+    enabled: ticket !== null,
+    gcTime: 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+  })
   const language = i18n.resolvedLanguage ?? 'zh-CN'
   const showWindowControls = native && !navigator.userAgent.includes('Macintosh')
+  const authenticated = session !== null
+  const { mutate: handleClaim, isPending: claiming, error: claimError, reset: resetClaim } = useMutation({
+    mutationFn: async () => auth.claim(),
+    retry: false,
+  })
+  const { mutate: handleBegin, isPending: beginning, error: beginError } = useMutation({
+    mutationFn: async () => auth.begin(),
+    onMutate: () => resetClaim(),
+    retry: false,
+  })
   const { mutate: handleWindowAction } = useMutation({
     mutationFn: async (action: 'minimize' | 'toggleMaximize' | 'close') => getCurrentWindow()[action](),
     onError: () => toast(t('login.window_action_failed'), { variant: 'danger' }),
   })
+  const failure = initialization.error ?? beginError ?? claimError ?? qr.error
+  let errorKey = 'login.scan_failed'
+  if (String(failure).includes('DESKTOP_AUTH_AUTH_URL_MISSING'))
+    errorKey = 'login.auth_url_missing'
+  const vaultFailure = String(failure).includes('DESKTOP_AUTH_VAULT_')
+  if (vaultFailure)
+    errorKey = 'login.vault_failed'
+  const waiting = native && ticket !== null && qr.isSuccess && !failure && !expired && !authenticated
+  const showQr = waiting && Boolean(qr.data)
+  const loading = native && !failure && !expired && !authenticated && !showQr
+  const poll = useIntervalFn(() => {
+    if (waiting && !claiming)
+      handleClaim()
+  }, 2000, { immediate: false })
 
-  function refreshCode(nextProvider: Provider = provider) {
-    setProvider(nextProvider)
-    setRevision(value => value + 1)
-    setExpired(false)
-    restartExpiry()
-  }
+  useWatch([waiting], () => {
+    if (waiting)
+      poll.resume()
+    else
+      poll.pause()
+  }, { immediate: true })
+  useWatch([initialization.isSuccess, authenticated, native], () => {
+    if (authenticated && native)
+      onContinue()
+    else if (native && initialization.isSuccess)
+      handleBegin()
+  }, { immediate: true })
+  useWatch([expired], () => {
+    if (native && expired) {
+      toast(t('login.qr_expired'), { variant: 'warning' })
+      handleBegin()
+    }
+  })
+  useUnmount(() => {
+    void auth.cancel().catch(error => console.error('[Login] cancel failed:', error))
+  })
 
   return (
     <main className="login-page" data-testid="dsh-login-page">
@@ -200,7 +284,7 @@ export function Login({ onContinue }: { onContinue: () => void }) {
                   aria-selected={provider === item}
                   aria-controls="login-qr-panel"
                   tabIndex={provider === item ? 0 : -1}
-                  onClick={() => refreshCode(item)}
+                  onClick={() => setProvider(item)}
                   onKeyDown={(event) => {
                     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key))
                       return
@@ -208,7 +292,7 @@ export function Login({ onContinue }: { onContinue: () => void }) {
                     let next: Provider = 'dingtalk'
                     if (event.key === 'End' || (event.key !== 'Home' && provider === 'dingtalk'))
                       next = 'wecom'
-                    refreshCode(next)
+                    setProvider(next)
                     document.getElementById(`login-tab-${next}`)?.focus()
                   }}
                 >
@@ -220,30 +304,42 @@ export function Login({ onContinue }: { onContinue: () => void }) {
           </div>
 
           <div className="login-qr-panel" id="login-qr-panel" role="tabpanel" aria-labelledby={`login-tab-${provider}`}>
-            <div className="login-qr-frame" data-expired={expired}>
-              <img className="login-qr-image" src={qrSource} alt={t('login.qr_alt', { provider: providerName })} width="208" height="208" />
-              <span className="login-qr-brand" aria-hidden="true"><img src={`/login/${provider}.svg`} alt="" width="25" height="25" /></span>
-              <If cond={expired}>
-                <div className="login-qr-expired" role="status">
-                  <ArrowRotateRight width="28" height="28" />
-                  <strong>{t('login.expired')}</strong>
-                  <Button size="sm" onPress={() => refreshCode()}>{t('login.refresh')}</Button>
+            <If
+              cond={provider === 'dingtalk'}
+              else={(
+                <div className="login-qr-area login-wecom-pending">
+                  <img src="/login/wecom.svg" alt="" width="48" height="48" />
+                  <p role="status">{t('login.wecom_pending')}</p>
                 </div>
+              )}
+            >
+              <div className="login-qr-area" aria-busy={loading}>
+                <If cond={loading}><p role="status">{t('login.qr_loading')}</p></If>
+                <If cond={showQr}>
+                  <img className="login-qr" src={qr.data} alt={t('login.qr_alt')} width="240" height="240" />
+                </If>
+                <If cond={Boolean(failure)}><p role="alert">{t(errorKey)}</p></If>
+                <If cond={expired}><p role="status">{t('login.qr_expired')}</p></If>
+                <If cond={!native}><p role="status">{t('login.desktop_required')}</p></If>
+                <If cond={authenticated}><p role="status">{t('login.signed_in', { name: session?.employeeName, number: session?.employeeNumber })}</p></If>
+              </div>
+              <If cond={waiting}><p className="login-scan-description" role="status">{t('login.scan_waiting')}</p></If>
+              <If cond={native && !authenticated}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  isDisabled={beginning || initialization.isFetching}
+                  onPress={() => {
+                    if (initialization.isError || vaultFailure)
+                      void initialization.refetch()
+                    else
+                      handleBegin()
+                  }}
+                >
+                  {t('login.refresh_qr')}
+                </Button>
               </If>
-            </div>
-            <p className="login-scan-instruction">
-              {t('login.scan_prefix')}
-              <strong>{providerName}</strong>
-              {t('login.scan_suffix')}
-            </p>
-            <p className="login-scan-description">{t('login.scan_description')}</p>
-            <Button className="login-refresh" size="sm" variant="ghost" onPress={() => refreshCode()}>
-              <ArrowRotateRight width="14" height="14" />
-              {t('login.refresh')}
-            </Button>
-            <p className="login-preview-notice" role="status" aria-live="polite" key={`${provider}-${revision}`}>
-              <If cond={revision > 0} else={t('login.preview_notice')}>{t('login.preview_refreshed')}</If>
-            </p>
+            </If>
           </div>
 
           <div className="login-local-divider">

@@ -595,6 +595,9 @@ importers:
       i18next:
         specifier: catalog:runtime
         version: 26.3.6(typescript@5.8.3)
+      qrcode:
+        specifier: catalog:utils
+        version: 1.5.4
       react:
         specifier: catalog:runtime
         version: 19.2.8
@@ -806,6 +809,9 @@ importers:
       '@types/node':
         specifier: catalog:types
         version: 22.20.1
+      '@types/qrcode':
+        specifier: catalog:types
+        version: 1.5.6
       '@types/react':
         specifier: catalog:types
         version: 19.2.18
