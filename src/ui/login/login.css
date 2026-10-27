@@ -84,8 +84,9 @@
 .login-provider-mark { display: grid; width: 24px; height: 24px; place-items: center; }
 .login-qr-panel { min-height: 324px; }
 .login-qr-area { display: flex; min-height: 240px; margin-top: 22px; flex-direction: column; align-items: center; justify-content: center; color: var(--login-muted); font-size: 12px; line-height: 1.7; }
-.login-wecom-pending { gap: 16px; }
 .login-qr { display: block; width: 240px; height: 240px; max-width: 100%; background: #fff; }
+.login-wecom-frame { display: block; width: 320px; height: 420px; max-width: 100%; border: 0; background: #fff; border-radius: 4px; scrollbar-width: none; -ms-overflow-style: none; }
+.login-wecom-frame::-webkit-scrollbar { display: none; }
 .login-scan-description { margin-top: 6px; font-size: 11px; color: var(--login-muted); }
 .login-local-divider { display: flex; align-items: center; gap: 13px; margin: 22px 0 16px; font-size: 10px; color: var(--login-muted); }
 .login-local-divider > span { height: 1px; flex: 1; background: var(--color-line); }

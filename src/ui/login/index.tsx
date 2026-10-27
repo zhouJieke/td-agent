@@ -26,6 +26,25 @@ const providerStyles = tv({
 })
 const providers = ['dingtalk', 'wecom'] as const
 type Provider = typeof providers[number]
+
+/**
+ * 企微二维码的嵌入端点：把后端返回的 wwlogin 授权页链接（/wwlogin/sso/login，PC 整页）
+ * 改写为官方文档「构造内嵌登录二维码」的 open.work.weixin.qq.com/wwopen/sso/qrConnect
+ * （新域名下无 qrConnect 端点，实测 404），加 self_redirect 让授权后的回跳发生在
+ * iframe 内。企微 App 只认官方页面渲染的授权票据二维码，前端自编码 authUrl 成二维码
+ * 会被手机端再次打开成 PC 扫码页（死循环）。
+ */
+function wecomQrConnectUrl(authUrl: string): string {
+  const url = new URL(authUrl)
+  if (url.host !== 'login.work.weixin.qq.com')
+    return authUrl
+  url.host = 'open.work.weixin.qq.com'
+  url.pathname = '/wwopen/sso/qrConnect'
+  url.searchParams.delete('login_type')
+  url.searchParams.set('self_redirect', 'true')
+  return url.toString()
+}
+
 const App = lazy(async () => ({ default: (await import('@/layout')).App }))
 
 export function DesktopEntry() {
@@ -92,7 +111,7 @@ export function Login({ onContinue }: { onContinue: () => void }) {
       const svg = await QRCode.toString(ticket.authUrl, { type: 'svg', margin: 4, errorCorrectionLevel: 'M' })
       return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
     },
-    enabled: ticket !== null,
+    enabled: ticket !== null && provider === 'dingtalk',
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
@@ -105,7 +124,7 @@ export function Login({ onContinue }: { onContinue: () => void }) {
     retry: false,
   })
   const { mutate: handleBegin, isPending: beginning, error: beginError } = useMutation({
-    mutationFn: async () => auth.begin(),
+    mutationFn: (platform: Provider) => auth.begin(platform),
     onMutate: () => resetClaim(),
     retry: false,
   })
@@ -113,6 +132,12 @@ export function Login({ onContinue }: { onContinue: () => void }) {
     mutationFn: async (action: 'minimize' | 'toggleMaximize' | 'close') => getCurrentWindow()[action](),
     onError: () => toast(t('login.window_action_failed'), { variant: 'danger' }),
   })
+
+  function switchProvider(next: Provider) {
+    setProvider(next)
+    if (native && !authenticated && initialization.isSuccess && !initialization.isFetching)
+      handleBegin(next)
+  }
   const failure = initialization.error ?? beginError ?? claimError ?? qr.error
   let errorKey = 'login.scan_failed'
   if (String(failure).includes('DESKTOP_AUTH_AUTH_URL_MISSING'))
@@ -120,8 +145,14 @@ export function Login({ onContinue }: { onContinue: () => void }) {
   const vaultFailure = String(failure).includes('DESKTOP_AUTH_VAULT_')
   if (vaultFailure)
     errorKey = 'login.vault_failed'
-  const waiting = native && ticket !== null && qr.isSuccess && !failure && !expired && !authenticated
-  const showQr = waiting && Boolean(qr.data)
+  const rejection = String(failure).startsWith('DESKTOP_AUTH_BEGIN_REJECTED')
+    ? String(failure).slice('DESKTOP_AUTH_BEGIN_REJECTED: '.length)
+    : null
+  const providerName = t(`login.${provider}`)
+  const wecomQrSrc = provider === 'wecom' && ticket ? wecomQrConnectUrl(ticket.authUrl) : null
+  const waiting = native && ticket !== null && (provider === 'wecom' || qr.isSuccess) && !failure && !expired && !authenticated
+  const showQr = waiting && provider === 'dingtalk' && Boolean(qr.data)
+  const wecomWaiting = waiting && provider === 'wecom'
   const loading = native && !failure && !expired && !authenticated && !showQr
   const poll = useIntervalFn(() => {
     if (waiting && !claiming)
@@ -138,12 +169,12 @@ export function Login({ onContinue }: { onContinue: () => void }) {
     if (authenticated && native)
       onContinue()
     else if (native && initialization.isSuccess)
-      handleBegin()
+      handleBegin(provider)
   }, { immediate: true })
   useWatch([expired], () => {
     if (native && expired) {
       toast(t('login.qr_expired'), { variant: 'warning' })
-      handleBegin()
+      handleBegin(provider)
     }
   })
   useUnmount(() => {
@@ -284,7 +315,7 @@ export function Login({ onContinue }: { onContinue: () => void }) {
                   aria-selected={provider === item}
                   aria-controls="login-qr-panel"
                   tabIndex={provider === item ? 0 : -1}
-                  onClick={() => setProvider(item)}
+                  onClick={() => switchProvider(item)}
                   onKeyDown={(event) => {
                     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key))
                       return
@@ -292,7 +323,7 @@ export function Login({ onContinue }: { onContinue: () => void }) {
                     let next: Provider = 'dingtalk'
                     if (event.key === 'End' || (event.key !== 'Home' && provider === 'dingtalk'))
                       next = 'wecom'
-                    setProvider(next)
+                    switchProvider(next)
                     document.getElementById(`login-tab-${next}`)?.focus()
                   }}
                 >
@@ -304,41 +335,41 @@ export function Login({ onContinue }: { onContinue: () => void }) {
           </div>
 
           <div className="login-qr-panel" id="login-qr-panel" role="tabpanel" aria-labelledby={`login-tab-${provider}`}>
-            <If
-              cond={provider === 'dingtalk'}
-              else={(
-                <div className="login-qr-area login-wecom-pending">
-                  <img src="/login/wecom.svg" alt="" width="48" height="48" />
-                  <p role="status">{t('login.wecom_pending')}</p>
-                </div>
-              )}
-            >
-              <div className="login-qr-area" aria-busy={loading}>
-                <If cond={loading}><p role="status">{t('login.qr_loading')}</p></If>
-                <If cond={showQr}>
-                  <img className="login-qr" src={qr.data} alt={t('login.qr_alt')} width="240" height="240" />
-                </If>
-                <If cond={Boolean(failure)}><p role="alert">{t(errorKey)}</p></If>
-                <If cond={expired}><p role="status">{t('login.qr_expired')}</p></If>
-                <If cond={!native}><p role="status">{t('login.desktop_required')}</p></If>
-                <If cond={authenticated}><p role="status">{t('login.signed_in', { name: session?.employeeName, number: session?.employeeNumber })}</p></If>
-              </div>
-              <If cond={waiting}><p className="login-scan-description" role="status">{t('login.scan_waiting')}</p></If>
-              <If cond={native && !authenticated}>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  isDisabled={beginning || initialization.isFetching}
-                  onPress={() => {
-                    if (initialization.isError || vaultFailure)
-                      void initialization.refetch()
-                    else
-                      handleBegin()
-                  }}
-                >
-                  {t('login.refresh_qr')}
-                </Button>
+            <div className="login-qr-area" aria-busy={loading}>
+              <If cond={loading}><p role="status">{t('login.qr_loading')}</p></If>
+              <If cond={showQr}>
+                <img className="login-qr" src={qr.data} alt={t('login.qr_alt', { provider: providerName })} width="240" height="240" />
               </If>
+              <If cond={wecomWaiting && wecomQrSrc !== null}>
+                <iframe
+                  className="login-wecom-frame"
+                  src={wecomQrSrc ?? undefined}
+                  title={t('login.qr_alt', { provider: providerName })}
+                  scrolling="no"
+                />
+              </If>
+              <If cond={Boolean(failure)}>
+                <p role="alert">{rejection ?? t(errorKey)}</p>
+              </If>
+              <If cond={expired}><p role="status">{t('login.qr_expired')}</p></If>
+              <If cond={!native}><p role="status">{t('login.desktop_required')}</p></If>
+              <If cond={authenticated}><p role="status">{t('login.signed_in', { name: session?.employeeName, number: session?.employeeNumber })}</p></If>
+            </div>
+            <If cond={waiting}><p className="login-scan-description" role="status">{t('login.scan_waiting', { provider: providerName })}</p></If>
+            <If cond={native && !authenticated}>
+              <Button
+                size="sm"
+                variant="ghost"
+                isDisabled={beginning || initialization.isFetching}
+                onPress={() => {
+                  if (initialization.isError || vaultFailure)
+                    void initialization.refetch()
+                  else
+                    handleBegin(provider)
+                }}
+              >
+                {t('login.refresh_qr')}
+              </Button>
             </If>
           </div>
 

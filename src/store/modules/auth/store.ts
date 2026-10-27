@@ -29,15 +29,16 @@ export const auth = defineStore({
         return
       auth.session = await invoke<AuthSession | null>('desktop_auth_session').catch(handleSessionError)
     },
-    async begin() {
+    async begin(platform: 'dingtalk' | 'wecom'): Promise<LoginQr | null> {
       if (!isTauri())
         throw new Error('DESKTOP_AUTH_NATIVE_REQUIRED')
       const current = ++revision
       auth.ticket = null
       auth.expired = false
-      const ticket = await invoke<LoginQr | null>('desktop_auth_begin')
+      const ticket = await invoke<LoginQr | null>('desktop_auth_begin', { platform })
       if (current === revision)
         auth.ticket = ticket
+      return ticket
     },
     claim(): Promise<void> {
       if (claiming)

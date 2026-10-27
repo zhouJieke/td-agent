@@ -24,7 +24,7 @@ afterEach(async () => {
 describe('桌面登录状态', () => {
   it('浏览器环境在 IPC 调用前拦截登录', async () => {
     ipc.native = false
-    await expect(auth.begin()).rejects.toThrow('DESKTOP_AUTH_NATIVE_REQUIRED')
+    await expect(auth.begin('dingtalk')).rejects.toThrow('DESKTOP_AUTH_NATIVE_REQUIRED')
     await auth.initialize()
     expect(ipc.invoke).not.toHaveBeenCalled()
   })
@@ -41,7 +41,7 @@ describe('桌面登录状态', () => {
     ipc.invoke.mockImplementationOnce(() => new Promise((done) => {
       resolve = done
     }))
-    const begin = auth.begin()
+    const begin = auth.begin('wecom')
     await auth.cancel()
     resolve({ loginId: 1, authUrl: 'https://login.dingtalk.com/old' })
     await begin
@@ -81,7 +81,8 @@ describe('桌面登录状态', () => {
     }))
     const oldClaim = auth.claim()
     ipc.invoke.mockResolvedValueOnce({ loginId: 2, authUrl: 'https://login.dingtalk.com/new' })
-    await auth.begin()
+    await auth.begin('dingtalk')
+    expect(ipc.invoke).toHaveBeenCalledWith('desktop_auth_begin', { platform: 'dingtalk' })
     resolve({ status: 'authenticated', session })
     await oldClaim
     expect(auth.ticket?.loginId).toBe(2)

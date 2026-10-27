@@ -4,8 +4,9 @@ use crate::service::auth::{AuthService, AuthSession, ClaimResult, LoginQr};
 pub async fn desktop_auth_begin(
     window: tauri::WebviewWindow,
     auth: tauri::State<'_, AuthService>,
+    platform: String,
 ) -> Result<Option<LoginQr>, String> {
-    auth.begin(window.label()).await
+    auth.begin(window.label(), &platform).await
 }
 
 #[tauri::command]

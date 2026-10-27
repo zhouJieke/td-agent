@@ -257,7 +257,10 @@ impl AuthService {
         Ok(())
     }
 
-    pub async fn begin(&self, owner: &str) -> Result<Option<LoginQr>, String> {
+    pub async fn begin(&self, owner: &str, platform: &str) -> Result<Option<LoginQr>, String> {
+        if !matches!(platform, "dingtalk" | "wecom") {
+            return Err("DESKTOP_AUTH_REQUEST_INVALID".into());
+        }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         {
             let mut pending = self.pending.lock().await;
@@ -275,9 +278,23 @@ impl AuthService {
             );
         }
         let result = async {
-            let response = self.post("/desktop/api/begin", json!({})).await?;
+            let response = self
+                .post("/desktop/api/begin", json!({ "platform": platform }))
+                .await?;
             #[cfg(debug_assertions)]
             log::info!(target: "desktop_auth", "POST {}desktop/api/begin -> {}", self.endpoint()?, response.status());
+            if response.status() == StatusCode::BAD_REQUEST {
+                let error: Value = read_json(response).await?;
+                if error.get("error").and_then(Value::as_str) == Some("invalid_request") {
+                    let description = error
+                        .get("error_description")
+                        .and_then(Value::as_str)
+                        .filter(|text| !text.trim().is_empty())
+                        .unwrap_or("invalid_request");
+                    return Err(format!("DESKTOP_AUTH_BEGIN_REJECTED: {description}"));
+                }
+                return Err("DESKTOP_AUTH_BEGIN_FAILED".into());
+            }
             if response.status() != StatusCode::OK {
                 return Err("DESKTOP_AUTH_BEGIN_FAILED".into());
             }
@@ -841,15 +858,52 @@ mod tests {
     #[tokio::test]
     async fn begin_returns_only_real_auth_url_and_local_identifier() {
         let server = backend(vec![(200, ticket())], None).await;
-        let qr = server.auth.begin("main").await.unwrap().unwrap();
+        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
         assert_eq!(
             serde_json::to_value(qr).unwrap(),
             json!({"loginId":1,"authUrl":"https://login.dingtalk.com/oauth2/auth?state=nonce-one"})
         );
         assert_eq!(
             *server.requests.lock().await,
-            vec![("POST /desktop/api/begin HTTP/1.1".into(), json!({}))]
+            vec![(
+                "POST /desktop/api/begin HTTP/1.1".into(),
+                json!({"platform":"dingtalk"})
+            )]
         );
+    }
+
+    #[tokio::test]
+    async fn begin_wecom_passes_platform_and_surfaces_backend_rejection() {
+        let server = backend(
+            vec![(
+                400,
+                json!({"error":"invalid_request","error_description":"企业微信登录未配置（hr.im.wecom），无法发起"}),
+            )],
+            None,
+        )
+        .await;
+        assert_eq!(
+            server.auth.begin("main", "wecom").await.err().unwrap(),
+            "DESKTOP_AUTH_BEGIN_REJECTED: 企业微信登录未配置（hr.im.wecom），无法发起"
+        );
+        assert_eq!(
+            *server.requests.lock().await,
+            vec![(
+                "POST /desktop/api/begin HTTP/1.1".into(),
+                json!({"platform":"wecom"})
+            )]
+        );
+        assert!(server.auth.pending.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn begin_rejects_unknown_platform_without_network() {
+        let server = backend(Vec::new(), None).await;
+        assert_eq!(
+            server.auth.begin("main", "feishu").await.err().unwrap(),
+            "DESKTOP_AUTH_REQUEST_INVALID"
+        );
+        assert!(server.requests.lock().await.is_empty());
     }
 
     #[tokio::test]
@@ -858,7 +912,7 @@ mod tests {
         response.as_object_mut().unwrap().remove("authUrl");
         let server = backend(vec![(200, response)], None).await;
         assert_eq!(
-            server.auth.begin("main").await.err().unwrap(),
+            server.auth.begin("main", "dingtalk").await.err().unwrap(),
             "DESKTOP_AUTH_AUTH_URL_MISSING"
         );
         assert!(server.auth.pending.lock().await.is_empty());
@@ -875,7 +929,7 @@ mod tests {
             None,
         )
         .await;
-        let qr = server.auth.begin("main").await.unwrap().unwrap();
+        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
         assert!(matches!(
             server.auth.claim("main", qr.login_id).await.unwrap(),
             ClaimResult::Pending
@@ -905,7 +959,7 @@ mod tests {
     #[tokio::test]
     async fn expired_claim_invalidates_ticket_without_authenticating() {
         let server = backend(vec![(200, ticket()), (410, json!({}))], None).await;
-        let qr = server.auth.begin("main").await.unwrap().unwrap();
+        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
         assert!(matches!(
             server.auth.claim("main", qr.login_id).await.unwrap(),
             ClaimResult::Expired
@@ -919,7 +973,7 @@ mod tests {
         let mut invalid = token("access", "refresh");
         invalid["employee_number"] = json!("");
         let server = backend(vec![(200, ticket()), (200, invalid)], None).await;
-        let qr = server.auth.begin("main").await.unwrap().unwrap();
+        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
         assert_eq!(
             server.auth.claim("main", qr.login_id).await.err().unwrap(),
             "DESKTOP_AUTH_RESPONSE_INVALID"
@@ -930,7 +984,7 @@ mod tests {
     #[tokio::test]
     async fn wrong_window_or_local_identifier_cannot_consume_ticket() {
         let server = backend(vec![(200, ticket())], None).await;
-        let qr = server.auth.begin("main").await.unwrap().unwrap();
+        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
         assert!(matches!(
             server.auth.claim("other", qr.login_id).await.unwrap(),
             ClaimResult::Cancelled
@@ -947,7 +1001,7 @@ mod tests {
         let gate = Arc::new(Notify::new());
         let server = backend(vec![(200, ticket())], Some(gate.clone())).await;
         let auth = server.auth.clone();
-        let begin = tokio::spawn(async move { auth.begin("main").await });
+        let begin = tokio::spawn(async move { auth.begin("main", "dingtalk").await });
         request_count(&server, 1).await;
         server.auth.cancel("main").await.unwrap();
         gate.notify_one();
@@ -964,7 +1018,7 @@ mod tests {
         )
         .await;
         gate.notify_one();
-        let qr = server.auth.begin("main").await.unwrap().unwrap();
+        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
         let auth = server.auth.clone();
         let claim = tokio::spawn(async move { auth.claim("main", qr.login_id).await });
         request_count(&server, 2).await;
@@ -998,7 +1052,7 @@ mod tests {
             None,
         )
         .await;
-        let qr = server.auth.begin("main").await.unwrap().unwrap();
+        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
         server.auth.claim("main", qr.login_id).await.unwrap();
         expire_access(&server).await;
         let (first, second) = tokio::join!(server.auth.access_token(), server.auth.access_token());
@@ -1029,7 +1083,7 @@ mod tests {
             None,
         )
         .await;
-        let qr = server.auth.begin("main").await.unwrap().unwrap();
+        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
         server.auth.claim("main", qr.login_id).await.unwrap();
         expire_access(&server).await;
         assert_eq!(
@@ -1051,7 +1105,7 @@ mod tests {
             None,
         )
         .await;
-        let qr = server.auth.begin("main").await.unwrap().unwrap();
+        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
         server.auth.claim("main", qr.login_id).await.unwrap();
         expire_access(&server).await;
         assert_eq!(
@@ -1065,7 +1119,7 @@ mod tests {
         );
     }
     async fn authenticated(server: &Backend) {
-        let qr = server.auth.begin("main").await.unwrap().unwrap();
+        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
         server.auth.claim("main", qr.login_id).await.unwrap();
     }
 
@@ -1084,7 +1138,7 @@ mod tests {
             None,
         )
         .await;
-        let qr = server.auth.begin("main").await.unwrap().unwrap();
+        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
         let pending: PendingSecret = server
             .auth
             .read_secret("pending:main")
@@ -1154,7 +1208,7 @@ mod tests {
         let server = backend(vec![(200, ticket())], None).await;
         server.vault.fail_write.store(true, Ordering::Relaxed);
         assert_eq!(
-            server.auth.begin("main").await.err().unwrap(),
+            server.auth.begin("main", "dingtalk").await.err().unwrap(),
             "DESKTOP_AUTH_VAULT_UNAVAILABLE"
         );
         assert!(server.auth.pending.lock().await.is_empty());
