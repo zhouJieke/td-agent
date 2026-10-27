@@ -23,6 +23,7 @@ vi.mock('@/utils/toast', () => ({ toast: vi.fn() }))
 const clients: QueryClient[] = []
 const session = { employeeNumber: 'TD000001', employeeName: '张三', expiresAt: 1800000000000 }
 const qr = { loginId: 1, authUrl: 'https://login.dingtalk.com/oauth2/auth?state=one&client_id=desktop' }
+const wecomQr = { loginId: 2, authUrl: 'https://login.work.weixin.qq.com/wwlogin/sso/login?login_type=CorpApp&appid=ww1&agentid=100&state=two&redirect_uri=https%3A%2F%2Fbcw-test.jinmit.com%2Fdesktop%2Fcb' }
 
 function renderPage(children: ReactNode = <Login onContinue={vi.fn()} />) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
@@ -59,8 +60,9 @@ afterEach(async () => {
 })
 
 describe('桌面钉钉扫码登录', () => {
-  it('企微在面板内嵌官方二维码，拒绝时展示后端文案', async () => {
-    const wecomQr = { loginId: 2, authUrl: 'https://login.work.weixin.qq.com/wwlogin/sso/login?login_type=CorpApp&appid=ww1&agentid=100&state=two&redirect_uri=https%3A%2F%2Fbcw-test.jinmit.com%2Fdesktop%2Fcb' }
+  it('企微用 qrcode 原样编码后端 authUrl，不加载远程二维码页面', async () => {
+    const encode = vi.spyOn(QRCode, 'toString')
+    const fetch = vi.spyOn(globalThis, 'fetch')
     ipc.invoke.mockImplementation(async (command, args) => {
       if (command === 'desktop_auth_begin')
         return (args as { platform: string }).platform === 'wecom' ? wecomQr : qr
@@ -77,24 +79,54 @@ describe('桌面钉钉扫码登录', () => {
     expect(weCom.getAttribute('aria-selected')).toBe('true')
     expect(dingTalk.getAttribute('aria-selected')).toBe('false')
     expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('login-tab-wecom')
-    const frame = await screen.findByTitle('login.qr_alt')
-    const frameUrl = new URL(frame.getAttribute('src')!)
-    expect(frameUrl.host).toBe('open.work.weixin.qq.com')
-    expect(frameUrl.pathname).toBe('/wwopen/sso/qrConnect')
-    expect(frameUrl.searchParams.get('self_redirect')).toBe('true')
-    expect(frameUrl.searchParams.get('appid')).toBe('ww1')
-    expect(frameUrl.searchParams.get('state')).toBe('two')
-    expect(frameUrl.searchParams.get('login_type')).toBeNull()
-    expect(screen.queryByRole('img', { name: 'login.qr_alt' })).toBeNull()
+    await waitFor(() => expect(encode).toHaveBeenCalledWith(wecomQr.authUrl, expect.objectContaining({ type: 'svg', margin: 4, errorCorrectionLevel: 'M' })))
+    const image = await screen.findByRole('img', { name: 'login.qr_alt' })
+    expect(image.getAttribute('src')).toMatch(/^data:image\/svg\+xml;charset=utf-8,/)
+    expect(decodeURIComponent(image.getAttribute('src')!)).toContain('<svg xmlns="http://www.w3.org/2000/svg"')
+    expect(screen.getByRole('tabpanel').querySelector('iframe')).toBeNull()
+    expect(ipc.invoke).toHaveBeenCalledWith('desktop_auth_begin', { platform: 'wecom' })
+    expect(fetch).not.toHaveBeenCalled()
     expect(ipc.invoke.mock.calls.filter(([name]) => name === 'desktop_auth_open_login_window')).toHaveLength(0)
-    ipc.invoke.mockImplementation(async (command) => {
-      if (command === 'desktop_auth_begin')
-        throw 'DESKTOP_AUTH_BEGIN_REJECTED: 企业微信登录未配置（hr.im.wecom），无法发起'
+  })
+
+  it('企微 begin 被拒绝时仍展示后端文案且不显示二维码', async () => {
+    renderPage()
+    await screen.findByRole('img', { name: 'login.qr_alt' })
+    ipc.invoke.mockRejectedValueOnce('DESKTOP_AUTH_BEGIN_REJECTED: 企业微信登录未配置（hr.im.wecom），无法发起')
+    fireEvent.click(screen.getByRole('tab', { name: 'login.wecom' }))
+    await screen.findByText('企业微信登录未配置（hr.im.wecom），无法发起')
+    expect(screen.queryByRole('img', { name: 'login.qr_alt' })).toBeNull()
+  })
+
+  it('企微重新获取二维码仍请求 wecom 票据并编码最新 authUrl', async () => {
+    const encode = vi.spyOn(QRCode, 'toString')
+    let id = 1
+    ipc.invoke.mockImplementation(async (command, args) => {
+      if (command === 'desktop_auth_begin') {
+        if ((args as { platform: string }).platform === 'wecom') {
+          id++
+          return { loginId: id, authUrl: `${wecomQr.authUrl}&attempt=${id}` }
+        }
+        return qr
+      }
       return null
     })
-    fireEvent.click(weCom)
-    await screen.findByText('企业微信登录未配置（hr.im.wecom），无法发起')
-    expect(screen.queryByTitle('login.qr_alt')).toBeNull()
+    renderPage()
+    await screen.findByRole('img', { name: 'login.qr_alt' })
+    fireEvent.click(screen.getByRole('tab', { name: 'login.wecom' }))
+    await waitFor(() => expect(auth.ticket?.loginId).toBe(2))
+    const first = await screen.findByRole('img', { name: 'login.qr_alt' })
+    const source = first.getAttribute('src')
+    fireEvent.click(screen.getByRole('button', { name: 'login.refresh_qr' }))
+    await waitFor(() => expect(auth.ticket?.loginId).toBe(3))
+    await waitFor(() => expect(encode).toHaveBeenCalledWith(`${wecomQr.authUrl}&attempt=3`, expect.objectContaining({ type: 'svg', margin: 4, errorCorrectionLevel: 'M' })))
+    const refreshed = await screen.findByRole('img', { name: 'login.qr_alt' })
+    expect(refreshed.getAttribute('src')).not.toBe(source)
+    expect(ipc.invoke.mock.calls.filter(([name]) => name === 'desktop_auth_begin').map(call => call[1])).toEqual([
+      { platform: 'dingtalk' },
+      { platform: 'wecom' },
+      { platform: 'wecom' },
+    ])
   })
 
   it('方向键和 Home End 切换平台时同步选中状态与键盘焦点', () => {
@@ -118,9 +150,8 @@ describe('桌面钉钉扫码登录', () => {
     expect(ipc.invoke).not.toHaveBeenCalled()
   })
 
-  it('企微内嵌二维码仍按两秒领取新票据并在成功后进入工作台', async () => {
+  it('企微自渲染二维码仍按两秒领取新票据并在成功后进入工作台', async () => {
     vi.useFakeTimers()
-    const wecomQr = { loginId: 2, authUrl: 'https://login.work.weixin.qq.com/wwlogin/sso/login?login_type=CorpApp&appid=ww1&agentid=100&state=two&redirect_uri=https%3A%2F%2Fbcw-test.jinmit.com%2Fdesktop%2Fcb' }
     ipc.invoke.mockImplementation(async (command, args) => {
       if (command === 'desktop_auth_begin')
         return (args as { platform: string }).platform === 'wecom' ? wecomQr : qr
@@ -133,6 +164,11 @@ describe('桌面钉钉扫码登录', () => {
       await vi.advanceTimersByTimeAsync(100)
     })
     fireEvent.click(screen.getByRole('tab', { name: 'login.wecom' }))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100)
+    })
+    expect(screen.getByRole('img', { name: 'login.qr_alt' })).not.toBeNull()
+    expect(ipc.invoke.mock.calls.filter(([name]) => name === 'desktop_auth_claim')).toHaveLength(0)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000)
     })
