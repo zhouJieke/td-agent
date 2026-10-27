@@ -95,9 +95,9 @@ describe('navbar window close', () => {
     expect(native).not.toHaveBeenCalledWith(otherCommand, expect.anything())
   })
 
-  it.each(['main', 'window-2', 'remote-2'])('marks %s as a child window only when it is not the main window', (label) => {
+  it.each(['main', 'window-2'])('marks %s as a child window only when it is not the main window', (label) => {
     mockWindows(label)
-    render(<Navbar onRemoteChange={vi.fn()} />)
+    render(<Navbar />)
 
     const chip = screen.queryByTestId('dsh-navbar-child-window-chip')
     if (label === 'main')
