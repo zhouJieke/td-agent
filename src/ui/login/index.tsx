@@ -11,6 +11,7 @@ import { If } from 'react-if-lite'
 import { tv } from 'tailwind-variants'
 import { useStore } from 'valtio-define'
 import { queryKeys } from '@/config/query-keys'
+import { useListen } from '@/hooks/use-listen'
 import { auth } from '@/store/modules/auth'
 import { toast } from '@/utils/toast'
 import './login.css'
@@ -40,6 +41,13 @@ export function DesktopEntry() {
       refreshSession()
   }, 15_000, { immediate: false })
   const showWorkspace = workspaceMode === 'local' || (workspaceMode === 'authenticated' && session !== null)
+
+  useListen<number>('desktop-auth-logged-out', ({ payload }) => {
+    if (!Number.isSafeInteger(payload) || payload <= 0)
+      return
+    auth.completeLogout(payload)
+    setWorkspaceMode('login')
+  })
 
   useWatch([native, session !== null], () => {
     if (native && session)

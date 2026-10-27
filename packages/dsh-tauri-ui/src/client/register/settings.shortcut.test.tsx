@@ -69,7 +69,6 @@ beforeEach(() => {
   modal.available = true
   vi.clearAllMocks()
   store.settings.close()
-  store.settings.setLauncherAvailable(false)
   store.settings.setLauncherShortcut(undefined)
   store.sections.setRows([
     { id: 'general', label: 'General', order: 0 },
@@ -82,7 +81,6 @@ afterEach(() => {
   for (const dispose of disposers.splice(0))
     dispose()
   store.settings.close()
-  store.settings.setLauncherAvailable(false)
   store.settings.setLauncherShortcut(undefined)
   store.sections.setRows([])
   vi.restoreAllMocks()

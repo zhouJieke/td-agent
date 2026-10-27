@@ -1,6 +1,7 @@
 import type { RefObject } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useIframeMessage } from '@/hooks/use-iframe-message'
+import { auth } from '@/store/modules/auth'
 
 /**
  * 壳层 invoke 桥（宿主侧）：把 iframe 内 dsh 界面/插件的 Tauri 调用
@@ -34,6 +35,8 @@ interface InvokeBridgeRequest {
 const ALLOWED_INVOKE_CMDS = new Set([
   // 只读布尔量，供 dsh-tauri-ui 决定是否挂载仅 dev 可见的调试面板。
   'is_dev_build',
+  'desktop_auth_employee',
+  'desktop_auth_logout',
   // dsh-tauri 客户端接管官方登录：账号流进入 waiting-browser 时把授权地址交给系统浏览器
   // （命令自身只放行 http(s)，见 bridge/system_os.rs）。
   'open_external_url',
@@ -63,7 +66,14 @@ export function useInvokeIframe(iframeRef: RefObject<HTMLIFrameElement | null>):
       )
     }
     // 统一以字符串承载错误（command 已按约定 `Result<_, String>` 返回带前缀 error）。
-    void invoke<unknown>(cmd, args)
+    let request: Promise<unknown>
+    if (cmd === 'desktop_auth_employee')
+      request = auth.employee()
+    else if (cmd === 'desktop_auth_logout')
+      request = auth.logout()
+    else
+      request = invoke<unknown>(cmd, args)
+    void request
       .then(value => reply({ ok: true, value }))
       .catch((error: unknown) => {
         console.error(`[iframe-invoke] ${cmd} failed:`, error)

@@ -1,3 +1,4 @@
+import type { EmployeeInfo } from '../../../../packages/dsh-tauri/src/shared/auth'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { defineStore } from 'valtio-define'
 
@@ -22,12 +23,43 @@ export const auth = defineStore({
     session: null as AuthSession | null,
     ticket: null as LoginQr | null,
     expired: false,
+    logoutId: 0,
   }),
   actions: {
     async initialize() {
       if (!isTauri())
         return
-      auth.session = await invoke<AuthSession | null>('desktop_auth_session').catch(handleSessionError)
+      const current = revision
+      const session = await invoke<AuthSession | null>('desktop_auth_session').catch(error => handleSessionError(error, current))
+      if (current === revision)
+        auth.session = session
+    },
+    completeLogout(id: number) {
+      if (!Number.isSafeInteger(id) || id <= auth.logoutId)
+        return
+      auth.logoutId = id
+      revision++
+      auth.session = null
+      auth.ticket = null
+      auth.expired = false
+    },
+    async logout() {
+      if (!isTauri())
+        throw new Error('DESKTOP_AUTH_NATIVE_REQUIRED')
+      revision++
+      const id = await invoke<number>('desktop_auth_logout')
+      if (!Number.isSafeInteger(id) || id <= 0)
+        throw new Error('DESKTOP_AUTH_RESPONSE_INVALID')
+      auth.completeLogout(id)
+    },
+    async employee(): Promise<EmployeeInfo> {
+      if (!isTauri())
+        throw new Error('DESKTOP_AUTH_NATIVE_REQUIRED')
+      const current = revision
+      const employee = await invoke<EmployeeInfo>('desktop_auth_employee').catch(error => handleSessionError(error, current))
+      if (current !== revision)
+        throw new Error('DESKTOP_AUTH_SESSION_MISSING')
+      return employee
     },
     async begin(platform: 'dingtalk' | 'wecom'): Promise<LoginQr | null> {
       if (!isTauri())
@@ -92,9 +124,9 @@ export const auth = defineStore({
   },
 })
 
-function handleSessionError(error: unknown): never {
+function handleSessionError(error: unknown, current = revision): never {
   const message = String(error)
-  if (message === 'DESKTOP_AUTH_SESSION_MISSING' || message.startsWith('DESKTOP_AUTH_VAULT_'))
+  if (current === revision && (message === 'DESKTOP_AUTH_SESSION_MISSING' || message.startsWith('DESKTOP_AUTH_VAULT_')))
     auth.session = null
   throw error
 }

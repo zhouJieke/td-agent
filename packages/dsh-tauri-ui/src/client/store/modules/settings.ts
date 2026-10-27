@@ -16,7 +16,6 @@ export const settings = defineStore({
     query: '',
     railWidth: undefined,
     chatContentWidth: undefined,
-    launcherAvailable: false,
     launcherShortcut: undefined,
   }),
   actions: {
@@ -41,9 +40,6 @@ export const settings = defineStore({
     },
     setRailWidth(px: number) {
       this.railWidth = px
-    },
-    setLauncherAvailable(available: boolean) {
-      this.launcherAvailable = available
     },
     setLauncherShortcut(shortcut: SettingsUiState['launcherShortcut']) {
       this.launcherShortcut = shortcut

@@ -138,6 +138,13 @@ pub struct LoginQr {
     pub auth_url: String,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmployeeInfo {
+    employee_number: String,
+    employee_name: String,
+}
+
 #[derive(Serialize)]
 #[serde(tag = "status", rename_all = "lowercase")]
 pub enum ClaimResult {
@@ -281,8 +288,6 @@ impl AuthService {
             let response = self
                 .post("/desktop/api/begin", json!({ "platform": platform }))
                 .await?;
-            #[cfg(debug_assertions)]
-            log::info!(target: "desktop_auth", "POST {}desktop/api/begin -> {}", self.endpoint()?, response.status());
             if response.status() == StatusCode::BAD_REQUEST {
                 let error: Value = read_json(response).await?;
                 if error.get("error").and_then(Value::as_str) == Some("invalid_request") {
@@ -299,8 +304,6 @@ impl AuthService {
                 return Err("DESKTOP_AUTH_BEGIN_FAILED".into());
             }
             let body: Value = read_json(response).await?;
-            #[cfg(debug_assertions)]
-            log::info!(target: "desktop_auth", "begin response (redacted): {}", redacted_auth_response(&body));
             let data: BeginResponse =
                 serde_json::from_value(body).map_err(|_| "DESKTOP_AUTH_RESPONSE_INVALID")?;
             let auth_url = data
@@ -354,6 +357,38 @@ impl AuthService {
             .access(format!("pending:{owner}"), VaultAction::Delete)
             .await?;
         Ok(())
+    }
+
+    pub async fn logout(&self) -> Result<u64, String> {
+        let mut tokens = self.tokens.lock().await;
+        let mut pending = self.pending.lock().await;
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+        self.invalidated.store(true, Ordering::Relaxed);
+        *tokens = None;
+        for ticket in pending.values_mut() {
+            ticket.id = 0;
+            ticket.nonce.clear();
+            ticket.claiming = false;
+        }
+        let mut result = self
+            .vault
+            .access("session".into(), VaultAction::Delete)
+            .await
+            .map(|_| id);
+        let owners: Vec<_> = pending.keys().cloned().collect();
+        for owner in owners {
+            match self
+                .vault
+                .access(format!("pending:{owner}"), VaultAction::Delete)
+                .await
+            {
+                Ok(_) => {
+                    pending.remove(&owner);
+                }
+                Err(error) => result = Err(error),
+            }
+        }
+        result
     }
 
     pub async fn claim(&self, owner: &str, login_id: u64) -> Result<ClaimResult, String> {
@@ -492,6 +527,32 @@ impl AuthService {
         Ok(self.current(None).await?.map(|(session, _)| session))
     }
 
+    pub async fn employee(&self) -> Result<EmployeeInfo, String> {
+        let body = self.request("GET", "/api/employee/me", Value::Null).await?;
+        let code = body
+            .get("code")
+            .and_then(Value::as_i64)
+            .ok_or("DESKTOP_AUTH_RESPONSE_INVALID: /api/employee/me code must be an integer")?;
+        if code != 0 {
+            return Err(format!("DESKTOP_AUTH_EMPLOYEE_FAILED: code={code}"));
+        }
+        let employee: EmployeeInfo =
+            serde_json::from_value(body.get("data").cloned().unwrap_or(Value::Null)).map_err(|_| {
+                "DESKTOP_AUTH_RESPONSE_INVALID: /api/employee/me data must contain string employeeNumber and employeeName"
+            })?;
+        if employee.employee_number.trim().is_empty() {
+            return Err(
+                "DESKTOP_AUTH_RESPONSE_INVALID: /api/employee/me employeeNumber is blank".into(),
+            );
+        }
+        if employee.employee_name.trim().is_empty() {
+            return Err(
+                "DESKTOP_AUTH_RESPONSE_INVALID: /api/employee/me employeeName is blank".into(),
+            );
+        }
+        Ok(employee)
+    }
+
     pub async fn access_token(&self) -> Result<String, String> {
         self.current(None)
             .await?
@@ -549,7 +610,13 @@ impl AuthService {
         if response.status() == StatusCode::NO_CONTENT {
             return Ok(Value::Null);
         }
-        read_json(response).await
+        read_json(response).await.map_err(|error| {
+            if path == "/api/employee/me" && error == "DESKTOP_AUTH_RESPONSE_INVALID" {
+                "DESKTOP_AUTH_RESPONSE_INVALID: GET /api/employee/me expected valid JSON within 64 KiB".into()
+            } else {
+                error
+            }
+        })
     }
 
     #[cfg(test)]
@@ -615,47 +682,6 @@ impl TokenSession {
         session.public.expires_at = saved.expires_at;
         session.persisted = true;
         Ok(session)
-    }
-}
-
-#[cfg(any(debug_assertions, test))]
-fn redacted_auth_response(value: &Value) -> Value {
-    match value {
-        Value::Object(fields) => Value::Object(
-            fields
-                .iter()
-                .map(|(key, value)| {
-                    let name = key.to_ascii_lowercase().replace(['_', '-'], "");
-                    let value = match name.as_str() {
-                        "nonce" | "claimkey" | "accesstoken" | "refreshtoken" | "clientsecret"
-                        | "state" | "code" | "authcode" | "password" | "authorization"
-                        | "cookie" => {
-                            json!("[REDACTED]")
-                        }
-                        _ => redacted_auth_response(value),
-                    };
-                    (key.clone(), value)
-                })
-                .collect(),
-        ),
-        Value::Array(values) => Value::Array(values.iter().map(redacted_auth_response).collect()),
-        Value::String(text) => {
-            if let Ok(mut url) = Url::parse(text) {
-                if matches!(url.scheme(), "http" | "https") {
-                    let _ = url.set_username("");
-                    let _ = url.set_password(None);
-                    if url.query().is_some() {
-                        url.set_query(Some("REDACTED"));
-                    }
-                    if url.fragment().is_some() {
-                        url.set_fragment(Some("REDACTED"));
-                    }
-                    return json!(url.as_str());
-                }
-            }
-            value.clone()
-        }
-        _ => value.clone(),
     }
 }
 
@@ -811,35 +837,188 @@ mod tests {
         json!({"nonce":"nonce-one", "claimKey":"private-key", "loginPage":"https://service.test/desktop/login.html?nonce=nonce-one", "authUrl":"https://login.dingtalk.com/oauth2/auth?state=nonce-one"})
     }
 
-    #[test]
-    fn begin_diagnostics_preserve_response_shape_without_credentials() {
-        let body = json!({
-            "data": [ticket(), {"access_token":"access-secret", "refreshToken":"refresh-secret"}],
-            "message":"ok",
-            "link":"https://user:secret@service.test/result?code=secret#access_token=secret"
+    fn token(access: &str, refresh: &str) -> Value {
+        json!({"access_token":access, "refresh_token":refresh, "token_type":"Bearer", "expires_in":7200, "refresh_expires_in":2592000, "scope":"mcp", "employee_number":"TD000001", "employee_name":"张三"})
+    }
+
+    #[tokio::test]
+    async fn employee_uses_bearer_and_returns_only_enveloped_identity() {
+        let server = backend(vec![(200, json!({"code":0,"msg":null,"data":{"employeeNumber":"TD000002","employeeName":"李四","email":"private@example.test"}}))], None).await;
+        *server.auth.tokens.lock().await = Some(
+            TokenSession::new(serde_json::from_value(token("access", "refresh")).unwrap()).unwrap(),
+        );
+        let employee = server.auth.employee().await.unwrap();
+        assert_eq!(
+            serde_json::to_value(employee).unwrap(),
+            json!({"employeeNumber":"TD000002","employeeName":"李四"})
+        );
+        assert_eq!(
+            *server.requests.lock().await,
+            vec![("GET /api/employee/me HTTP/1.1".into(), Value::Null)]
+        );
+        assert!(server.headers.lock().await[0]
+            .to_lowercase()
+            .contains("authorization: bearer access"));
+    }
+
+    #[tokio::test]
+    async fn employee_rejects_failed_or_malformed_envelopes() {
+        for (body, error) in [
+            (json!({"code":1,"msg":"denied","data":null}), "DESKTOP_AUTH_EMPLOYEE_FAILED: code=1"),
+            (json!({"code":0,"data":null}), "DESKTOP_AUTH_RESPONSE_INVALID: /api/employee/me data must contain string employeeNumber and employeeName"),
+            (json!({"code":0,"data":{"employeeNumber":"","employeeName":"张三"}}), "DESKTOP_AUTH_RESPONSE_INVALID: /api/employee/me employeeNumber is blank"),
+            (json!({"code":0,"data":{"employeeNumber":"TD000001","employeeName":" "}}), "DESKTOP_AUTH_RESPONSE_INVALID: /api/employee/me employeeName is blank"),
+            (json!({"code":0,"data":{"employeeNumber":123,"employeeName":"张三"}}), "DESKTOP_AUTH_RESPONSE_INVALID: /api/employee/me data must contain string employeeNumber and employeeName"),
+            (json!({"code":0,"data":{"employeeNumber":"TD000001"}}), "DESKTOP_AUTH_RESPONSE_INVALID: /api/employee/me data must contain string employeeNumber and employeeName"),
+            (json!({"employeeNumber":"TD000001","employeeName":"张三"}), "DESKTOP_AUTH_RESPONSE_INVALID: /api/employee/me code must be an integer"),
+            (json!({"code":"0","data":{"employeeNumber":"TD000001","employeeName":"张三"}}), "DESKTOP_AUTH_RESPONSE_INVALID: /api/employee/me code must be an integer"),
+        ] {
+            let server = backend(vec![(200, body.clone())], None).await;
+            *server.auth.tokens.lock().await = Some(
+                TokenSession::new(serde_json::from_value(token("access", "refresh")).unwrap())
+                    .unwrap(),
+            );
+            assert_eq!(server.auth.employee().await.err().unwrap(), error);
+        }
+    }
+
+    #[tokio::test]
+    async fn employee_non_json_response_identifies_the_failing_endpoint() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let auth = AuthService {
+            endpoint: Some(format!("http://{}", listener.local_addr().unwrap())),
+            ..AuthService::for_test()
+        };
+        *auth.tokens.lock().await = Some(
+            TokenSession::new(serde_json::from_value(token("access", "refresh")).unwrap()).unwrap(),
+        );
+        let response = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0; 4096];
+            socket.read(&mut request).await.unwrap();
+            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 13\r\nConnection: close\r\n\r\n<html></html>").await.unwrap();
         });
         assert_eq!(
-            redacted_auth_response(&body),
-            json!({
-                "data": [{
-                    "nonce":"[REDACTED]",
-                    "claimKey":"[REDACTED]",
-                    "loginPage":"https://service.test/desktop/login.html?REDACTED",
-                    "authUrl":"https://login.dingtalk.com/oauth2/auth?REDACTED"
-                }, {"access_token":"[REDACTED]", "refreshToken":"[REDACTED]"}],
-                "message":"ok",
-                "link":"https://service.test/result?REDACTED#REDACTED"
-            })
+            auth.employee().await.err().unwrap(),
+            "DESKTOP_AUTH_RESPONSE_INVALID: GET /api/employee/me expected valid JSON within 64 KiB"
         );
-        assert_eq!(body["data"][0]["claimKey"], "private-key");
+        response.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn employee_401_refreshes_rotated_tokens_before_retrying() {
+        let server = backend(vec![(401,json!({})), (200,token("new-access","new-refresh")), (200,json!({"code":0,"msg":null,"data":{"employeeNumber":"TD000001","employeeName":"张三"}}))],None).await;
+        *server.auth.tokens.lock().await = Some(
+            TokenSession::new(serde_json::from_value(token("old-access", "old-refresh")).unwrap())
+                .unwrap(),
+        );
         assert_eq!(
-            body["data"][0]["authUrl"],
-            "https://login.dingtalk.com/oauth2/auth?state=nonce-one"
+            server.auth.employee().await.unwrap().employee_number,
+            "TD000001"
+        );
+        let headers = server.headers.lock().await;
+        assert!(headers[0]
+            .to_lowercase()
+            .contains("authorization: bearer old-access"));
+        assert!(headers[2]
+            .to_lowercase()
+            .contains("authorization: bearer new-access"));
+        let saved: SavedTokens = server.auth.read_secret("session").await.unwrap().unwrap();
+        assert_eq!(saved.data.refresh_token, "new-refresh");
+    }
+
+    #[tokio::test]
+    async fn employee_does_not_mislabel_a_refresh_response_error() {
+        let server = backend(vec![(401, json!({})), (200, json!({}))], None).await;
+        *server.auth.tokens.lock().await = Some(
+            TokenSession::new(serde_json::from_value(token("access", "refresh")).unwrap()).unwrap(),
+        );
+        assert_eq!(
+            server.auth.employee().await.err().unwrap(),
+            "DESKTOP_AUTH_RESPONSE_INVALID"
+        );
+        assert_eq!(
+            server.requests.lock().await[1].0,
+            "POST /desktop/api/refresh HTTP/1.1"
         );
     }
 
-    fn token(access: &str, refresh: &str) -> Value {
-        json!({"access_token":access, "refresh_token":refresh, "token_type":"Bearer", "expires_in":7200, "refresh_expires_in":2592000, "scope":"mcp", "employee_number":"TD000001", "employee_name":"张三"})
+    #[tokio::test]
+    async fn logout_deletes_session_and_pending_keys_and_stays_signed_out_after_restart() {
+        let server = backend(vec![(200, ticket()), (200, ticket())], None).await;
+        *server.auth.tokens.lock().await = Some(
+            TokenSession::new(serde_json::from_value(token("access", "refresh")).unwrap()).unwrap(),
+        );
+        server.auth.session().await.unwrap();
+        server.auth.begin("main", "dingtalk").await.unwrap();
+        server.auth.begin("window-1", "wecom").await.unwrap();
+        assert_eq!(server.vault.values.lock().await.len(), 3);
+        assert!(server.auth.logout().await.unwrap() > 0);
+        assert!(server.auth.pending.lock().await.is_empty());
+        assert!(server.vault.values.lock().await.is_empty());
+        assert!(server.auth.session().await.unwrap().is_none());
+        let restarted = AuthService {
+            vault: server.vault.clone(),
+            endpoint: server.auth.endpoint.clone(),
+            ..AuthService::for_test()
+        };
+        assert!(restarted.session().await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn logout_vault_failure_blocks_old_session_and_can_be_retried() {
+        let server = backend(vec![(200, ticket())], None).await;
+        *server.auth.tokens.lock().await = Some(
+            TokenSession::new(serde_json::from_value(token("access", "refresh")).unwrap()).unwrap(),
+        );
+        server.auth.session().await.unwrap();
+        let ticket = server
+            .auth
+            .begin("main", "dingtalk")
+            .await
+            .unwrap()
+            .unwrap();
+        server.vault.fail_delete.store(true, Ordering::Relaxed);
+        assert_eq!(
+            server.auth.logout().await.unwrap_err(),
+            "DESKTOP_AUTH_VAULT_UNAVAILABLE"
+        );
+        assert!(server.auth.session().await.unwrap().is_none());
+        assert!(matches!(
+            server.auth.claim("main", ticket.login_id).await.unwrap(),
+            ClaimResult::Cancelled
+        ));
+        server.vault.fail_delete.store(false, Ordering::Relaxed);
+        server.auth.logout().await.unwrap();
+        assert!(server.vault.values.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn logout_discards_claim_success_that_arrives_late() {
+        let gate = Arc::new(Notify::new());
+        let server = backend(
+            vec![(200, ticket()), (200, token("access", "refresh"))],
+            Some(gate.clone()),
+        )
+        .await;
+        gate.notify_one();
+        let ticket = server
+            .auth
+            .begin("main", "dingtalk")
+            .await
+            .unwrap()
+            .unwrap();
+        let auth = server.auth.clone();
+        let claim = tokio::spawn(async move { auth.claim("main", ticket.login_id).await });
+        request_count(&server, 2).await;
+        server.auth.logout().await.unwrap();
+        gate.notify_one();
+        assert!(matches!(
+            claim.await.unwrap().unwrap(),
+            ClaimResult::Cancelled
+        ));
+        assert!(server.auth.session().await.unwrap().is_none());
+        assert!(server.vault.values.lock().await.is_empty());
     }
 
     async fn request_count(server: &Backend, count: usize) {
@@ -858,7 +1037,12 @@ mod tests {
     #[tokio::test]
     async fn begin_returns_only_real_auth_url_and_local_identifier() {
         let server = backend(vec![(200, ticket())], None).await;
-        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
+        let qr = server
+            .auth
+            .begin("main", "dingtalk")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(
             serde_json::to_value(qr).unwrap(),
             json!({"loginId":1,"authUrl":"https://login.dingtalk.com/oauth2/auth?state=nonce-one"})
@@ -929,7 +1113,12 @@ mod tests {
             None,
         )
         .await;
-        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
+        let qr = server
+            .auth
+            .begin("main", "dingtalk")
+            .await
+            .unwrap()
+            .unwrap();
         assert!(matches!(
             server.auth.claim("main", qr.login_id).await.unwrap(),
             ClaimResult::Pending
@@ -959,7 +1148,12 @@ mod tests {
     #[tokio::test]
     async fn expired_claim_invalidates_ticket_without_authenticating() {
         let server = backend(vec![(200, ticket()), (410, json!({}))], None).await;
-        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
+        let qr = server
+            .auth
+            .begin("main", "dingtalk")
+            .await
+            .unwrap()
+            .unwrap();
         assert!(matches!(
             server.auth.claim("main", qr.login_id).await.unwrap(),
             ClaimResult::Expired
@@ -973,7 +1167,12 @@ mod tests {
         let mut invalid = token("access", "refresh");
         invalid["employee_number"] = json!("");
         let server = backend(vec![(200, ticket()), (200, invalid)], None).await;
-        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
+        let qr = server
+            .auth
+            .begin("main", "dingtalk")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(
             server.auth.claim("main", qr.login_id).await.err().unwrap(),
             "DESKTOP_AUTH_RESPONSE_INVALID"
@@ -984,7 +1183,12 @@ mod tests {
     #[tokio::test]
     async fn wrong_window_or_local_identifier_cannot_consume_ticket() {
         let server = backend(vec![(200, ticket())], None).await;
-        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
+        let qr = server
+            .auth
+            .begin("main", "dingtalk")
+            .await
+            .unwrap()
+            .unwrap();
         assert!(matches!(
             server.auth.claim("other", qr.login_id).await.unwrap(),
             ClaimResult::Cancelled
@@ -1018,7 +1222,12 @@ mod tests {
         )
         .await;
         gate.notify_one();
-        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
+        let qr = server
+            .auth
+            .begin("main", "dingtalk")
+            .await
+            .unwrap()
+            .unwrap();
         let auth = server.auth.clone();
         let claim = tokio::spawn(async move { auth.claim("main", qr.login_id).await });
         request_count(&server, 2).await;
@@ -1052,7 +1261,12 @@ mod tests {
             None,
         )
         .await;
-        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
+        let qr = server
+            .auth
+            .begin("main", "dingtalk")
+            .await
+            .unwrap()
+            .unwrap();
         server.auth.claim("main", qr.login_id).await.unwrap();
         expire_access(&server).await;
         let (first, second) = tokio::join!(server.auth.access_token(), server.auth.access_token());
@@ -1083,7 +1297,12 @@ mod tests {
             None,
         )
         .await;
-        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
+        let qr = server
+            .auth
+            .begin("main", "dingtalk")
+            .await
+            .unwrap()
+            .unwrap();
         server.auth.claim("main", qr.login_id).await.unwrap();
         expire_access(&server).await;
         assert_eq!(
@@ -1105,7 +1324,12 @@ mod tests {
             None,
         )
         .await;
-        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
+        let qr = server
+            .auth
+            .begin("main", "dingtalk")
+            .await
+            .unwrap()
+            .unwrap();
         server.auth.claim("main", qr.login_id).await.unwrap();
         expire_access(&server).await;
         assert_eq!(
@@ -1119,7 +1343,12 @@ mod tests {
         );
     }
     async fn authenticated(server: &Backend) {
-        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
+        let qr = server
+            .auth
+            .begin("main", "dingtalk")
+            .await
+            .unwrap()
+            .unwrap();
         server.auth.claim("main", qr.login_id).await.unwrap();
     }
 
@@ -1138,7 +1367,12 @@ mod tests {
             None,
         )
         .await;
-        let qr = server.auth.begin("main", "dingtalk").await.unwrap().unwrap();
+        let qr = server
+            .auth
+            .begin("main", "dingtalk")
+            .await
+            .unwrap()
+            .unwrap();
         let pending: PendingSecret = server
             .auth
             .read_secret("pending:main")

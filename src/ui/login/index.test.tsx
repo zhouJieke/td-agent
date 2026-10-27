@@ -8,9 +8,13 @@ import { auth } from '@/store/modules/auth'
 import { toast } from '@/utils/toast'
 import { DesktopEntry, Login } from './index'
 
-const ipc = vi.hoisted(() => ({ native: true, invoke: vi.fn() }))
+const ipc = vi.hoisted(() => ({ native: true, invoke: vi.fn(), loggedOut: undefined as undefined | ((event: { payload: number }) => void) }))
 const appRender = vi.hoisted(() => vi.fn())
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => ipc.native, invoke: ipc.invoke }))
+vi.mock('@/hooks/use-listen', () => ({ useListen: (event: string, handler: (event: { payload: number }) => void) => {
+  if (event === 'desktop-auth-logged-out')
+    ipc.loggedOut = handler
+} }))
 vi.mock('@/layout', () => ({ App: () => {
   appRender()
   return <div data-testid="running-harness" />
@@ -36,6 +40,8 @@ beforeEach(() => {
   auth.session = null
   auth.ticket = null
   auth.expired = false
+  auth.logoutId = 0
+  ipc.loggedOut = undefined
   ipc.invoke.mockReset()
   ipc.invoke.mockImplementation(async (command) => {
     if (command === 'desktop_auth_begin')
@@ -60,6 +66,30 @@ afterEach(async () => {
 })
 
 describe('桌面钉钉扫码登录', () => {
+  it.each(['authenticated', 'local'])('退出 %s 工作台后清除个人信息并回到扫码页', async (mode) => {
+    let saved = mode === 'authenticated' ? session : null
+    ipc.invoke.mockImplementation(async (command) => {
+      if (command === 'desktop_auth_session')
+        return saved
+      if (command === 'desktop_auth_begin')
+        return qr
+      return null
+    })
+    renderPage(<DesktopEntry />)
+    if (mode === 'local') {
+      await screen.findByRole('img', { name: 'login.qr_alt' })
+      fireEvent.click(screen.getByRole('button', { name: 'login.continue_local' }))
+    }
+    await screen.findByTestId('running-harness')
+    saved = null
+    expect(ipc.loggedOut).toBeTypeOf('function')
+    act(() => ipc.loggedOut!({ payload: 10 }))
+    await screen.findByRole('img', { name: 'login.qr_alt' })
+    expect(screen.queryByTestId('running-harness')).toBeNull()
+    expect(auth.session).toBeNull()
+    expect(auth.logoutId).toBe(10)
+  })
+
   it('企微用 qrcode 原样编码后端 authUrl，不加载远程二维码页面', async () => {
     const encode = vi.spyOn(QRCode, 'toString')
     const fetch = vi.spyOn(globalThis, 'fetch')

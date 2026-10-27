@@ -1,4 +1,23 @@
-use crate::service::auth::{AuthService, AuthSession, ClaimResult, LoginQr};
+use crate::service::auth::{AuthService, AuthSession, ClaimResult, EmployeeInfo, LoginQr};
+use tauri::Emitter;
+
+#[tauri::command]
+pub async fn desktop_auth_employee(
+    auth: tauri::State<'_, AuthService>,
+) -> Result<EmployeeInfo, String> {
+    auth.employee().await
+}
+
+#[tauri::command]
+pub async fn desktop_auth_logout(
+    app: tauri::AppHandle,
+    auth: tauri::State<'_, AuthService>,
+) -> Result<u64, String> {
+    let id = auth.logout().await?;
+    app.emit("desktop-auth-logged-out", id)
+        .map_err(|_| "DESKTOP_AUTH_EVENT_FAILED")?;
+    Ok(id)
+}
 
 #[tauri::command]
 pub async fn desktop_auth_begin(
@@ -63,8 +82,11 @@ mod tests {
     fn remote_iframe_cannot_reach_token_command_but_local_shell_can() {
         let reached = Arc::new(AtomicBool::new(false));
         let dispatched = reached.clone();
-        let handler: fn(tauri::ipc::Invoke<tauri::test::MockRuntime>) -> bool =
-            tauri::generate_handler![desktop_auth_access_token, desktop_auth_request];
+        let handler: fn(tauri::ipc::Invoke<tauri::test::MockRuntime>) -> bool = tauri::generate_handler![
+            desktop_auth_access_token,
+            desktop_auth_request,
+            desktop_auth_employee
+        ];
         let app = mock_builder()
             .manage(AuthService::for_test())
             .invoke_handler(move |invoke| {
@@ -76,7 +98,11 @@ mod tests {
         let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
             .build()
             .unwrap();
-        for command in ["desktop_auth_access_token", "desktop_auth_request"] {
+        for command in [
+            "desktop_auth_access_token",
+            "desktop_auth_request",
+            "desktop_auth_employee",
+        ] {
             for (origin, allowed) in [
                 ("http://127.0.0.1:3081", false),
                 ("tauri://localhost", true),

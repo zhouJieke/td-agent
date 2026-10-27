@@ -1,6 +1,8 @@
 import type { ParentMessage } from './iframe'
 import type { InvokeArgs } from './tauri'
 
+export type { EmployeeInfo } from '../../shared/auth'
+
 /** 插件错误上报动作（宿主 `plugin_errors::record` 原样落库，仅作分类展示）。 */
 export type ErrorAction = 'runtime' | 'install' | 'update' | 'remove'
 

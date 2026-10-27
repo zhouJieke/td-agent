@@ -1520,6 +1520,8 @@ mod macos_bundle_tests {
 pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         crate::bridge::desktop_auth_begin,
+        crate::bridge::desktop_auth_employee,
+        crate::bridge::desktop_auth_logout,
         crate::bridge::desktop_auth_claim,
         crate::bridge::desktop_auth_cancel,
         crate::bridge::desktop_auth_session,

@@ -1,8 +1,7 @@
 import type { PropsStore, StoreHandle } from '@deepseek-ai/dsh-client-store'
-import type { ClientContext, SlotRegistry } from 'dsh-tauri/client'
-import type { AccountClientMetadata, SettingsTriggerProps } from '../ui/settings-trigger'
+import type { ClientContext, EmployeeInfo, SlotRegistry } from 'dsh-tauri/client'
 import { SlotOutlet } from '@deepseek-ai/dsh-client-ui-renderer'
-import { defineRegister, detectMobileDevice, useWatchImmediate } from 'dsh-tauri/client'
+import { defineRegister, detectMobileDevice, invoke, useWatchImmediate } from 'dsh-tauri/client'
 import {
   SETTINGS_REGISTRANT,
   SETTINGS_SHELL_OVERLAY_SLOT,
@@ -22,14 +21,6 @@ type SettingsShell = StoreHandle<{ open: boolean, activeId?: string }, {
   close: (draft: { open: boolean }) => void
 }>
 
-interface AccountRemote {
-  signOut?: (metadata: AccountClientMetadata) => Promise<{ ok: true, value: unknown } | { ok: false, error: unknown }>
-}
-
-interface InjectedScope {
-  remote?: { account?: AccountRemote }
-}
-
 export const registerSettings = defineRegister<ClientContext>((controller, ctx, adapter) => {
   if (typeof SlotOutlet !== 'function') {
     console.warn(
@@ -41,28 +32,12 @@ export const registerSettings = defineRegister<ClientContext>((controller, ctx, 
   if (detectMobileDevice())
     return
 
-  let account: AccountRemote | undefined
-  if (typeof ctx.inject === 'function') {
-    const connection = ctx.inject(['remote', 'remote.account'], (scoped) => {
-      scoped.effect(() => {
-        account = (scoped as unknown as InjectedScope).remote?.account
-        return () => {
-          account = undefined
-        }
-      })
-    })
-    controller.add(() => {
-      void connection.dispose()
-    })
-  }
-  const signOut: NonNullable<SettingsTriggerProps['signOut']> = async (metadata) => {
-    const method = account?.signOut
-    if (controller.isDisposed() || typeof method !== 'function')
-      throw new Error('ACCOUNT_SIGN_OUT_UNAVAILABLE')
-    const result = await method.call(account, metadata)
-    if (!result.ok)
-      throw result.error
-  }
+  const account = 'dshDesktop' in globalThis
+    ? {
+        getEmployee: () => invoke<EmployeeInfo>('desktop_auth_employee'),
+        signOut: () => invoke<void>('desktop_auth_logout'),
+      }
+    : {}
 
   controller.add(
     ctx.slots.inject(SETTINGS_SHELL_OVERLAY_SLOT, () => {
@@ -80,7 +55,7 @@ export const registerSettings = defineRegister<ClientContext>((controller, ctx, 
   controller.add(
     ctx.slots.inject(SETTINGS_SIDEBAR_SLOT as never, () =>
       ctx.slots.register(
-        { name: SETTINGS_SIDEBAR_SLOT, priority: SETTINGS_TRIGGER_PRIORITY, registrant: SETTINGS_REGISTRANT, inject: () => ({ signOut }) } as never,
+        { name: SETTINGS_SIDEBAR_SLOT, priority: SETTINGS_TRIGGER_PRIORITY, registrant: SETTINGS_REGISTRANT, inject: () => account } as never,
         SettingsTrigger,
       )),
   )

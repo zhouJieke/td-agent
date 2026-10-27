@@ -1,33 +1,15 @@
-import type { MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { SessionId, SessionListState } from 'dsh-tauri/client'
+import type { EmployeeInfo, SessionId, SessionListState } from 'dsh-tauri/client'
 import type { ReactElement } from 'react'
 import type { SelectorHook } from '../types/selector'
-import { Menu } from '@deepseek-ai/dsh-client-ui-primitives'
-import { SlotOutlet } from '@deepseek-ai/dsh-client-ui-renderer'
-import { cn, uniq, useAsyncState, useStore } from 'dsh-tauri/client'
-import { useCallback, useState } from 'react'
-import { version } from '../../../../../package.json'
+import { cn, If, uniq, useAsyncState, useStore, useWatchImmediate } from 'dsh-tauri/client'
+import { useState } from 'react'
 import { Button } from '../components/button'
-import { Gear } from '../components/icons'
-import {
-  SETTINGS_LAUNCHER_SLOT,
-  SETTINGS_ONBOARDING_SLOT,
-  SETTINGS_TRIGGER_SLOT,
-} from '../constants'
+import { ArrowRightFromSquare, Gear, Person } from '../components/icons'
+import { Menu, SlotOutlet } from '../components/official'
+import { SETTINGS_ONBOARDING_SLOT } from '../constants'
 import { locale } from '../locales'
 import { store } from '../store'
 
-interface RetainedSessionLike {
-  retainedBy?: Readonly<Record<string, number | undefined>>
-}
-
-/**
- * `useSessions` 快照的读取面：0.1.7 起核心不再把选中态放进列表快照（改由 `uiSession` 持有），
- * 适配层会把 `current` 投影补回，因此按可选成员声明。
- *
- * `byId` 放宽为裸字符串索引：核心按 branded `SessionId` 建索引，而 `current` 经投影回落后
- * 是裸字符串，二者在读取处需能互相寻址。
- */
 export type SessionListStateLike = Omit<SessionListState, 'byId'> & {
   current?: string
   byId: Record<string, SessionListState['byId'][SessionId]>
@@ -37,146 +19,129 @@ export interface SettingsTriggerProps {
   wide: boolean
   useSessions: SelectorHook<SessionListStateLike>
   useWorkspaces?: unknown
-  signOut?: (metadata: AccountClientMetadata) => Promise<void>
+  getEmployee?: () => Promise<EmployeeInfo>
+  signOut?: () => Promise<void>
 }
 
-export interface AccountClientMetadata {
-  version: string
-  locale: string
-  timezoneOffsetSeconds: number
-}
-
-// 0.1.7 起列表快照不再带 current，「当前会话」改由主视图持有的 reference 表达。
-function isMainViewRetained(session: RetainedSessionLike): boolean {
-  return (session.retainedBy?.mainView ?? 0) > 0
-}
-
-export function SettingsTrigger({ wide, useSessions, signOut }: SettingsTriggerProps): ReactElement {
-  const { open, launcherAvailable, launcherShortcut } = useStore(store.settings)
+export function SettingsTrigger({ wide, useSessions, getEmployee, signOut }: SettingsTriggerProps): ReactElement {
+  const { open, launcherShortcut } = useStore(store.settings)
   const { onboarding } = useStore(store.sections)
+  locale.useLocale()
   const [completed, setCompleted] = useState<string[]>([])
-
+  const [menuOpen, setMenuOpen] = useState(false)
+  const { state: employee, setState: setEmployee, execute: loadEmployee, isLoading: loadingEmployee, error: employeeError } = useAsyncState<EmployeeInfo | undefined>(async () => getEmployee?.(), undefined, { immediate: false, onError: () => {} })
   const onboardingActive = useSessions((state) => {
     if (state.phase !== 'ready')
       return false
     if (state.current !== undefined)
       return state.byId[state.current]?.blank === true
-    const main = Object.values(state.byId).find(session => isMainViewRetained(session))
+    const main = Object.values(state.byId).find(session => (session.retainedBy?.mainView ?? 0) > 0)
     return main === undefined || main.blank === true
   })
-
   if (!onboardingActive && completed.length > 0)
     setCompleted([])
-
   const step = onboardingActive ? onboarding.find(s => !completed.includes(s.id)) : undefined
-
-  const completeStep = useCallback((id: string) => {
-    setCompleted(previous => uniq([...previous, id]))
-  }, [])
-
-  const openSection = useCallback((id: string) => {
-    store.settings.openAt(id)
-  }, [])
-
-  const [menuOpen, setMenuOpen] = useState(false)
-  const activeLocale = locale.useLocale()
-  // 官方账号菜单占据设置座位时它就是「设置菜单」；座位缺席（更老核心 / 浏览器直开）时
-  // 由壳层自己给菜单——两者条目结构一致，插件按「含『设置』条目」补条目。
-  const menuItems: MenuEntry[] = [
-    { id: 'settings', label: locale.text('settings'), icon: <Gear width={16} height={16} /> },
-  ]
-
+  const menuItems = [{ id: 'settings', label: locale.text('settings'), icon: <Gear width={16} height={16} />, shortcut: launcherShortcut }]
   const { execute: handleSignOut, isLoading: signingOut, error: signOutError } = useAsyncState(async () => {
-    if (signOut !== undefined) {
-      await signOut({
-        version,
-        locale: activeLocale,
-        timezoneOffsetSeconds: -new Date().getTimezoneOffset() * 60,
-      })
-    }
-  }, undefined, { immediate: false, onSuccess: () => setMenuOpen(false), onError: () => {} })
+    if (!signOut)
+      throw new Error('DESKTOP_AUTH_NATIVE_REQUIRED')
+    await signOut()
+  }, undefined, {
+    immediate: false,
+    onSuccess: () => {
+      setEmployee(undefined)
+      setMenuOpen(false)
+    },
+    onError: () => {},
+  })
+
+  useWatchImmediate([menuOpen], () => {
+    if (menuOpen && getEmployee)
+      void loadEmployee()
+  })
+
+  function completeStep(id: string) {
+    setCompleted(previous => uniq([...previous, id]))
+  }
 
   const trigger = (
     <button
       type="button"
-      aria-haspopup={launcherAvailable ? 'dialog' : 'menu'}
-      // 触发器同时是「设置菜单」和「设置侧栏」的入口：菜单开着或侧栏开着都算展开，
-      // 这样桌面载体（官方账号菜单直接开侧栏）与浏览器态（先开菜单再选设置）语义一致。
+      aria-label={locale.text('more')}
+      aria-haspopup="menu"
       aria-expanded={open || menuOpen}
-      onClick={() => {
-        if (launcherAvailable) {
-          store.settings.openAt()
-          return
-        }
-        setMenuOpen(value => !value)
-      }}
+      onClick={() => setMenuOpen(value => !value)}
       data-settings-trigger="dsh-tauri-ui"
       className={cn(
         'box-border flex flex-none items-center gap-[8px] w-[calc(100%+4px)] h-[42px] my-[4px] -mx-[2px] pr-[10px] pl-[8px] border-none rounded-[12px] bg-transparent [font-family:inherit] text-[14px] leading-[22px] text-primary overflow-hidden cursor-pointer hover:bg-hover',
         !wide && 'justify-center gap-0 w-[36px] h-[36px] mt-[8px] mb-[10px] mx-0 p-0 rounded-full',
       )}
     >
-      <SlotOutlet slotKey={SETTINGS_TRIGGER_SLOT} ownerProps={{ wide }} />
+      <Gear width={18} height={18} aria-hidden className="shrink-0" />
+      <If cond={wide}><span>{locale.text('more')}</span></If>
     </button>
   )
 
   return (
     <>
-      {launcherAvailable
-        ? (
-            <SlotOutlet
-              slotKey={SETTINGS_LAUNCHER_SLOT}
-              ownerProps={{
-                wide,
-                // 0.1.7-rc.2 起官方账号菜单把「设置面板刚打开」当作一次刷新时机。
-                settingsOpen: open,
-                // 同一代官方座位用 `settingsShortcut` 渲染「Ctrl+,」提示（老核心不传）。
-                ...launcherShortcut === undefined ? {} : { settingsShortcut: launcherShortcut },
-                openSettings: () => store.settings.openAt(),
-                openOnboarding: (id: string) => store.settings.openAt(id),
-              }}
-              opts={{ fallback: trigger }}
-            />
-          )
-        : (
-            <Menu
-              open={menuOpen}
-              side="top"
-              align="start"
-              portal
-              autoFocus
-              // 官方 primitives 的 Menu anchor 包裹层（`.root`）是收缩盒，且其样式不在 layer 里；
-              // 我们的工具类在 `@layer utilities`，不加 `!` 压不过它，触发器就不再占满整行。
-              className="block! w-full!"
-              items={menuItems}
-              anchor={trigger}
-              onSelect={(id: string) => {
-                setMenuOpen(false)
-                if (id === 'settings')
-                  store.settings.openAt()
-              }}
-              onClose={() => setMenuOpen(false)}
-            >
-              <div className="flex items-center justify-between gap-[24px] border-t border-border-l3 px-[12px] py-[8px]">
-                <span>{locale.text('userPlaceholder')}</span>
-                <Button variant="link" role="menuitem" className="text-error" disabled={signingOut || signOut === undefined} onClick={() => { void handleSignOut() }}>
-                  {locale.text('logout')}
-                </Button>
+      <Menu
+        open={menuOpen}
+        side="top"
+        align="start"
+        portal
+        autoFocus
+        className="block! w-full!"
+        items={menuItems}
+        footer={[{ id: 'logout', label: locale.text('logout'), icon: <ArrowRightFromSquare width={16} height={16} aria-hidden />, danger: true, disabled: signingOut || !signOut }]}
+        anchor={trigger}
+        onSelect={(id: string) => {
+          if (id === 'logout') {
+            void handleSignOut()
+            return
+          }
+          setMenuOpen(false)
+          if (id === 'settings')
+            store.settings.openAt()
+        }}
+        onClose={() => setMenuOpen(false)}
+      >
+        <div className="flex flex-col gap-[8px] border-t border-border-l3 px-[8px] py-[8px]" style={{ minWidth: 240, maxWidth: 320 }}>
+          <If cond={employee !== undefined || loadingEmployee || !getEmployee}>
+            <div className="flex items-center gap-[6px]">
+              <Person width={14} height={14} aria-hidden className="shrink-0 text-secondary" />
+              <div className="min-w-0 flex-1">
+                <If cond={employee !== undefined}>
+                  <div className="flex min-w-0 flex-wrap items-center gap-[8px] text-[13px] leading-[20px]">
+                    <span className="min-w-0 max-w-full break-all font-medium">{employee?.employeeName}</span>
+                    <span className="min-w-0 max-w-full break-all text-[12px] text-secondary">{employee?.employeeNumber}</span>
+                  </div>
+                </If>
+                <If cond={loadingEmployee}><span role="status">{locale.text('employeeLoading')}</span></If>
+                <If cond={!getEmployee}><span>{locale.text('notSignedIn')}</span></If>
               </div>
-              {signOutError != null && <span className="text-error" role="alert">{locale.text('logoutFailed')}</span>}
-            </Menu>
-          )}
-      {step !== undefined && (
+            </div>
+          </If>
+          <If cond={employeeError != null}>
+            <span className="text-error" role="alert">{locale.text('employeeFailed')}</span>
+            <Button variant="link" role="menuitem" disabled={loadingEmployee} onClick={() => { void loadEmployee() }}>{locale.text('retry')}</Button>
+          </If>
+          <If cond={signOutError != null}><span className="text-error" role="alert">{locale.text('logoutFailed')}</span></If>
+        </div>
+      </Menu>
+      <If cond={step !== undefined}>
         <SlotOutlet
           slotKey={SETTINGS_ONBOARDING_SLOT}
           ownerProps={{
-            stepId: step.id,
-            complete: () => completeStep(step.id),
-            openSection,
+            stepId: step?.id,
+            complete: () => {
+              if (step)
+                completeStep(step.id)
+            },
+            openSection: (id: string) => store.settings.openAt(id),
           }}
-          opts={{ only: step.id }}
+          opts={{ only: step?.id }}
         />
-      )}
+      </If>
     </>
   )
 }

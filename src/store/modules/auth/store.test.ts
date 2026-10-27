@@ -13,6 +13,7 @@ beforeEach(() => {
   auth.session = null
   auth.ticket = null
   auth.expired = false
+  auth.logoutId = 0
 })
 
 afterEach(async () => {
@@ -22,6 +23,72 @@ afterEach(async () => {
 })
 
 describe('桌面登录状态', () => {
+  it('退出登录清除员工信息与票据，重复事件不取消新扫码', async () => {
+    auth.session = session
+    auth.ticket = { loginId: 1, authUrl: 'https://login.dingtalk.com/qr' }
+    auth.expired = true
+    ipc.invoke.mockResolvedValueOnce(10)
+    await auth.logout()
+    expect(ipc.invoke).toHaveBeenCalledWith('desktop_auth_logout')
+    expect(auth.session).toBeNull()
+    expect(auth.ticket).toBeNull()
+    expect(auth.expired).toBe(false)
+    ipc.invoke.mockResolvedValueOnce({ loginId: 11, authUrl: 'https://login.dingtalk.com/new' })
+    await auth.begin('dingtalk')
+    auth.completeLogout(10)
+    expect(auth.ticket?.loginId).toBe(11)
+  })
+
+  it('退出时钥匙串删除失败会交付错误，允许用户重试', async () => {
+    auth.session = session
+    ipc.invoke.mockRejectedValueOnce('DESKTOP_AUTH_VAULT_UNAVAILABLE')
+    await expect(auth.logout()).rejects.toBe('DESKTOP_AUTH_VAULT_UNAVAILABLE')
+    expect(auth.logoutId).toBe(0)
+    ipc.invoke.mockResolvedValueOnce(2)
+    await auth.logout()
+    expect(auth.session).toBeNull()
+  })
+
+  it('退出后旧会话初始化晚返回不会恢复登录', async () => {
+    let resolve!: (value: unknown) => void
+    ipc.invoke.mockImplementationOnce(() => new Promise((done) => {
+      resolve = done
+    }))
+    const loading = auth.initialize()
+    auth.completeLogout(3)
+    resolve(session)
+    await loading
+    expect(auth.session).toBeNull()
+  })
+
+  it('当前用户从专用 Rust 命令读取，退出后丢弃晚返回的个人信息', async () => {
+    let resolve!: (value: unknown) => void
+    ipc.invoke.mockImplementationOnce(() => new Promise((done) => {
+      resolve = done
+    }))
+    const loading = auth.employee()
+    const result = expect(loading).rejects.toThrow('DESKTOP_AUTH_SESSION_MISSING')
+    auth.completeLogout(4)
+    resolve({ employeeNumber: 'TD000002', employeeName: '李四' })
+    await result
+    expect(ipc.invoke).toHaveBeenCalledWith('desktop_auth_employee')
+    expect(auth.session).toBeNull()
+  })
+
+  it('旧用户个人信息请求晚失败不会清除新用户会话', async () => {
+    let reject!: (error: unknown) => void
+    ipc.invoke.mockImplementationOnce(() => new Promise((_resolve, failed) => {
+      reject = failed
+    }))
+    const loading = auth.employee()
+    const result = expect(loading).rejects.toBe('DESKTOP_AUTH_SESSION_MISSING')
+    auth.completeLogout(5)
+    auth.session = { ...session, employeeNumber: 'TD000002', employeeName: '李四' }
+    reject('DESKTOP_AUTH_SESSION_MISSING')
+    await result
+    expect(auth.session?.employeeName).toBe('李四')
+  })
+
   it('浏览器环境在 IPC 调用前拦截登录', async () => {
     ipc.native = false
     await expect(auth.begin('dingtalk')).rejects.toThrow('DESKTOP_AUTH_NATIVE_REQUIRED')
