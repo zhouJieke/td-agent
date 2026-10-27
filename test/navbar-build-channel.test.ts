@@ -18,9 +18,6 @@ import { desktopUpdater } from '../src/store/modules/desktop-updater'
 vi.mock('@/store', async () => ({
   store: { desktopUpdater: (await import('../src/store/modules/desktop-updater')).desktopUpdater },
 }))
-vi.mock('@/layout/components/remote-switcher', () => ({
-  RemoteSwitcher: function RemoteSwitcher() { return null },
-}))
 vi.mock('@/ui/dialog/config', () => ({
   ConfigDialog: function ConfigDialog() { return null },
 }))
@@ -59,7 +56,7 @@ function renderNavbar() {
     createElement(
       I18nextProvider,
       { i18n },
-      createElement(OverlaysProvider, null, createElement(Navbar, { onRemoteChange: vi.fn() })),
+      createElement(OverlaysProvider, null, createElement(Navbar)),
     ),
   ))
 }

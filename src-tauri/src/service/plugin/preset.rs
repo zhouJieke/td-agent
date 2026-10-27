@@ -482,7 +482,7 @@ fn fnv1a(bytes: &[u8]) -> u64 {
 
 /// 当前 `plugins` 节的内容指纹（十六进制 FNV-1a）。
 ///
-/// 指纹只覆盖插件节：清单同时承载引擎版本、宠物与依赖映射规范，改宠物不应把用户
+/// 指纹只覆盖插件节：清单同时承载引擎版本与依赖映射规范，改这些不应把用户
 /// 重新拉回首次引导。清单缺失/不可读返回 None。
 pub(crate) fn current_preset_hash(app_handle: &AppHandle) -> Option<String> {
     let manifest = config::manifest::read(app_handle)?;
@@ -776,6 +776,21 @@ mod tests {
     #[test]
     fn deprecated_manifest_lists_the_retired_kernel() {
         assert!(shipped_deprecated_ids().contains("dsh-tauri-kernel"));
+    }
+
+    #[test]
+    fn deprecated_manifest_lists_the_retired_pet() {
+        // 桌宠能力整体移除，内置清单条目与 pets 目录一并删掉：升级用户档案里的
+        // link: 依赖与 bundle 引用只能靠弃用名单兜底卸载（残留 bundle 会导致无法进入
+        // 软件页面）。
+        assert!(shipped_deprecated_ids().contains("dsh-tauri-pet"));
+    }
+
+    #[test]
+    fn deprecated_manifest_lists_the_retired_remote() {
+        // 远程能力（局域网监听 / 公网隧道 / SSH 机器）整体移除，内置清单条目一并删掉：
+        // 升级用户档案里的 link: 依赖与 bundle 引用只能靠弃用名单兜底卸载。
+        assert!(shipped_deprecated_ids().contains("dsh-tauri-remote"));
     }
 
     #[test]

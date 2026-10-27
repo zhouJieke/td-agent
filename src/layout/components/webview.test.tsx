@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { IframeProps } from './iframe'
 import type { NavbarProps } from './navbar'
-import { act, cleanup, render } from '@testing-library/react'
+import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { Webview } from './webview'
 
@@ -35,18 +35,17 @@ vi.mock('./navbar', () => ({
   },
 }))
 vi.mock('./iframe', () => ({
-  Iframe: ({ iframeRef, srcOverride }: IframeProps) => (
-    <iframe key={srcOverride} ref={iframeRef} src={srcOverride ?? 'http://127.0.0.1:3081'} title="session" />
+  Iframe: ({ iframeRef }: IframeProps) => (
+    <iframe ref={iframeRef} src="http://127.0.0.1:3081" title="session" />
   ),
 }))
 
-it('logs the selected shell branch and deduplicates unrelated rerenders without exposing remote URLs', () => {
+it('logs the selected shell branch and keeps the navbar bridge with the local service', () => {
   window.location.hash = ''
   const view = render(<Webview />)
   expect(console.warn).toHaveBeenLastCalledWith('[Webview] shell view', expect.objectContaining({
     branch: 'iframe',
     status: 'ready',
-    remoteMode: false,
     serviceHealthy: true,
     iframeKey: 0,
     iframeLoaded: false,
@@ -67,9 +66,12 @@ it('logs the selected shell branch and deduplicates unrelated rerenders without 
   mocks.harness.status = 'ready'
   mocks.harness.serviceHealthy = false
   view.rerender(<Webview />)
-  act(() => navbar().onRemoteChange('https://example.test/?token=secret', null))
-  expect(console.warn).toHaveBeenLastCalledWith('[Webview] shell view', expect.objectContaining({ branch: 'iframe', remoteMode: true, serviceHealthy: false }))
-  expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain('secret')
+  expect(navbar().onToggleSidebar).toBeUndefined()
+  expect(console.warn).toHaveBeenLastCalledWith('[Webview] shell view', expect.objectContaining({ branch: 'iframe', serviceHealthy: false }))
+  expect(console.warn).toHaveBeenCalledTimes(5)
+  mocks.harness.serviceHealthy = true
+  view.rerender(<Webview />)
+  expect(navbar().onToggleSidebar).toBeInstanceOf(Function)
   expect(console.warn).toHaveBeenCalledTimes(6)
 })
 

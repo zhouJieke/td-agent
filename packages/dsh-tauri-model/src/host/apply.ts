@@ -4,10 +4,13 @@ import type { HostContext } from './types'
 import { PLUGIN_ID } from '../shared/constants'
 import { ONBOARDING_CONFIG_GLOBAL } from '../shared/onboarding-config'
 import { server } from './server'
+import { gateway } from './service/gateway'
 
 const INDEX_EFFECT = `${PLUGIN_ID}: onboarding config global`
 
 const ROUTES_EFFECT = `${PLUGIN_ID}: routes`
+
+const GATEWAY_EFFECT = `${PLUGIN_ID}: backend model provisioning`
 
 export function apply(ctx: HostContext, config?: Config): void {
   ctx.effect(() => ctx.on('webserver/index-inject', (table) => {
@@ -19,4 +22,6 @@ export function apply(ctx: HostContext, config?: Config): void {
   }), INDEX_EFFECT)
 
   ctx.effect(() => server(ctx as unknown as Context), ROUTES_EFFECT)
+
+  ctx.effect(() => gateway.start(), GATEWAY_EFFECT)
 }

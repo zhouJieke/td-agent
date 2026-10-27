@@ -61,6 +61,7 @@ pub async fn update_app_config(
     window: tauri::WebviewWindow,
     app_handle: AppHandle,
     proxy_url: Option<String>,
+    model_backend_url: Option<String>,
     appearance: Option<config::Appearance>,
     port: Option<u16>,
     zoom_factor: Option<f64>,
@@ -75,6 +76,10 @@ pub async fn update_app_config(
     let proxy_url = proxy_url
         .as_deref()
         .map(config::proxy::normalize_proxy_url)
+        .transpose()?;
+    let model_backend_url = model_backend_url
+        .as_deref()
+        .map(config::model_backend::normalize_model_backend_url)
         .transpose()?;
     if let Some(port) = port {
         if port == 0 {
@@ -93,6 +98,9 @@ pub async fn update_app_config(
     let setting = config::update_store_dat_setting(&app_handle, |setting| {
         if let Some(proxy_url) = proxy_url {
             setting.proxy_url = proxy_url;
+        }
+        if let Some(model_backend_url) = model_backend_url {
+            setting.model_backend_url = model_backend_url;
         }
         if let Some(appearance) = appearance {
             setting.appearance = appearance;

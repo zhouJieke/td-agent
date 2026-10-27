@@ -53,7 +53,7 @@
 | 801–1200 | 预警 | 新功能落位前须先评估拆分 |
 | > 1200 | 必须拆分 | 本 PR 内不得继续堆叠职责 |
 
-当前超标存量（拆分候选，按行数降序）：`service/core/runtime.rs` (2185)、`bridge/pet.rs` (1854)、`service/profile/mod.rs` (1757)、`service/plugin/internal/mod.rs` (1439)、`desktop/builder.rs` (1362)、`service/download/github.rs` (1285)、`service/cli/shim/build.rs` (1232)、`service/plugin/preset.rs` (1219)。
+当前超标存量（拆分候选，按行数降序）：`service/core/runtime.rs` (2185)、`service/profile/mod.rs` (1757)、`service/plugin/internal/mod.rs` (1439)、`desktop/builder.rs` (1362)、`service/download/github.rs` (1285)、`service/cli/shim/build.rs` (1232)、`service/plugin/preset.rs` (1219)。
 
 除行数外，命中以下任一条即视为「职责混杂」，不受行数门槛保护：单个文件内出现 ≥ 3 个互不调用的领域概念；同一文件同时承担「协议解析 + 进程编排 + 落盘」两种以上角色；修改一处需同时理解 ≥ 4 个独立状态机。
 

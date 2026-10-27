@@ -12,6 +12,16 @@ it('始终隐藏 better-sidebar 的 dock fallback 入口', () => {
   }])
 })
 
+it('隐藏预设下拉中 minimal 与 cordis 两条内置预设', () => {
+  const selector = '[data-agent-preset-id="minimal"], [data-agent-preset-id="cordis"]'
+  const rules = postcss.parse(globalStyle.render()).nodes.filter(node =>
+    node.type === 'rule' && node.selector === selector,
+  )
+  expect(rules).toMatchObject([{
+    nodes: [{ type: 'decl', prop: 'display', value: 'none', important: true }],
+  }])
+})
+
 describe('desktop settings page width', () => {
   function declarationsFor(markup: string, target: string, property: string): string[] {
     const fixture = document.createElement('div')

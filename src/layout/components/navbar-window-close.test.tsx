@@ -30,7 +30,6 @@ vi.mock('@/ui/dialog/config', () => ({ ConfigDialog: () => null }))
 vi.mock('@/ui/dialog/task-manager', () => ({ TaskManagerDialog: () => null }))
 vi.mock('@/ui/dialog/update', () => ({ DesktopUpdateDialog: () => null }))
 vi.mock('@/utils/toast', () => ({ toast: vi.fn<(title: string, options?: { description?: ReactNode }) => void>() }))
-vi.mock('./remote-switcher', () => ({ RemoteSwitcher: () => null }))
 
 beforeEach(() => {
   vi.stubGlobal('CSS', { escape: (value: string) => value.replace(/[^\w-]/g, character => `\\${character}`) })
@@ -63,19 +62,19 @@ afterAll(() => {
 })
 
 describe('navbar window close', () => {
-  it.each(['window-2', 'remote-2'])('closes the %s attached window instead of hiding it', async (label) => {
-    mockWindows(label)
-    render(<Navbar onRemoteChange={vi.fn()} />)
+  it('closes the attached window instead of hiding it', async () => {
+    mockWindows('window-2')
+    render(<Navbar />)
 
     fireEvent.click(screen.getByLabelText('nav.close'))
 
-    await waitFor(() => expect(native).toHaveBeenCalledWith('plugin:window|close', expect.objectContaining({ label })))
+    await waitFor(() => expect(native).toHaveBeenCalledWith('plugin:window|close', expect.objectContaining({ label: 'window-2' })))
     expect(native).not.toHaveBeenCalledWith('plugin:window|hide', expect.anything())
   })
 
   it('hides the main window when its background button is clicked without requesting close', async () => {
     mockWindows('main')
-    render(<Navbar onRemoteChange={vi.fn()} />)
+    render(<Navbar />)
 
     fireEvent.click(screen.getByLabelText('nav.background'))
 
@@ -83,9 +82,9 @@ describe('navbar window close', () => {
     expect(native).not.toHaveBeenCalledWith('plugin:window|close', expect.anything())
   })
 
-  it.each(['main', 'window-2', 'remote-2'])('routes the File close action for %s to the matching native operation', async (label) => {
+  it.each(['main', 'window-2'])('routes the File close action for %s to the matching native operation', async (label) => {
     mockWindows(label)
-    render(<Navbar onRemoteChange={vi.fn()} />)
+    render(<Navbar />)
 
     fireEvent.click(screen.getByTestId('dsh-navbar-menu-file'))
     fireEvent.click(await screen.findByTestId('dsh-navbar-item-close'))
@@ -109,7 +108,7 @@ describe('navbar window close', () => {
 
   it('keeps the main window close labeled as backgrounding to the tray', () => {
     mockWindows('main')
-    render(<Navbar onRemoteChange={vi.fn()} />)
+    render(<Navbar />)
 
     expect(screen.getByLabelText('nav.background')).toBeTruthy()
     expect(screen.queryByLabelText('nav.close')).toBeNull()

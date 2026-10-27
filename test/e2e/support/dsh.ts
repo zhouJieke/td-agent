@@ -34,7 +34,7 @@ const MINIMUM_CORE_VERSION = '0.1.7-rc.1'
  * ========================================== */
 
 export interface StartDshHostOptions {
-  /** 要挂载的包名，如 `dsh-tauri-pet`。 */
+  /** 要挂载的包名，如 `dsh-tauri-scheduler`。 */
   plugin: string
   /** 额外挂载的包名（依赖插件，如 `dsh-tauri`）。 */
   also?: readonly string[]

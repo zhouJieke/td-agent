@@ -4,7 +4,7 @@ import { defineStore } from 'valtio-define'
 import { persist } from 'valtio-define/plugins/persist'
 import { CONNECTION_STORAGE_KEY, HISTORY_LIMIT, RECENT_LIMIT } from '@/config/constants'
 import { i18n } from '@/i18n'
-import { isDeviceSession, isRecord, parseQrPayload } from '@/utils/bridge-protocol'
+import { isRecord, parseQrPayload } from '@/utils/bridge-protocol'
 
 export type ConnectionStage = 'scanning' | 'idle' | 'connected'
 export type HostHealth = 'checking' | 'available' | 'unavailable'
@@ -32,7 +32,6 @@ export interface ConnectionState {
   stage: ConnectionStage
   current: BridgeAddress | null
   history: HistoryEntry[]
-  tokens: Record<string, string>
   health: Record<string, HostHealth>
   guidedHosts: string[]
   drawerOpen: boolean
@@ -44,7 +43,6 @@ export interface ConnectionState {
   viewGeneration: number
   pendingFocus: NotificationFocus | null
   focusGeneration: number
-  forgettingOrigin: string | null
 }
 
 /** 持久化字段：插件按此顺序把 state 写成 `{version, history, guidedHosts}`。 */
@@ -171,7 +169,6 @@ export function createConnectionState(): ConnectionState {
     stage: 'idle',
     current: null,
     history: [],
-    tokens: {},
     health: {},
     guidedHosts: [],
     drawerOpen: false,
@@ -183,7 +180,6 @@ export function createConnectionState(): ConnectionState {
     viewGeneration: 0,
     pendingFocus: null,
     focusGeneration: 0,
-    forgettingOrigin: null,
   }
 }
 
@@ -195,11 +191,10 @@ export const connection = defineStore({
     },
   },
   actions: {
-    /** 由 `restoreConnections()` 在持久化快照与 SecureStore 令牌都落地后调用。 */
-    markHydrated(tokens: Record<string, string>) {
+    /** 由 `restoreConnections()` 在持久化快照落地后调用。 */
+    markHydrated() {
       if (this.hydrated)
         return
-      this.tokens = tokens
       this.hydrated = true
     },
     beginScan(): number {
@@ -212,7 +207,6 @@ export const connection = defineStore({
       this.notice = null
       this.drawerOpen = false
       this.swipeHintVisible = false
-      this.forgettingOrigin = null
       return this.scanGeneration
     },
     cancelScan() {
@@ -230,14 +224,14 @@ export const connection = defineStore({
       if (generation !== undefined && generation !== this.scanGeneration)
         return false
       const normalized = parseQrPayload(address.url)
-      if (!normalized || normalized.id === this.forgettingOrigin)
+      if (!normalized)
         return false
       let name = this.history.find(entry => entry.id === normalized.id)?.name
       if (!name && this.current?.id === normalized.id)
         name = this.current.name
       if (name)
         normalized.name = name
-      const token = address.token ?? normalized.token ?? this.tokens[normalized.id]
+      const token = address.token ?? normalized.token
       if (token)
         normalized.token = token
       this.scanGeneration++
@@ -249,7 +243,6 @@ export const connection = defineStore({
       this.drawerOpen = false
       this.swipeHintVisible = false
       this.health[normalized.id] = 'available'
-      this.forgettingOrigin = null
       this.viewGeneration++
       return true
     },
@@ -266,14 +259,6 @@ export const connection = defineStore({
       this.guidedHosts = this.guidedHosts.filter(origin => retained.has(origin))
       this.swipeHintVisible = !this.guidedHosts.includes(id)
       this.health[id] = 'available'
-    },
-    rememberDeviceSession(origin: string, token: string, generation: number) {
-      if (generation !== this.viewGeneration || this.current?.id !== origin || this.loading || this.loadError
-        || this.forgettingOrigin === origin || !isDeviceSession(token)) {
-        return
-      }
-      this.tokens[origin] = token
-      this.current.token = token
     },
     markLoadFailed(generation: number, message: string) {
       if (!this.current || generation !== this.viewGeneration)
@@ -314,25 +299,10 @@ export const connection = defineStore({
         this.current.name = trimmed
     },
     forget(id: string) {
-      if (this.current?.id !== id) {
-        this.remove(id)
-        return
-      }
-      this.history = this.history.filter(entry => entry.id !== id)
-      this.guidedHosts = this.guidedHosts.filter(origin => origin !== id)
-      delete this.tokens[id]
-      delete this.health[id]
-      delete this.current.token
-      if (this.pendingFocus?.origin === id)
-        this.queueFocus(null)
-      this.forgettingOrigin = id
-    },
-    remove(id: string) {
       if (this.current?.id === id)
         this.disconnect('idle')
       this.history = this.history.filter(entry => entry.id !== id)
       this.guidedHosts = this.guidedHosts.filter(origin => origin !== id)
-      delete this.tokens[id]
       delete this.health[id]
       if (this.pendingFocus?.origin === id)
         this.queueFocus(null)
@@ -348,7 +318,6 @@ export const connection = defineStore({
       this.drawerOpen = false
       this.swipeHintVisible = false
       this.pendingFocus = null
-      this.forgettingOrigin = null
     },
     /** 当前应当落盘的快照（含归一化），磁盘格式与旧版实现一致。 */
     serialize(): ConnectionSnapshot {
@@ -366,7 +335,7 @@ export const connection = defineStore({
   },
 })
 
-// 手动水合：令牌只能进 SecureStore，所以先把快照读回来，再由 restoreConnections() 补令牌并 markHydrated。
+// 手动水合：快照由 restoreConnections() 读回来后，markHydrated() 才允许插件开始落盘。
 connection.use(persist({ hydrate: false }))
 
 // 读写失败时用 store 的 notice 提示用户；定义在 connection 之后以满足 ts/no-use-before-define

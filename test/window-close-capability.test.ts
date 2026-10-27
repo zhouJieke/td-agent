@@ -30,11 +30,11 @@ describe('window close capability', () => {
       expect(enabled).toContain('window-close')
   })
 
-  it('limits close to local attached shell windows without granting it to main or pet', () => {
+  it('limits close to local attached shell windows without granting it to main or extra windows', () => {
     const capability = closeCapabilities.find(capability => capability.identifier === 'window-close')
     expect(capability).toMatchObject({
       local: true,
-      windows: ['window-*', 'remote-*'],
+      windows: ['window-*'],
       permissions: ['core:window:allow-close'],
     })
     expect(capability).not.toHaveProperty('webviews')

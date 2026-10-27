@@ -611,9 +611,6 @@ fn help_menu_window_label<'a>(
 ) -> Option<&'a str> {
     let mut main_window = None;
     for (label, focused) in windows {
-        if label == crate::desktop::pet::PET_WINDOW_LABEL {
-            continue;
-        }
         if focused {
             return Some(label);
         }
@@ -631,8 +628,8 @@ mod help_menu_tests {
     #[test]
     fn help_links_prefer_the_focused_shell_window() {
         for windows in [
-            [("main", false), ("window-1", true), ("pet", false)],
-            [("window-1", true), ("main", false), ("pet", false)],
+            [("main", false), ("window-1", true)],
+            [("window-1", true), ("main", false)],
         ] {
             assert_eq!(help_menu_window_label(windows), Some("window-1"));
         }
@@ -643,29 +640,18 @@ mod help_menu_tests {
     }
 
     #[test]
-    fn help_links_fall_back_to_main_when_only_the_pet_is_focused() {
-        assert_eq!(
-            help_menu_window_label([("main", false), ("window-1", false), ("pet", true)]),
-            Some("main")
-        );
-    }
-
-    #[test]
     fn help_links_fall_back_to_main_when_all_windows_are_unfocused() {
         for windows in [
-            [("main", false), ("window-1", false), ("pet", false)],
-            [("window-1", false), ("pet", false), ("main", false)],
+            [("main", false), ("window-1", false)],
+            [("window-1", false), ("main", false)],
         ] {
             assert_eq!(help_menu_window_label(windows), Some("main"));
         }
     }
 
     #[test]
-    fn help_links_never_fall_back_to_a_pet_or_an_arbitrary_extra_window() {
-        assert_eq!(
-            help_menu_window_label([("window-1", false), ("pet", true)]),
-            None
-        );
+    fn help_links_never_fall_back_to_an_arbitrary_extra_window() {
+        assert_eq!(help_menu_window_label([("window-1", false)]), None);
         assert_eq!(help_menu_window_label([]), None);
     }
 }
@@ -684,9 +670,7 @@ pub fn sync_view_menu(
 ) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        if window.label() == crate::desktop::pet::PET_WINDOW_LABEL
-            || !window.is_focused().unwrap_or(false)
-        {
+        if !window.is_focused().unwrap_or(false) {
             return Ok(());
         }
         let Some(menu) = window.app_handle().menu() else {
@@ -730,9 +714,7 @@ pub fn sync_view_menu(
 /// 原生全屏动画会连续触发 Resize；只在状态真正变化时刷新菜单文案。
 #[cfg(target_os = "macos")]
 fn sync_macos_fullscreen_menu(window: &tauri::Window<Wry>) {
-    if window.label() == crate::desktop::pet::PET_WINDOW_LABEL
-        || !window.is_focused().unwrap_or(false)
-    {
+    if !window.is_focused().unwrap_or(false) {
         return;
     }
     let Ok(is_fullscreen) = window.is_fullscreen() else {
@@ -1187,8 +1169,8 @@ fn apply_window_background(app: &tauri::AppHandle<Wry>, window: &tauri::WebviewW
 /// （Windows）WebView2 用户数据目录与按窗口注入的桥脚本，但**不**参与主窗口
 /// 几何恢复与落盘（`on_window_event` 只对 `MAIN_WINDOW_LABEL` 采样）。
 ///
-/// 只能在异步运行时的命令任务里调用（与 `pet::ensure_pet_window` 同样的约束：
-/// `WebviewWindowBuilder::build()` 需要主线程事件循环回包，主线程调用会死锁）。
+/// 只能在异步运行时的命令任务里调用（`WebviewWindowBuilder::build()` 需要主线程
+/// 事件循环回包，主线程调用会死锁）。
 pub fn build_shell_window(
     app: &tauri::AppHandle<Wry>,
     label: String,
@@ -1356,15 +1338,10 @@ mod shell_nav_tests {
 #[cfg(test)]
 mod menu_tests {
     use super::{fullscreen_menu_label_key, menu_action_window_label};
-    use crate::desktop::pet::PET_WINDOW_LABEL;
 
     #[test]
     fn menu_actions_prefer_the_focused_shell_window_in_any_iteration_order() {
-        let windows = [
-            ("main", false),
-            ("window-1", true),
-            (PET_WINDOW_LABEL, false),
-        ];
+        let windows = [("main", false), ("window-1", true)];
         assert_eq!(menu_action_window_label(windows), Some("window-1"));
         assert_eq!(
             menu_action_window_label(windows.into_iter().rev()),
@@ -1376,18 +1353,6 @@ mod menu_tests {
     fn menu_actions_target_main_when_it_is_focused() {
         assert_eq!(
             menu_action_window_label([("main", true), ("window-1", false)]),
-            Some("main")
-        );
-    }
-
-    #[test]
-    fn menu_actions_fall_back_to_main_when_only_the_pet_is_focused() {
-        assert_eq!(
-            menu_action_window_label([
-                (PET_WINDOW_LABEL, true),
-                ("window-1", false),
-                ("main", false)
-            ]),
             Some("main")
         );
     }
@@ -1410,10 +1375,7 @@ mod menu_tests {
 
     #[test]
     fn menu_actions_have_no_target_without_a_focused_shell_or_main() {
-        assert_eq!(
-            menu_action_window_label([(PET_WINDOW_LABEL, true), ("window-1", false)]),
-            None
-        );
+        assert_eq!(menu_action_window_label([("window-1", false)]), None);
         assert_eq!(menu_action_window_label([]), None);
     }
 
@@ -1467,10 +1429,10 @@ mod security_tests {
     }
 
     #[test]
-    fn pet_http_scope_is_limited_to_remote_asset_hosts() {
-        // 桌宠窗口经插件版 fetch 直连远端素材（绕开 githubusercontent 的 CORS），
+    fn http_scope_is_limited_to_remote_asset_hosts() {
+        // 壳层经插件版 fetch 直连远端素材主机（绕开 githubusercontent 的 CORS），
         // 但 scope 必须收口到素材主机：出现任意 https 通配等于把插件 fetch 面
-        // 整个开放给桌宠窗口。
+        // 整个开放给壳层窗口。
         let capability = capability();
         let permissions = capability["permissions"]
             .as_array()
@@ -1490,18 +1452,6 @@ mod security_tests {
             scoped,
             vec!["https://*.githubusercontent.com/*".to_string()]
         );
-    }
-
-    #[test]
-    fn remote_popup_windows_are_scoped_by_glob_and_stay_loopback() {
-        let capability = include_str!("../../capabilities/default.json");
-        // 弹窗窗口 label 为 remote-<machineId>（machineId 是 uuid），只能以
-        // glob 覆盖；不接受裸 "remote-" 或 "*" 之类的过度放宽。
-        assert!(capability.contains("\"remote-*\""));
-        assert!(!capability.contains("\"*\""));
-        // remote URL 面仍然只有 loopback 通配（弹窗与主窗口同一约束）。
-        let wildcard_loopback = ["http://127.0.0.1:", "*"].concat();
-        assert!(capability.contains(wildcard_loopback.as_str()));
     }
 
     #[test]
@@ -1677,32 +1627,6 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::desktop::window::quit_app,
         crate::desktop::window::toggle_devtools,
         crate::bridge::log_frontend,
-        crate::bridge::get_pet_status,
-        crate::bridge::pet_show_main_window,
-        crate::bridge::pet_show_context_menu,
-        crate::bridge::get_pet_overlay_supported,
-        crate::bridge::get_force_xwayland,
-        crate::bridge::set_force_xwayland,
-        crate::bridge::set_pet_enabled,
-        crate::bridge::set_active_pet,
-        crate::bridge::set_pet_size,
-        crate::bridge::set_pet_throw_enabled,
-        crate::bridge::push_pet_session,
-        crate::bridge::move_pet_window,
-        crate::bridge::persist_pet_window_position,
-        crate::bridge::set_pet_ignore_cursor_events,
-        crate::bridge::list_pets,
-        crate::bridge::import_pet,
-        crate::bridge::delete_pet,
-        crate::bridge::import_pet_repository,
-        crate::bridge::check_pet_updates,
-        crate::bridge::update_pet_repository,
-        crate::bridge::get_pet_asset,
-        crate::bridge::list_preset_pets,
-        crate::desktop::pet_mouse::start_pet_mouse_stream,
-        crate::bridge::remote::remote,
-        crate::bridge::remote_bridge_ping,
-        crate::bridge::remote_open_window,
     ]
 }
 
@@ -1711,9 +1635,6 @@ fn menu_action_window_label<'a>(
 ) -> Option<&'a str> {
     let mut main = None;
     for (label, focused) in windows {
-        if label == crate::desktop::pet::PET_WINDOW_LABEL {
-            continue;
-        }
         if focused {
             return Some(label);
         }
@@ -1737,7 +1658,6 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
 
     let builder = builder
         .manage(crate::service::auth::AuthService::default())
-        .manage(crate::desktop::pet_mouse::PetMouseStreamState::default())
         .setup(|app| {
             let app_handle = app.handle().clone();
             crate::desktop::autostart::init(&app_handle)?;
@@ -1752,25 +1672,10 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
             #[cfg(target_os = "macos")]
             install_macos_menu(&app_handle)?;
             tray(&app_handle)?;
-            // 桌宠窗口：按「是否启用」设置惰性创建/显示（幂等）。
-            crate::desktop::pet::init_pet_window(&app_handle);
             setup(app_handle.clone());
-            // 方案 1（host → rust → pet）：Rust 作为宿主会话增量 SSE 流的消费者，
-            // 不再依赖 iframe 的 invoke 桥转发（#396 根因）。断连自动重连；
-            // 仅当桌宠已启用且可见才订阅——关闭桌宠则宿主不做任何转发。
-            crate::bridge::pet::sync_pet_session_stream(
-                &app_handle,
-                crate::bridge::pet::pet_stream_wanted(&app_handle),
-            );
             Ok(())
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "pet-show-main-window" => show_main_window(app),
-            "pet-close" => {
-                if let Err(error) = crate::bridge::set_pet_enabled(app.clone(), false) {
-                    log::error!("PET_CLOSE_FAILED: {error}");
-                }
-            }
             "desktop-toggle-sidebar"
             | "desktop-toggle-right-panel"
             | "desktop-open-terminal"
@@ -1780,8 +1685,7 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
             | "desktop-zoom-reset"
             | "desktop-task-manager" => {
                 if let Some(window) = app.webview_windows().into_values().find(|window| {
-                    window.label() != crate::desktop::pet::PET_WINDOW_LABEL
-                        && window.is_focused().unwrap_or(false)
+                    window.is_focused().unwrap_or(false)
                 }) {
                     if let Err(error) =
                         app.emit_to(window.label(), "macos-menu-action", event.id().as_ref())
@@ -1809,8 +1713,7 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
             #[cfg(target_os = "macos")]
             "desktop-fullscreen" => {
                 if let Some(window) = app.webview_windows().into_values().find(|window| {
-                    window.label() != crate::desktop::pet::PET_WINDOW_LABEL
-                        && window.is_focused().unwrap_or(false)
+                    window.is_focused().unwrap_or(false)
                 }) {
                     if let Err(error) = window
                         .is_fullscreen()
@@ -1859,17 +1762,6 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
         // 附加窗口不驻留托盘，关闭即销毁（见下面的 CloseRequested 分支）。
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
-                if window.label() == crate::desktop::pet::PET_WINDOW_LABEL {
-                    // 桌宠窗口没有装饰按钮，但 Alt+F4 / 系统关闭仍会走到这里：语义等同
-                    // 「关闭宠物」——持久化 enabled=false 并销毁窗口（与会话流一起收口）。
-                    // 走命令本身而不是内部函数：关闭是持久动作，重启后不该再自己起来。
-                    api.prevent_close();
-                    let handle = window.app_handle().clone();
-                    if let Err(error) = crate::bridge::pet::set_pet_enabled(handle, false) {
-                        log::warn!("[pet] PET_WINDOW_DESTROY_FAILED: {error}");
-                    }
-                    return;
-                }
                 // 主窗口以外的附加窗口（「文件 → 新建窗口」、SSH 远端弹窗）不驻留托盘：
                 // 关闭即销毁。隐藏它们既没有恢复入口，也会留下仍在监听通知的窗口——
                 // 通知点击时它们会跟着一起 show 出来，看起来像被重新打开。
@@ -1953,17 +1845,9 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
                     });
                 }
             }
-            tauri::WindowEvent::ScaleFactorChanged { .. } => {
-                if window.label() == crate::desktop::pet::PET_WINDOW_LABEL {
-                    crate::desktop::pet::apply_pet_size(window.app_handle());
-                }
-            }
             tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
                 match window.label() {
-                    label if label == crate::desktop::pet::PET_WINDOW_LABEL => {
-                        crate::desktop::pet::save_pet_window_geometry(window);
-                    }
-                    label if label == MAIN_WINDOW_LABEL => crate::config::save_geometry(window),
+                    MAIN_WINDOW_LABEL => crate::config::save_geometry(window),
                     _ => {}
                 }
                 #[cfg(target_os = "macos")]
@@ -2011,7 +1895,7 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
         .plugin(tauri_plugin_notification::init())
         // FS plugin
         .plugin(tauri_plugin_fs::init())
-        // HTTP plugin：桌宠窗口拉取远端宠物素材时把 fetch 交给 Rust 发起，
+        // HTTP plugin：拉取远端素材时把 fetch 交给 Rust 发起，
         // 绕开 raw.githubusercontent.com 不返回 CORS 头导致的浏览器拦截。
         .plugin(tauri_plugin_http::init())
         // Simple Store plugin

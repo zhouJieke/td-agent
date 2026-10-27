@@ -206,7 +206,7 @@ function resetConnection() {
 
 function hydrate(entries: HistoryEntry[] = []) {
   connection.$patch(store.parseConnectionSnapshot({ version: 1, history: entries, guidedHosts: [] }))
-  connection.markHydrated({ 'http://one.local:3080': 'saved-token' })
+  connection.markHydrated()
 }
 
 function holdNetwork() {
@@ -222,7 +222,7 @@ async function ready() {
   await act(async () => {
     webView().props.onMessage({
       nativeEvent: {
-        url: 'http://one.local:3080/tasks?auth=saved-token',
+        url: 'http://one.local:3080/tasks',
         data: JSON.stringify({ channel: 'dsh-bridge', origin: 'http://one.local:3080', nonce: 'home-test-nonce', payload: { type: 'dsh://bridge-ready' } }),
       },
     })
@@ -431,7 +431,7 @@ describe('rendered Home scanning and idle actions', () => {
     expect(root().findAll(node => String(node.type) === 'Svg').map(node => node.props.accessibilityLabel)).toEqual(['DSH Mobile', 'DeepSeek', 'Harness'])
     expect(texts()).toContain('连接中…')
     expect(texts()).not.toContain('寻找可用连接')
-    expect(webView().props.source).toEqual({ uri: 'http://one.local:3080/tasks?auth=saved-token' })
+    expect(webView().props.source).toEqual({ uri: 'http://one.local:3080/?pair=1' })
     await ready()
     expect(root().findAll(node => String(node.type) === 'Svg')).toHaveLength(0)
     expect(texts()).not.toContain('连接中…')
@@ -504,7 +504,7 @@ describe('rendered Home connection editing', () => {
     expect(texts()).toContain('我的电脑')
     expect(connection.current).toMatchObject({ ...alpha, name: '我的电脑' })
     expect(connection.viewGeneration).toBe(generation)
-    expect(webView().props.source).toEqual({ uri: 'http://one.local:3080/tasks?auth=saved-token' })
+    expect(webView().props.source).toEqual({ uri: 'http://one.local:3080/tasks' })
     expect(root().findAll(node => String(node.type) === 'Dialog')).toHaveLength(0)
   })
 
@@ -551,7 +551,7 @@ describe('rendered Home connection editing', () => {
     expect(drawer().props.open).toBe(true)
   })
 
-  it('keeps the active connection on cancel and removes it only after confirming the disconnect warning', async () => {
+  it('keeps the active connection on cancel and removes it immediately after confirming the disconnect warning', async () => {
     const { i18n } = await import('@/i18n')
     hydrate(history)
     runtime.connectAddress(alpha)
@@ -565,24 +565,14 @@ describe('rendered Home connection editing', () => {
     expect(root().findAll(node => String(node.type) === 'WebView')).toHaveLength(1)
     await press(i18n.t('common.cancel'))
     expect(connection.history.some(entry => entry.id === alpha.id)).toBe(true)
-    expect(connection.tokens[alpha.id]).toBe('saved-token')
-    expect(connection.forgettingOrigin).toBeNull()
     await act(async () => button('one.local:3080，可用').props.onLongPress())
     await press(i18n.t('connection.delete'))
     native.fetch.mockClear()
     await press(i18n.t('connection.delete'))
-    expect(connection.current?.id).toBe(alpha.id)
-    expect(connection.forgettingOrigin).toBe(alpha.id)
-    expect(connection.history.some(entry => entry.id === alpha.id)).toBe(false)
-    expect(connection.tokens[alpha.id]).toBeUndefined()
-    const generation = connection.viewGeneration
-    await act(async () => runtime.connectAddress(alpha))
-    expect(connection.viewGeneration).toBe(generation)
-    await act(async () => vi.advanceTimersByTimeAsync(2000))
+
     expect(connection.current).toBeNull()
     expect(connection.stage).toBe('idle')
     expect(connection.history.some(entry => entry.id === alpha.id)).toBe(false)
-    expect(connection.tokens[alpha.id]).toBeUndefined()
     expect(drawer().props.open).toBe(false)
     expect(root().findAll(node => String(node.type) === 'WebView')).toHaveLength(0)
     expect(button('自动扫描局域网').props.isDisabled).toBe(false)
@@ -604,9 +594,9 @@ describe('rendered Home connection editing', () => {
     expect(connection.history.some(entry => entry.id === history[1]!.id)).toBe(true)
     await press(i18n.t('connection.delete'))
     expect(connection.history.some(entry => entry.id === history[1]!.id)).toBe(false)
-    expect(connection.current).toEqual({ ...alpha, token: 'saved-token' })
+    expect(connection.current).toEqual(alpha)
     expect(connection.viewGeneration).toBe(generation)
-    expect(webView().props.source).toEqual({ uri: 'http://one.local:3080/tasks?auth=saved-token' })
+    expect(webView().props.source).toEqual({ uri: 'http://one.local:3080/tasks' })
     expect(root().findAll(node => String(node.type) === 'Dialog')).toHaveLength(0)
   })
 })
@@ -790,7 +780,7 @@ describe('rendered Home connection drawer', () => {
 
     expect(drawer().props.open).toBe(false)
     expect(connection.viewGeneration).toBe(2)
-    expect(webView().props.source).toEqual({ uri: 'http://one.local:3080/tasks?auth=saved-token' })
+    expect(webView().props.source).toEqual({ uri: 'http://one.local:3080/tasks' })
   })
 
   it('refreshes host availability from the recent header without reconnecting or duplicating active probes', async () => {
@@ -832,7 +822,7 @@ describe('rendered Home connection drawer', () => {
     await press('one.local:3080，正在检测')
 
     expect(drawer().props.open).toBe(false)
-    expect(webView().props.source).toEqual({ uri: 'http://one.local:3080/tasks?auth=saved-token' })
+    expect(webView().props.source).toEqual({ uri: 'http://one.local:3080/tasks' })
     expect(texts()).toContain('连接中…')
     expect(connection.stage).toBe('connected')
   })
@@ -920,7 +910,7 @@ describe('rendered Home connection drawer', () => {
     await press('关闭连接信息')
 
     expect(root().findByType(WebView).instance).toBe(instance)
-    expect(webView().props.source).toEqual({ uri: 'http://one.local:3080/tasks?auth=saved-token' })
+    expect(webView().props.source).toEqual({ uri: 'http://one.local:3080/?pair=1' })
     expect(texts()).not.toContain('连接中…')
   })
 })

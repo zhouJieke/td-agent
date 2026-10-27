@@ -13,7 +13,7 @@ import { listen } from '../service/listen'
  * - 唯一的 effect 只负责注册/注销（需要清理），无其它副作用。
  *
  * @example
- * useListen<PetStatus>('pet://status', event => setStatus(event.payload))
+ * useListen<string>('macos-menu-action', event => runMenuAction(event.payload))
  */
 export function useListen<T>(event: string, handler: EventCallback<T>, options?: Options): void {
   const handlerRef = useRef(handler)

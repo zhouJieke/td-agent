@@ -47,7 +47,7 @@ const REAL_CRASH_LOG = [
   'dsh-tauri-extension     webServer',
   'dsh-tauri-model         webServer',
   'dsh-tauri-notification  webServer',
-  'dsh-tauri-pet           webServer',
+  'dsh-tauri-scheduler       webServer',
   'dsh-tauri-rightclick    webServer',
   'dsh-tauri-scheduler     webServer',
   'ssh-remote              webServer',

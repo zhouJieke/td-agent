@@ -47,7 +47,7 @@ fn ensure_shell(webview: &tauri::Webview) -> Result<(), String> {
             .dev_url
             .as_ref()
             .is_some_and(|dev| dev.origin() == url.origin());
-    if webview.label() != "pet" && (packaged || dev) {
+    if packaged || dev {
         Ok(())
     } else {
         Err("TASK_MANAGER_ORIGIN: only the desktop shell can manage processes".into())

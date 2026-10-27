@@ -17,7 +17,7 @@ export const APP_FRAME_VIEWPORT = { width: 1400, height: 900 } as const
  *
  * dsh 客户端的初始语言来自 `navigator.languages` → `navigator.language`
  * （`dsh-client-locale` 的 `detectBrowserLocale`，都匹配不到才回落 `en`）。Playwright
- * 不指定 `locale` 时把语境交给宿主机，于是本车道大量以中文文案为锚（`宠物` / `模型` /
+ * 不指定 `locale` 时把语境交给宿主机，于是本车道大量以中文文案为锚（`模型` /
  * 页脚操作区文案…）的断言会变成「在中文开发机上恰好绿、在干净 runner 上找不到中文分区」。
  * 这里显式钉死，让断言只取决于产品，而不取决于运行机的系统语言。
  */
@@ -39,10 +39,6 @@ export const WORKTREE_SURFACE = '[data-dsh-worktree-surface]'
 export const SESSION_ARCHIVE_ITEM = '[data-dsh-tauri-session-archive-item]'
 export const SESSION_ARCHIVE_MENU_PATCHED = '[data-dsh-tauri-session-archive-menu-patched="1"]'
 export const RUNNING_CHANGES = '[data-running-changes]'
-
-/** 设置菜单里的桌宠条目与「该菜单已被补丁」标记（同上常量文件）。 */
-export const PET_MENU_ITEM = '[data-dsh-tauri-pet-menu-item="1"]'
-export const PET_MENU_PATCHED = '[data-dsh-tauri-pet-menu-patched="1"]'
 
 /** dsh 内部结构（上游产物）：可用稳定结构性锚点。 */
 export const SIDEBAR = '[data-slot="sidebar"]'
@@ -609,8 +605,8 @@ export async function waitForCredentialModal(
 /**
  * 点开设置入口并把菜单**停在展开态**，返回触发器的 locator。
  *
- * 桌宠开关是设置菜单里克隆出来的条目，只有菜单展开时才存在，因此断言它的用例必须在
- * 这一步停下；`openSettings` 会继续点「设置」条目把菜单收掉。
+ * 设置菜单里克隆出来的插件条目只有菜单展开时才存在，因此断言它们的用例必须在这一
+ * 步停下；`openSettings` 会继续点「设置」条目把菜单收掉。
  */
 export async function openSettingsMenu(
   page: Page,

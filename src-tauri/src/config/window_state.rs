@@ -391,7 +391,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn exit_geometry_does_not_sample_extra_or_remote_windows_without_main() {
+    fn exit_geometry_does_not_sample_extra_windows_without_main() {
         let app = tauri::test::mock_builder()
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
             .unwrap();

@@ -17,12 +17,10 @@ export default defineConfig(async () => ({
     tailwindcss(),
   ],
 
-  // 多页入口：主窗口（index.html）与桌宠外置窗口（pet.html，独立透明窗口）。
   build: {
     rollupOptions: {
       input: {
         main: '/index.html',
-        pet: '/pet.html',
       },
     },
   },

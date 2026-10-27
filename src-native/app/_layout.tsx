@@ -10,17 +10,16 @@ import { useHostsHealth } from '@/hooks/use-hosts-health'
 import { useNotifications } from '@/hooks/use-notifications'
 import { connection } from '@/store/modules/connection'
 import { connectAddress, startAutoScan, stopConnectionRuntime } from '@/store/modules/connection/runtime'
-import { bindConnectionPersistence, restoreConnections } from '@/store/modules/connection/storage'
+import { restoreConnections } from '@/store/modules/connection/storage'
 import '../global.css'
 
 function RootNavigator() {
   useNotifications()
   // 已保存主机的健康轮询（含前台重取）由 React Query 托管，见 hooks/use-hosts-health.ts。
   useHostsHealth()
-  // keep:effect Own hydration, persistence, cancellable discovery and notification focus.
+  // keep:effect Own hydration, cancellable discovery and notification focus.
   useEffect(() => {
     let disposed = false
-    let unsubscribePersistence = () => {}
     function focusRequested() {
       const focus = connection.pendingFocus
       if (!connection.hydrated || !focus)
@@ -42,7 +41,6 @@ function RootNavigator() {
       await restoreConnections()
       if (disposed)
         return
-      unsubscribePersistence = bindConnectionPersistence()
       focusRequested()
       // 历史连接交给可取消的扫描自动接入；其余情况（无历史 / 已在连接中）由健康查询立即探测一次。
       if (connection.stage === 'idle' && connection.history.length > 0)
@@ -52,7 +50,6 @@ function RootNavigator() {
     return () => {
       disposed = true
       unsubscribeFocus()
-      unsubscribePersistence()
       stopConnectionRuntime()
     }
   }, [])

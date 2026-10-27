@@ -129,12 +129,12 @@ const PRESENTATION_FULL_SIDEBAR: &str = "full-sidebar";
 ///
 /// 传入 `session_id` 时把跳转目标注入新窗口的全部 frame，由 dsh-tauri 插件在启动后接收并
 /// 打开该会话。注入而不是拼 `index.html#...`：hash 只有壳层可读，内嵌 dsh 的插件拿不到，
-/// 只能退回壳层轮询转发，并把新窗口误当成 remote 视图。
+/// 只能退回壳层轮询转发。
 ///
 /// `presentation` 与 `session_id` 同行：壳层读它决定导航栏形态，插件读它把右栏展开成全屏。
 ///
 /// 异步命令（不占用主线程）是唯一安全的调用侧：`WebviewWindowBuilder::build()`
-/// 需要主线程事件循环回包，主线程调用会死锁（与 `pet::ensure_pet_window` 同约束）。
+/// 需要主线程事件循环回包，主线程调用会死锁）。
 #[tauri::command]
 pub async fn create_app_window(
     app_handle: AppHandle<Wry>,

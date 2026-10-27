@@ -16,7 +16,6 @@ import { store } from '@/store'
 import { Recovery } from '@/ui/plugin/recovery'
 import { FullSidebarNavbar } from './full-sidebar-navbar'
 import { Iframe } from './iframe'
-import { REMOTE_SECTION, REMOTE_TAB_ACCESS, REMOTE_TAB_MACHINES } from './nav-bridge'
 import { Navbar } from './navbar'
 import { Setup } from './setup'
 import { PreinstallSetup } from './setup-preinstall'
@@ -34,7 +33,6 @@ export function Webview() {
   const [fullSidebarRevealed, setFullSidebarRevealed] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const iframeRef = useRef<HTMLIFrameElement>(null)
-  const pendingSettingsTabRef = useRef<string | null>(null)
   const appearanceCss = useAppearance(iframeRef)
   const post = useIframePost(iframeRef)
 
@@ -43,17 +41,12 @@ export function Webview() {
 
   const { status, serviceHealthy, serviceRunning, iframeKey, iframeLoaded, iframeAlive, iframeError, startupPhase, busyAction } = useStore(store.harness)
   const { recovery } = useStore(store.recovery)
-  const [remoteView, setRemoteView] = useState({ url: '', tint: null as string | null })
-  const activeTunnelUrl = remoteView.url
-  const borderTint = remoteView.tint
-  const remoteMode = activeTunnelUrl !== ''
-  const live = status === 'ready' && (remoteMode || serviceHealthy)
+  const live = status === 'ready' && serviceHealthy
   const branch = status === 'ready' ? 'iframe' : status === 'preinstall' ? 'preinstall' : status === 'error' && recovery.required ? 'recovery' : 'setup'
-  useWatch([branch, status, remoteMode, serviceHealthy, serviceRunning, iframeKey, iframeLoaded, iframeAlive, iframeError, startupPhase, busyAction], () => {
+  useWatch([branch, status, serviceHealthy, serviceRunning, iframeKey, iframeLoaded, iframeAlive, iframeError, startupPhase, busyAction], () => {
     console.warn('[Webview] shell view', {
       branch,
       status,
-      remoteMode,
       serviceHealthy,
       serviceRunning,
       iframeKey,
@@ -78,32 +71,12 @@ export function Webview() {
   }
 
   useWatch([shortcutRows, live], syncViewMenu, { immediate: true })
-  useWatch(activeTunnelUrl, () => setDshShortcuts({ rows: [] }))
   useWatch(live, (ready) => {
     if (!ready)
       setDshShortcuts({ rows: [] })
   })
   useListen('tauri://focus', syncViewMenu, { target: getCurrentWindow().label })
   useListen('macos-menu-rebuilt', syncViewMenu, { target: getCurrentWindow().label })
-
-  function handleRemoteChange(url: string, tint: string | null) {
-    setRemoteView({ url, tint })
-  }
-
-  function openSettingsTab(tab: string) {
-    post({ type: 'dsh://settings:open', section: REMOTE_SECTION, tab })
-  }
-
-  // 远端视图下 iframe 里是远端页面，设置分区在它那边不存在：先切回本机，
-  // 等本机插件重新 boot 就绪（`dsh://plugin-boot:ready`）再定位，避免发出无人接收的消息。
-  function openLocalSettingsTab(tab: string) {
-    if (remoteMode) {
-      pendingSettingsTabRef.current = tab
-      handleRemoteChange('', null)
-      return
-    }
-    openSettingsTab(tab)
-  }
 
   useIframeMessage<NavBridgeMessage>(iframeRef, (data) => {
     if (data.type === 'dsh://sidebar:collapsed') {
@@ -118,13 +91,6 @@ export function Webview() {
     else if (data.type === 'dsh://window:close') {
       void getCurrentWindow().close()
     }
-    else if (data.type === 'dsh://plugin-boot:ready') {
-      const pending = pendingSettingsTabRef.current
-      if (pending !== null) {
-        pendingSettingsTabRef.current = null
-        openSettingsTab(pending)
-      }
-    }
   })
 
   const renderContent = () => {
@@ -138,13 +104,7 @@ export function Webview() {
       case 'preinstall':
         return <PreinstallSetup />
       case 'ready':
-        return (
-          <Iframe
-            iframeRef={iframeRef}
-            srcOverride={remoteMode ? activeTunnelUrl : null}
-            borderTint={borderTint}
-          />
-        )
+        return <Iframe iframeRef={iframeRef} />
       default:
         return <Setup />
     }
@@ -168,8 +128,6 @@ export function Webview() {
         onOpenFolder: () => post({ type: 'dsh://workspace:add' }),
         onOpenShortcuts: () => post({ type: 'dsh://shortcuts:open' }),
         onViewCommand: (command: DshViewCommand) => post({ type: 'dsh://view:command', command }),
-        onOpenMachineManager: () => openLocalSettingsTab(REMOTE_TAB_MACHINES),
-        onOpenRemoteAccess: () => openLocalSettingsTab(REMOTE_TAB_ACCESS),
       }
     : {}
 
@@ -180,7 +138,7 @@ export function Webview() {
       <If
         cond={fullSidebar}
         then={<FullSidebarNavbar />}
-        else={<Navbar onRemoteChange={handleRemoteChange} sidebarCollapsed={sidebarCollapsed} {...bridge} />}
+        else={<Navbar sidebarCollapsed={sidebarCollapsed} {...bridge} />}
       />
       <div className="relative flex min-h-0 flex-1">
         {renderContent()}

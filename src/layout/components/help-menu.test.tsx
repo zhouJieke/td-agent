@@ -36,7 +36,6 @@ vi.mock('@/ui/dialog/config', () => ({ ConfigDialog: () => null }))
 vi.mock('@/ui/dialog/task-manager', () => ({ TaskManagerDialog: () => null }))
 vi.mock('@/ui/dialog/update', () => ({ DesktopUpdateDialog: () => null }))
 vi.mock('@/utils/toast', () => ({ toast }))
-vi.mock('./remote-switcher', () => ({ RemoteSwitcher: () => null }))
 
 const HELP_DESTINATIONS = [
   ['documentation', 'https://dshtauri.mintlify.site'],
@@ -45,7 +44,7 @@ const HELP_DESTINATIONS = [
 ] as const
 
 async function selectHelpLink(id: string) {
-  render(<Navbar onRemoteChange={vi.fn()} />)
+  render(<Navbar />)
   fireEvent.click(screen.getByTestId('dsh-navbar-menu-help'))
   fireEvent.click(await screen.findByTestId(`dsh-navbar-item-${id}`))
 }
@@ -125,7 +124,7 @@ describe('help menu links', () => {
   })
 
   it('toggles the developer tools from the item above the task manager', async () => {
-    render(<Navbar onRemoteChange={vi.fn()} />)
+    render(<Navbar />)
     fireEvent.click(screen.getByTestId('dsh-navbar-menu-help'))
     const devtools = await screen.findByTestId('dsh-navbar-item-toggle-devtools')
     const taskManager = screen.getByTestId('dsh-navbar-item-task-manager')
@@ -142,7 +141,7 @@ describe('help menu links', () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {})
     toggleDevtools.mockRejectedValue(failure)
 
-    render(<Navbar onRemoteChange={vi.fn()} />)
+    render(<Navbar />)
     fireEvent.click(screen.getByTestId('dsh-navbar-menu-help'))
     fireEvent.click(await screen.findByTestId('dsh-navbar-item-toggle-devtools'))
 

@@ -2,7 +2,7 @@
 import type { EventTarget } from '@tauri-apps/api/event'
 import type { ComponentProps, RefObject } from 'react'
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useDshShortcuts } from '@/hooks/use-dsh-shortcuts'
 import { Navbar } from './navbar'
@@ -45,17 +45,8 @@ vi.mock('@/ui/plugin/recovery', () => ({ Recovery: () => null }))
 vi.mock('./setup', () => ({ Setup: () => null }))
 vi.mock('./setup-preinstall', () => ({ PreinstallSetup: () => null }))
 vi.mock('./iframe', () => ({
-  Iframe: ({ iframeRef, srcOverride }: { iframeRef: RefObject<HTMLIFrameElement | null>, srcOverride: string | null }) => (
-    <iframe ref={iframeRef} title="Harness" src={srcOverride ?? 'http://127.0.0.1:3081'} />
-  ),
-}))
-vi.mock('./remote-switcher', () => ({
-  RemoteSwitcher: ({ onChange }: { onChange: (url: string, tint: string | null) => void }) => (
-    <>
-      <button onClick={() => onChange('http://127.0.0.1:4001', null)}>Remote alpha</button>
-      <button onClick={() => onChange('http://127.0.0.1:4002', null)}>Remote beta</button>
-      <button onClick={() => onChange('', null)}>Local</button>
-    </>
+  Iframe: ({ iframeRef }: { iframeRef: RefObject<HTMLIFrameElement | null> }) => (
+    <iframe ref={iframeRef} title="Harness" src="http://127.0.0.1:3081" />
   ),
 }))
 
@@ -151,30 +142,6 @@ afterAll(() => {
   Object.defineProperty(navigator, 'userAgent', { configurable: true, value: userAgent })
 })
 
-describe('shell remote share availability', () => {
-  it.each(['starting', 'preinstall', 'error'])('hides remote sharing while the local service is %s', (status) => {
-    store.harness.status = status
-    render(<Webview />)
-    expect(screen.queryByRole('button', { name: 'remote.share' })).toBeNull()
-  })
-
-  it('hides remote sharing when local health is lost and restores it after recovery', () => {
-    const view = render(<Webview />)
-    expect(screen.getByRole('button', { name: 'remote.share' })).not.toBeNull()
-    store.harness.serviceHealthy = false
-    view.rerender(<Webview />)
-    expect(screen.queryByRole('button', { name: 'remote.share' })).toBeNull()
-    store.harness.serviceHealthy = true
-    view.rerender(<Webview />)
-    expect(screen.getByRole('button', { name: 'remote.share' })).not.toBeNull()
-  })
-
-  it('keeps remote sharing independent of SSH and LAN/tunnel settings while the service bridge is live', () => {
-    render(<Navbar onRemoteChange={vi.fn()} onToggleSidebar={vi.fn()} />)
-    expect(screen.getByRole('button', { name: 'remote.share' })).not.toBeNull()
-  })
-})
-
 describe('native View menu state', () => {
   it('restores enabled commands and hints after the language change rebuilds the native menu', async () => {
     render(<Webview />)
@@ -186,22 +153,21 @@ describe('native View menu state', () => {
     expect(menuEntries.slice(1).map(entry => entry.enabled)).toEqual([false, false, false])
   })
 
-  it('keeps the remote catalog and command bridge during a local service restart', async () => {
+  it('keeps the iframe and routes view commands across a local service restart', async () => {
     const view = render(<Webview />)
-    fireEvent.click(screen.getByRole('button', { name: 'Remote alpha' }))
     reportShortcuts()
     const frame = iframe()
     const post = vi.spyOn(frame.contentWindow!, 'postMessage')
     store.harness.serviceHealthy = false
     view.rerender(<Webview />)
-    act(() => nativeEvent('tauri://focus', null, 'main'))
-    await waitFor(() => expect(menuEntries[0].enabled).toBe(true))
-    act(() => nativeEvent('macos-menu-action', 'desktop-toggle-sidebar', 'main'))
-    expect(post).toHaveBeenCalledExactlyOnceWith({ source: 'dsh-desktop', type: 'dsh://view:command', command: 'sidebar.left.toggle' }, 'http://127.0.0.1:4001')
-    expect(iframe()).toBe(frame)
     store.harness.serviceHealthy = true
     view.rerender(<Webview />)
+    reportShortcuts()
     await waitFor(() => expect(menuEntries[0].enabled).toBe(true))
+    act(() => nativeEvent('tauri://focus', null, 'main'))
+    act(() => nativeEvent('macos-menu-action', 'desktop-toggle-sidebar', 'main'))
+    expect(post).toHaveBeenCalledExactlyOnceWith({ source: 'dsh-desktop', type: 'dsh://view:command', command: 'sidebar.left.toggle' }, 'http://127.0.0.1:3081')
+    expect(iframe()).toBe(frame)
   })
 
   it('clears the local catalog when the local service becomes unavailable', async () => {
@@ -214,70 +180,47 @@ describe('native View menu state', () => {
     view.rerender(<Webview />)
     expect(menuEntries[0]).toEqual({ id: 'desktop-toggle-sidebar', enabled: false, shortcut: null })
   })
-
-  it.each(['Remote beta', 'Local'])('clears the previous remote catalog when switching to %s', async (destination) => {
-    render(<Webview />)
-    fireEvent.click(screen.getByRole('button', { name: 'Remote alpha' }))
-    reportShortcuts()
-    fireEvent.click(screen.getByRole('button', { name: destination }))
-    await waitFor(() => expect(menuEntries[0]).toEqual({ id: 'desktop-toggle-sidebar', enabled: false, shortcut: null }))
-    reportShortcuts()
-    await waitFor(() => expect(menuEntries[0].enabled).toBe(true))
-  })
-
-  it('clears the remote catalog when the shell removes the iframe', async () => {
-    const view = render(<Webview />)
-    fireEvent.click(screen.getByRole('button', { name: 'Remote alpha' }))
-    reportShortcuts()
-    store.harness.status = 'error'
-    view.rerender(<Webview />)
-    expect(screen.queryByTitle('Harness')).toBeNull()
-    await waitFor(() => expect(menuEntries[0].enabled).toBe(false))
-    store.harness.status = 'ready'
-    view.rerender(<Webview />)
-    expect(menuEntries[0].shortcut).toBeNull()
-  })
 })
 
 describe('native View menu recipients', () => {
   function mountWindow(label: string, props: Partial<ComponentProps<typeof Navbar>> = {}) {
     mockWindows(label)
-    return render(<Navbar onRemoteChange={vi.fn()} {...props} />)
+    return render(<Navbar {...props} />)
   }
 
-  it.each(['main', 'remote-alpha'])('delivers a targeted core command only to %s', async (label) => {
+  it.each(['main', 'window-2'])('delivers a targeted core command only to %s', async (label) => {
     const main = vi.fn()
-    const remote = vi.fn()
+    const attached = vi.fn()
     mountWindow('main', { onViewCommand: main })
-    mountWindow('remote-alpha', { onViewCommand: remote })
+    mountWindow('window-2', { onViewCommand: attached })
     await waitFor(() => expect([...listeners.values()].filter(listener => listener.event === 'macos-menu-action')).toHaveLength(2))
     act(() => nativeEvent('macos-menu-action', 'desktop-open-terminal', label))
     expect(main.mock.calls).toEqual(label === 'main' ? [['terminal.new']] : [])
-    expect(remote.mock.calls).toEqual(label === 'remote-alpha' ? [['terminal.new']] : [])
+    expect(attached.mock.calls).toEqual(label === 'window-2' ? [['terminal.new']] : [])
   })
 
   it('opens the task manager only in the targeted shell window', async () => {
     mountWindow('main')
-    mountWindow('remote-alpha')
+    mountWindow('window-2')
     await waitFor(() => expect([...listeners.values()].filter(listener => listener.event === 'macos-menu-action')).toHaveLength(2))
-    act(() => nativeEvent('macos-menu-action', 'desktop-task-manager', 'remote-alpha'))
+    act(() => nativeEvent('macos-menu-action', 'desktop-task-manager', 'window-2'))
     expect(openOverlay).toHaveBeenCalledExactlyOnceWith()
   })
 
   it('applies a targeted zoom action once when two shell windows are open', async () => {
     mountWindow('main')
-    mountWindow('remote-alpha')
-    act(() => nativeEvent('macos-menu-action', 'desktop-zoom-in', 'remote-alpha'))
+    mountWindow('window-2')
+    act(() => nativeEvent('macos-menu-action', 'desktop-zoom-in', 'window-2'))
     expect(store.setting.zoom).toHaveBeenCalledExactlyOnceWith('increase')
   })
 
   it('unsubscribes the recipient when its shell window closes', async () => {
     const command = vi.fn()
-    const view = mountWindow('remote-alpha', { onViewCommand: command })
+    const view = mountWindow('window-2', { onViewCommand: command })
     await waitFor(() => expect([...listeners.values()].filter(listener => listener.event === 'macos-menu-action')).toHaveLength(1))
     view.unmount()
     await waitFor(() => expect([...listeners.values()].filter(listener => listener.event === 'macos-menu-action')).toEqual([]))
-    act(() => nativeEvent('macos-menu-action', 'desktop-open-terminal', 'remote-alpha'))
+    act(() => nativeEvent('macos-menu-action', 'desktop-open-terminal', 'window-2'))
     expect(command).not.toHaveBeenCalled()
   })
 })
@@ -288,7 +231,7 @@ describe('native Help menu links', () => {
     ['desktop-feedback', 'https://github.com/dsh-tauri/deepseek-harness-desktop/issues'],
     ['desktop-harness-feedback', 'https://trtgsjkv6r.feishu.cn/share/base/form/shrcnlCoGElW7MQznGy9r3YYXcg?hide_uid=1&hide_device_info=1&hide_harness_version=1'],
   ])('opens the expected destination for %s', async (action, url) => {
-    render(<Navbar onRemoteChange={vi.fn()} />)
+    render(<Navbar />)
     await waitFor(() => expect([...listeners.values()].filter(listener => listener.event === 'macos-menu-action')).toHaveLength(1))
 
     act(() => nativeEvent('macos-menu-action', action, 'main'))
@@ -297,7 +240,7 @@ describe('native Help menu links', () => {
   })
 
   it('toggles the shell window developer tools from the native item', async () => {
-    render(<Navbar onRemoteChange={vi.fn()} />)
+    render(<Navbar />)
     await waitFor(() => expect([...listeners.values()].filter(listener => listener.event === 'macos-menu-action')).toHaveLength(1))
 
     act(() => nativeEvent('macos-menu-action', 'desktop-toggle-devtools', 'main'))

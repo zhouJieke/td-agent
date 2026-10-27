@@ -51,7 +51,6 @@
 - 🗂️ **档案配置** — 分别管理插件与设置，支持一键迁移档案数据、备份、克隆；
 - 💽 **数据目录** — 安装时（Windows）可选择数据存放位置；能在设置里整体迁移与回滚。
 - ⌨️ **命令行集成** — 通过托管 shim 提供 `dsh` / `pnpm` 命令行工具，不是全局 npm 内核安装。
-- 🐾 **桌宠** — Pets / Codex 资源管理、资源包导入与会话状态展示；预设素材来自远端。
 - 🎨 **个性化** — 8 种配色、本机界面缩放、终端模式，以及可调不透明度与可选磨砂模糊。
 
 ## 内置插件
@@ -65,7 +64,6 @@
 - [DSH Tauri Extension](https://dshtauri.mintlify.site/zh-CN/built-in-plugins/dsh-tauri-extension) — 官方插件管理、插件市场、Skills 与 MCP
 - [DSH Tauri Scheduler](https://dshtauri.mintlify.site/zh-CN/built-in-plugins/dsh-tauri-scheduler) — 定时任务与执行记录
 - [DSH Tauri Archive](https://dshtauri.mintlify.site/zh-CN/built-in-plugins/dsh-tauri-archive) — 聊天归档与恢复
-- [DSH Tauri Pet](https://dshtauri.mintlify.site/zh-CN/built-in-plugins/dsh-tauri-pet) — 桌宠与活动状态设置
 - [DSH Tauri Rightclick Menu](https://dshtauri.mintlify.site/zh-CN/built-in-plugins/dsh-tauri-rightclick) — 会话、工作区与正文右键菜单
 - [DSH Tauri Model](https://dshtauri.mintlify.site/zh-CN/built-in-plugins/dsh-tauri-model) — 模型选择与参数、自动配置模型
 - [DSH Tauri Remote](https://dshtauri.mintlify.site/zh-CN/built-in-plugins/dsh-tauri-remote) — SSH 远端 Harness 连接与同步，并把本机 Harness 分享到局域网或公网隧道
@@ -103,7 +101,7 @@ brew install dsh-tauri/desktop/deepseek-harness
 
 - 普通安装包首次启动需联网下载缺失的运行时与内核；Git 功能需要可用的 Git。
 - 包含 `Bundle` 后缀为离线安装包（`_Bundle_*.exe`、`_Bundle_*.deb`、两种 `_Bundle_*.dmg`）。
-- 本地运行不等于完全离线：模型服务、插件安装、更新与桌宠预设素材仍可能联网。
+- 本地运行不等于完全离线：模型服务、插件安装、更新仍可能联网。
 - Linux 显示、Wayland、AppImage 与权限问题的处理见[安装与故障排查文档](https://dshtauri.mintlify.site/zh-CN/help/troubleshooting)。
 
 ### 桌面代理
@@ -175,8 +173,6 @@ Windows 启动失败时会通过原生对话框显示具体错误。若出现 `S
 
 - [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) — 上游 `dsh` agent 平台
 - [deepseek-harness-pkg](https://github.com/dsh-tauri/deepseek-harness-pkg) — 预打包 Harness 发行版与下载源
-- [dsh-pet](https://github.com/PC2005-cloud/dsh-pet) · [dsh-pet-mov](https://github.com/dsh-tauri/dsh-pet-mov) · [dsh-pet-component](https://github.com/dsh-tauri/dsh-pet-component) — 桌宠素材与渲染组件
-- [dsh-plugin-codex-pets](https://github.com/Skylarking/dsh-plugin-codex-pets) · [BongoCat](https://github.com/ayangweb/BongoCat) · [dsh-dafeiyu](https://github.com/QCYTSN/dsh-dafeiyu) · [codex-to-dsh-pet](https://github.com/Signalight/codex-to-dsh-pet) · [dsh-pet-sticker](https://github.com/PC2005-cloud/dsh-pet-sticker) — 桌宠参考项目
 
 ## Contributors
 

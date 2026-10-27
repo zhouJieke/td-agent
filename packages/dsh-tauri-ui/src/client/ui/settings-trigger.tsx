@@ -4,8 +4,10 @@ import type { ReactElement } from 'react'
 import type { SelectorHook } from '../types/selector'
 import { Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SlotOutlet } from '@deepseek-ai/dsh-client-ui-renderer'
-import { cn, uniq, useStore } from 'dsh-tauri/client'
+import { cn, uniq, useAsyncState, useStore } from 'dsh-tauri/client'
 import { useCallback, useState } from 'react'
+import { version } from '../../../../../package.json'
+import { Button } from '../components/button'
 import { Gear } from '../components/icons'
 import {
   SETTINGS_LAUNCHER_SLOT,
@@ -35,6 +37,13 @@ export interface SettingsTriggerProps {
   wide: boolean
   useSessions: SelectorHook<SessionListStateLike>
   useWorkspaces?: unknown
+  signOut?: (metadata: AccountClientMetadata) => Promise<void>
+}
+
+export interface AccountClientMetadata {
+  version: string
+  locale: string
+  timezoneOffsetSeconds: number
 }
 
 // 0.1.7 起列表快照不再带 current，「当前会话」改由主视图持有的 reference 表达。
@@ -42,7 +51,7 @@ function isMainViewRetained(session: RetainedSessionLike): boolean {
   return (session.retainedBy?.mainView ?? 0) > 0
 }
 
-export function SettingsTrigger({ wide, useSessions }: SettingsTriggerProps): ReactElement {
+export function SettingsTrigger({ wide, useSessions, signOut }: SettingsTriggerProps): ReactElement {
   const { open, launcherAvailable, launcherShortcut } = useStore(store.settings)
   const { onboarding } = useStore(store.sections)
   const [completed, setCompleted] = useState<string[]>([])
@@ -70,12 +79,22 @@ export function SettingsTrigger({ wide, useSessions }: SettingsTriggerProps): Re
   }, [])
 
   const [menuOpen, setMenuOpen] = useState(false)
-  locale.useLocale()
+  const activeLocale = locale.useLocale()
   // 官方账号菜单占据设置座位时它就是「设置菜单」；座位缺席（更老核心 / 浏览器直开）时
-  // 由壳层自己给菜单——两者条目结构一致，宠物等插件按「含『设置』条目」补条目。
+  // 由壳层自己给菜单——两者条目结构一致，插件按「含『设置』条目」补条目。
   const menuItems: MenuEntry[] = [
     { id: 'settings', label: locale.text('settings'), icon: <Gear width={16} height={16} /> },
   ]
+
+  const { execute: handleSignOut, isLoading: signingOut, error: signOutError } = useAsyncState(async () => {
+    if (signOut !== undefined) {
+      await signOut({
+        version,
+        locale: activeLocale,
+        timezoneOffsetSeconds: -new Date().getTimezoneOffset() * 60,
+      })
+    }
+  }, undefined, { immediate: false, onSuccess: () => setMenuOpen(false), onError: () => {} })
 
   const trigger = (
     <button
@@ -137,7 +156,15 @@ export function SettingsTrigger({ wide, useSessions }: SettingsTriggerProps): Re
                   store.settings.openAt()
               }}
               onClose={() => setMenuOpen(false)}
-            />
+            >
+              <div className="flex items-center justify-between gap-[24px] border-t border-border-l3 px-[12px] py-[8px]">
+                <span>{locale.text('userPlaceholder')}</span>
+                <Button variant="link" role="menuitem" className="text-error" disabled={signingOut || signOut === undefined} onClick={() => { void handleSignOut() }}>
+                  {locale.text('logout')}
+                </Button>
+              </div>
+              {signOutError != null && <span className="text-error" role="alert">{locale.text('logoutFailed')}</span>}
+            </Menu>
           )}
       {step !== undefined && (
         <SlotOutlet

@@ -475,7 +475,7 @@ mod tests {
                 "dsh-tauri": "link:D:/gone/packages/dsh-tauri",
                 "dshmarket": "github:dsh-market/dshmarket",
                 "dsh-better-sidebar": "1.0.0",
-                "dsh-tauri-pet": "link:missing-sibling-package"
+                "dsh-tauri-scheduler": "link:missing-sibling-package"
             }
         });
         let keep = HashSet::from(["dsh-tauri"]);
@@ -484,7 +484,7 @@ mod tests {
 
         assert_eq!(
             dangling,
-            vec!["dsh-tauri-panel".to_string(), "dsh-tauri-pet".to_string()]
+            vec!["dsh-tauri-panel".to_string(), "dsh-tauri-scheduler".to_string()]
         );
         let _ = std::fs::remove_dir_all(root);
     }

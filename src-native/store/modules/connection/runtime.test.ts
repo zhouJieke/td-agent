@@ -52,9 +52,9 @@ const releases: (() => void)[] = []
 let runtime: typeof import('./runtime')
 let connection: typeof import('./index')['connection']
 
-function hydrate(history: HistoryEntry[] = [], tokens: Record<string, string> = {}): void {
+function hydrate(history: HistoryEntry[] = []): void {
   connection.$patch({ version: 1, history, guidedHosts: [] })
-  connection.markHydrated(tokens)
+  connection.markHydrated()
 }
 
 function deferred<T>(fallback: T) {
@@ -127,14 +127,14 @@ async function disposeRuntime() {
 describe('connectAddress', describeDirectConnections)
 
 function describeDirectConnections() {
-  it('opens the requested route with its saved origin token without probing or recording successful history', connectDirectly)
+  it('opens the requested route without probing or recording successful history', connectDirectly)
 
   function connectDirectly() {
-    hydrate([], { 'http://10.0.0.20:4444': 'fixture-saved-token' })
+    hydrate()
 
     runtime.connectAddress(alpha)
 
-    expect(connection.current).toEqual({ ...alpha, token: 'fixture-saved-token' })
+    expect(connection.current).toEqual(alpha)
     expect(connection.stage).toBe('connected')
     expect(connection.loading).toBe(true)
     expect(connection.notice).toBeNull()
@@ -146,27 +146,25 @@ function describeDirectConnections() {
     expect(vi.getTimerCount()).toBe(0)
   }
 
-  it('prefers an explicit new token over the saved token for the same origin', preferExplicitToken)
+  it('keeps a URL token from the accepted route transiently without recording history', preferExplicitToken)
 
   function preferExplicitToken() {
-    hydrate([], { 'http://10.0.0.20:4444': 'fixture-old-token' })
+    hydrate()
 
     runtime.connectAddress({ ...alpha, token: 'fixture-new-token' })
 
     expect(connection.current).toEqual({ ...alpha, token: 'fixture-new-token' })
-    expect(connection.tokens).toEqual({ 'http://10.0.0.20:4444': 'fixture-old-token' })
     expect(connection.serialize()).toEqual({ version: 1, history: [], guidedHosts: [] })
   }
 
-  it('preserves a new URL token instead of replacing it with an older saved token', preferUrlToken)
+  it('carries a token parsed from the accepted URL into the current connection', preferUrlToken)
 
   function preferUrlToken() {
-    hydrate([], { 'http://10.0.0.20:4444': 'fixture-old-token' })
+    hydrate()
 
     runtime.connectAddress({ ...alpha, url: 'http://10.0.0.20:4444/tasks?auth=fixture-new-token&theme=dark' })
 
     expect(connection.current).toEqual({ ...alpha, token: 'fixture-new-token' })
-    expect(connection.tokens).toEqual({ 'http://10.0.0.20:4444': 'fixture-old-token' })
   }
 
   it('aborts an in-flight history probe before a direct connection and ignores its late success', supersedeHistoryWithDirectConnection)
@@ -273,7 +271,6 @@ function describeDiscovery() {
     await runtime.startAutoScan()
 
     expect(connection.current).toEqual(alpha)
-    expect(connection.tokens).toEqual({})
     expect(connection.health[alpha.id]).toBe('available')
     expect(connection.loading).toBe(true)
     expect(connection.history).toEqual([recentAlpha, recentBeta])
@@ -281,21 +278,19 @@ function describeDiscovery() {
     expect(connection.notice).toBeNull()
   })
 
-  it('reuses the exact saved origin token when probing identified history', acceptAuthenticatedHistory)
-
-  async function acceptAuthenticatedHistory() {
-    hydrate([recentAlpha], { 'http://10.0.0.20:4444': 'fixture-saved-token' })
-    boundary.probe.mockResolvedValue({ ...alpha, token: 'fixture-saved-token' })
+  it('probes identified history with its saved route and the history timeout', async () => {
+    hydrate([recentAlpha])
+    boundary.probe.mockResolvedValue(alpha)
 
     await runtime.startAutoScan()
 
-    expect(recordedProbe()[0]).toEqual({ ...recentAlpha, token: 'fixture-saved-token' })
+    expect(recordedProbe()[0]).toEqual(recentAlpha)
     expect(recordedProbe()[2]).toBe(3000)
-    expect(connection.current).toEqual({ ...alpha, token: 'fixture-saved-token' })
+    expect(connection.current).toEqual(alpha)
     expect(connection.history).toEqual([recentAlpha])
     expect(boundary.ip).not.toHaveBeenCalled()
     expect(boundary.scan).not.toHaveBeenCalled()
-  }
+  })
 
   it('passes history custom ports into the real subnet candidate builder while excluding self and subnet boundaries', includeHistoryPorts)
 
@@ -371,48 +366,8 @@ function describeDiscovery() {
     expect(connection.loading).toBe(true)
     expect(connection.notice).toBeNull()
     expect(connection.history).toEqual([])
-    expect(connection.tokens).toEqual({})
     expect(vi.getTimerCount()).toBe(0)
   })
-
-  it('accepts an identified LAN discovery using a saved token for the exact origin', acceptAuthenticatedLanHost)
-
-  async function acceptAuthenticatedLanHost() {
-    hydrate([], { 'http://10.0.0.2:3082': 'fixture-saved-token' })
-    const scan = deferred<BridgeAddress[]>([])
-    boundary.scan.mockReturnValue(scan.promise)
-    const scanning = runtime.startAutoScan()
-    await vi.advanceTimersByTimeAsync(0)
-
-    publish(beta)
-    expect(recordedScan()[1].signal.aborted).toBe(true)
-    scan.resolve([beta])
-    await scanning
-
-    expect(connection.current).toEqual({ ...beta, token: 'fixture-saved-token' })
-    expect(connection.notice).toBeNull()
-    expect(connection.history).toEqual([])
-  }
-
-  it('does not reuse a saved token for another port on the same LAN host', isolateLanTokensByOrigin)
-
-  async function isolateLanTokensByOrigin() {
-    hydrate([], { 'http://10.0.0.2:3080': 'fixture-sibling-token' })
-    const scan = deferred<BridgeAddress[]>([])
-    boundary.scan.mockReturnValue(scan.promise)
-    const scanning = runtime.startAutoScan()
-    await vi.advanceTimersByTimeAsync(0)
-
-    publish(beta)
-    expect(recordedScan()[1].signal.aborted).toBe(true)
-    scan.resolve([beta])
-    await scanning
-
-    expect(connection.current).toEqual(beta)
-    expect(connection.loading).toBe(true)
-    expect(connection.notice).toBeNull()
-    expect(connection.tokens).toEqual({ 'http://10.0.0.2:3080': 'fixture-sibling-token' })
-  }
 
   it('reports a network-boundary rejection and releases the scan deadline', reportDiscoveryFailure)
 
@@ -436,15 +391,15 @@ function describeDiscovery() {
 }
 
 describe('history-only re-entry', () => {
-  it('preserves history ordering and saved tokens without reading the LAN address', async () => {
-    hydrate([recentAlpha, recentBeta], { 'http://10.0.0.20:4444': 'fixture-saved-token' })
-    boundary.probe.mockResolvedValueOnce({ ...alpha, token: 'fixture-saved-token' }).mockResolvedValueOnce(beta)
+  it('preserves history ordering without reading the LAN address', async () => {
+    hydrate([recentAlpha, recentBeta])
+    boundary.probe.mockResolvedValueOnce(alpha).mockResolvedValueOnce(beta)
 
     await runtime.startAutoScan({ historyOnly: true })
 
-    expect(recordedProbe()[0]).toEqual({ ...recentAlpha, token: 'fixture-saved-token' })
+    expect(recordedProbe()[0]).toEqual(recentAlpha)
     expect(recordedProbe(1)[0]).toEqual(recentBeta)
-    expect(connection.current).toEqual({ ...alpha, token: 'fixture-saved-token' })
+    expect(connection.current).toEqual(alpha)
     expect(connection.history).toEqual([recentAlpha, recentBeta])
     expect(boundary.ip).not.toHaveBeenCalled()
     expect(boundary.scan).not.toHaveBeenCalled()
@@ -491,7 +446,6 @@ describe('history-only re-entry', () => {
     expect(connection.notice).toBeNull()
     expect(connection.health[alpha.id]).toBe('available')
     expect(connection.history).toEqual([recentAlpha])
-    expect(connection.tokens).toEqual({})
     expect(boundary.ip).not.toHaveBeenCalled()
     expect(boundary.scan).not.toHaveBeenCalled()
   })

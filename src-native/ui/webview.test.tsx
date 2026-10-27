@@ -144,7 +144,7 @@ function resetConnection() {
 /** 与 restoreConnections() 等价的水合：快照进 state，hydrated 由 markHydrated 置位。 */
 function hydrate() {
   connection.$patch(store.parseConnectionSnapshot({ version: 1, history: [], guidedHosts: [] }))
-  connection.markHydrated({})
+  connection.markHydrated()
 }
 
 interface NativeViewRef {
@@ -339,9 +339,7 @@ afterEach(async () => {
   vi.useRealTimers()
 })
 
-describe('rendered paired device authorization', () => {
-  const token = `v1.1700000000000.0.${'a'.repeat(64)}`
-
+describe('rendered Bridge WebView pairing source', () => {
   it('forces a new tokenless origin through pairing without persisting the pairing flag, while retaining remembered-host reconnects', async () => {
     await mount()
     expect(webView().props.source).toEqual({ uri: `${alpha.id}/?pair=1` })
@@ -353,60 +351,23 @@ describe('rendered paired device authorization', () => {
     expect(webView().props.source).toEqual({ uri: alpha.url })
   })
 
-  it('requires pairing after forgetting even when switching hosts interrupts cookie clearing', async () => {
+  it('requires pairing again once the remembered host is removed and reselected', async () => {
     await mount()
     await ready()
-    await message({ type: 'dsh://device-session', token })
     await act(async () => connection.forget(alpha.id))
-    expect(connection.tokens).toEqual({})
+    expect(connection.current).toBeNull()
     expect(connection.history).toEqual([])
-    const generation = connection.viewGeneration
-    await act(async () => runtime.connectAddress(alpha))
-    expect(connection.viewGeneration).toBe(generation)
     await unmount()
-    runtime.connectAddress(beta)
     runtime.connectAddress(alpha)
     await mount()
     expect(webView().props.source).toEqual({ uri: `${alpha.id}/?pair=1` })
   })
-
-  it('remembers authorization from the verified document without changing the initial WebView URI or generation', async () => {
-    runtime.connectAddress({ ...alpha, token: 'AB23CD45' })
-    await act(async () => {
-      screen = create(createElement(BridgeWebView, { address: connection.current!, generation: connection.viewGeneration }))
-    })
-    const instance = await viewRef()
-    const generation = connection.viewGeneration
-    const source = webView().props.source
-    await message({ type: 'dsh://device-session', token })
-    expect(connection.tokens).toEqual({})
-    await ready()
-    await message({ type: 'dsh://device-session', token }, { nonce: 'stale-nonce' })
-    await message({ type: 'dsh://device-session', token }, { url: beta.url })
-    expect(connection.tokens).toEqual({})
-    await message({ type: 'dsh://device-session', token })
-    expect(connection.tokens).toEqual({ [alpha.id]: token })
-    expect(connection.current?.token).toBe(token)
-    await act(async () => {
-      screen!.update(createElement(BridgeWebView, { address: connection.current!, generation }))
-    })
-    expect(webView().props.source).toEqual(source)
-    expect(await viewRef()).toBe(instance)
-    expect(connection.viewGeneration).toBe(generation)
-    expect(native.scheduleNotificationAsync).not.toHaveBeenCalled()
-    runtime.connectAddress(beta)
-    await message({ type: 'dsh://device-session', token: `v1.1700000000001.0.${'b'.repeat(64)}` })
-    expect(connection.tokens).toEqual({ [alpha.id]: token })
-  })
 })
 
 describe('rendered Bridge WebView document lifecycle', () => {
-  it('reveals the real gateway pairing form after trusted SSR readiness instead of leaving it behind the fullscreen loader', async () => {
-    vi.useRealTimers()
-    const { loginPageHtml } = await vi.importActual<{ loginPageHtml: (message?: string) => string }>('../../packages/dsh-tauri-remote/src/host/service/gateway.utils')
-    vi.useFakeTimers()
+  it('reveals the served pairing form after trusted SSR readiness instead of leaving it behind the fullscreen loader', async () => {
     await mount()
-    const page = createPage(undefined, 'unverified', loginPageHtml())
+    const page = createPage(undefined, 'unverified', '<form id="loginForm"><input id="password" /></form>')
 
     expect(page.posts).toHaveLength(1)
     const raw = page.posts[0]!

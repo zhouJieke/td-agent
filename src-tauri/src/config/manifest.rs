@@ -1,9 +1,9 @@
-//! 资源清单（`resources/manifest.jsonc`）：引擎版本、插件目录、预设宠物与依赖
+//! 资源清单（`resources/manifest.jsonc`）：引擎版本、插件目录与依赖
 //! 映射规范的唯一真值来源。
 //!
 //! 定位顺序按构建区分：debug 优先源码 `resources/`（构建产物中的资源可能过期），
 //! release 优先随安装包分发的资源目录，两者互为兜底。清单缺失/损坏只记日志并回落
-//! 空清单——插件与宠物目录不是启动硬依赖；依赖映射的读写见 [`super::dependencies`]。
+//! 空清单——插件目录不是启动硬依赖；依赖映射的读写见 [`super::dependencies`]。
 
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -20,7 +20,6 @@ pub const MANIFEST_FILE: &str = "manifest.jsonc";
 pub struct Manifest {
     pub engines: Engines,
     pub plugins: Plugins,
-    pub pets: Pets,
     pub dependencies: BTreeMap<String, DependencySpec>,
 }
 
@@ -210,52 +209,6 @@ where
     })
 }
 
-/// 预设宠物目录
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(default)]
-pub struct Pets {
-    #[serde(rename = "built-in")]
-    pub built_in: Vec<PresetPetSpec>,
-}
-
-/// 预设宠物条目：字段名与 `dsh-pet-component` 的 props 一一对应，前端拿到后直接
-/// 展开给 `<Pet>`；`deny_unknown_fields` 保证清单写错字段（如 `sizeMB`）立即报错。
-#[derive(Debug, Clone, serde::Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct PresetPetSpec {
-    pub id: String,
-    pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub desc: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub image: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub kind: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub size: Option<f64>,
-    pub config: String,
-    pub uri: PresetPetUri,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ext: Option<PresetPetExt>,
-}
-
-/// 素材基地址：`default` 必填，`mac` 覆盖 Apple 平台（WKWebView 不认 VP9-alpha）
-#[derive(Debug, Clone, serde::Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct PresetPetUri {
-    pub default: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mac: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct PresetPetExt {
-    pub default: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mac: Option<String>,
-}
-
 /// 依赖映射规范：入口相对路径与默认托管根
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -369,7 +322,7 @@ pub(crate) fn manifest_path_from(
     candidates.into_iter().flatten().find(|path| path.is_file())
 }
 
-/// 解析结果缓存：清单是热路径（核心来源判定、插件清单、宠物列表、依赖映射都要读），
+/// 解析结果缓存：清单是热路径（核心来源判定、插件清单、依赖映射都要读），
 /// 按「路径 + mtime」命中即复用解析结果；debug 下编辑清单会因 mtime 变化而重载。
 static CACHE: std::sync::Mutex<Option<(PathBuf, u64, Manifest)>> = std::sync::Mutex::new(None);
 
@@ -603,12 +556,11 @@ mod tests {
     }
 
     #[test]
-    fn shipped_manifest_carries_engines_plugins_pets_and_dependencies() {
+    fn shipped_manifest_carries_engines_plugins_and_dependencies() {
         let manifest = shipped_manifest();
         assert!(!manifest.plugins.preset.is_empty());
         assert!(!manifest.plugins.built_in.is_empty());
         assert!(!manifest.plugins.deprecated.is_empty());
-        assert!(!manifest.pets.built_in.is_empty());
         for key in ["node", "pnpm", "dsh", "git"] {
             assert!(
                 manifest.dependencies.contains_key(key),
