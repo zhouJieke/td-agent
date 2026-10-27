@@ -21,51 +21,61 @@
 
 后台按这个 token 判定用户身份，返回**这个人**能用的模型。换 token 就换清单，这是「按人控制」的唯一依据。
 
-响应体（除 `models[].id` 外全部可选）：
+响应体是**网关数组**，一个元素一个上游（也兼容裸对象，等价于单元素数组）：
 
 ```json
-{
-  "baseURL": "https://gw.example.com/api/v1",
-  "api": "openai-completions",
-  "name": "公司网关",
-  "apiKey": "sk-issued-per-user",
-  "headers": { "x-tenant": "tc" },
-  "models": [
-    {
-      "id": "deepseek-chat",
-      "name": "DeepSeek Chat",
-      "contextWindow": 128000,
-      "maxTokens": 8192,
-      "input": ["text", "image"],
-      "reasoningEfforts": { "off": null, "low": "low", "medium": "medium", "high": "high" },
-      "compat": { "thinkingFormat": "chat-template", "supportsDeveloperRole": false }
-    },
-    { "id": "kimi-k2", "name": "Kimi K2", "default": true }
-  ]
-}
+[
+  {
+    "route": "company-gw",
+    "baseURL": "https://gw.example.com/api/v1",
+    "api": "openai-completions",
+    "name": "公司网关",
+    "apiKey": "sk-issued-per-user",
+    "headers": { "x-tenant": "tc" },
+    "models": [
+      {
+        "id": "deepseek-chat",
+        "name": "DeepSeek Chat",
+        "contextWindow": 128000,
+        "maxTokens": 8192,
+        "input": ["text", "image"],
+        "reasoningEfforts": { "off": null, "low": "low", "medium": "medium", "high": "high" },
+        "compat": { "thinkingFormat": "chat-template", "supportsDeveloperRole": false }
+      }
+    ]
+  },
+  {
+    "route": "vendor-b",
+    "baseURL": "https://api.vendor-b.com/v1",
+    "api": "anthropic-messages",
+    "apiKey": "sk-b",
+    "models": [{ "id": "claude-x", "default": true }]
+  }
+]
 ```
 
 字段规则：
 
-- `models` 或 `data` 任一为数组即接受（兼容 OpenAI 风格返回）；无 `id` 的条目丢弃，重复 `id` 只保留第一条。
-- `baseURL` 缺省派生成 `{域名}/api/v1`；`api` 只认 `openai-completions` / `openai-responses` / `anthropic-messages`，缺省或无法识别回落 `openai-completions`。
-- `apiKey` 缺省则不写凭据；给了就存进核心凭据引用 `DSH_BACKEND_API_KEY`，配置里只留引用名。凭据按请求现解析，**换 key 不需要重启**。
+- `route`：稳定标识，直接决定 `providers.<route>` 的键名与凭据引用名，用小写短横线（`company-gw`）。不要拿显示名当标识。缺省时按显式 `name` 的 slug 推导，推不出就用 `dsh-backend` / `dsh-backend-2` 按数组位置兜底；同一批里重复 `route` 只认第一条。
+- 数组就是**全量权威**：这次没出现的 `route`，客户端会把它从配置里摘掉。所以「下线一个上游」= 把它从数组里去掉，不需要额外接口。
+- 元素内除 `models[].id` 外全部可选。`baseURL` 缺省派生成 `{域名}/api/v1`（授权接口与网关同域时无需返回）；`api` 只认 `openai-completions` / `openai-responses` / `anthropic-messages`，缺省或无法识别回落 `openai-completions`。
+- `apiKey` 缺省则不写凭据；给了就按 `route` 存进独立引用（`company-gw` → `COMPANY_GW_API_KEY`），配置里只留引用名。凭据按请求现解析，**换 key 不需要重启**，多个上游各自一把 key 互不覆盖。
 - `headers` 里的 `authorization` 与 `x-api-key` 一律丢弃，不允许后台反向改写鉴权通道；其它头原样附到每次模型请求。
-- `models[].name/contextWindow/maxTokens/input/reasoningEfforts/compat` 是能力事实；没给的字段用桌面端已缓存的第三方模型目录表补齐（键按小写全名、末段、以及逐级 `-` 前缀匹配），后台已声明的值不覆盖。
-- 默认模型：顶层 `defaultModel`（或 `default`）优先，其次是首个带 `default: true` 的条目，都没有则取清单第一条。
+- `models[].name/contextWindow/maxTokens/input/reasoningEfforts/compat` 是能力事实；缺省项用桌面端已缓存的第三方模型目录表补齐（键按小写全名、末段、逐级 `-` 前缀匹配）。**注意**：内部别名（如 `qwen3.8-flash`）可能被目录表按前缀猜中一个并不准确的上下文长度，显式给出这两个字段比让客户端猜稳。
+- 默认模型：元素内顶层 `defaultModel`（或 `default`）优先，其次首个 `default: true` 的模型；都没声明时该元素取第一条。多个元素同时声明默认时按数组顺序取第一个。
 
 ## 3. 下发与刷新
 
 - 暂存区：`$DSH_HOME/dsh-tauri-model/gateway-models.json`（开发态在 `~/.dsh.dev` 下）。
 - 启动顺序：先读暂存区下发（断网也有模型可用），随后立刻请求一次，之后每 15 分钟一次；同一轮次串行，不并发。
-- 落点：核心设置命名空间 `llm-pi-ai` 的 `providers.dsh-backend`，形态与用户手填的自定义 provider 完全一致；内容没变化时不重复写。
+- 落点：核心设置命名空间 `llm-pi-ai` 的 `providers.<route>`，形态与用户手填的自定义 provider 完全一致；逐个比对指纹，内容没变化的上游不重复写，消失的上游 `unset`。
 - 默认模型：写 `agent-default-model` 的 `provider=dsh-backend` 与 `model=<钦定 id>`，**仅当当前默认不在授权清单内**时才改写——用户在会话里自己切过的模型不会被下一轮刷回来。
 
 ## 4. 失败与撤销语义
 
-- 权威撤销（后台明确回答「没有你的模型」）：`models: []`、HTTP 401 或 403 → 摘掉 `providers.dsh-backend`，默认模型若指向它则一并回退到发版默认，并删除暂存区。退出登录的客户端不会继续留着一套可用模型。
-- 非权威失败（网络错误、超时、5xx、载荷畸形、清单里没有任何合法 id）：保留上一次下发，只记录错误，绝不清空。
-- 因此「撤销个别模型」= 从 `models` 里去掉那一项；「停掉某人」= 对该 token 返回空数组或 401/403。
+- 权威撤销（后台明确回答「没有你的模型」）：空数组、裸对象里 `models: []`、HTTP 401 或 403 → 摘掉全部 `providers.<route>`，默认模型若指向它们则一并回退到发版默认，并删除暂存区。退出登录的客户端不会继续留着一套可用模型。
+- 非权威失败（网络错误、超时、5xx、载荷畸形、所有元素都解析不出合法 id）：保留上一次下发，只记录错误，绝不清空。
+- 部分元素畸形只丢那个元素，不牵连整批。因此「撤销个别模型」= 从 `models` 里去掉那一项；「下线某个上游」= 从数组里去掉那个元素；「停掉某人」= 返回空数组或 401/403。
 
 ## 5. AI 网关侧要求
 

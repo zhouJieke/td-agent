@@ -1,9 +1,11 @@
 export interface GatewayGrant {
+  readonly route: string
   readonly baseURL: string
   readonly api: string
   readonly displayName: string
   readonly models: readonly Record<string, unknown>[]
   readonly defaultModel: string
+  readonly declaresDefault: boolean
   readonly apiKey?: string
   readonly headers?: Record<string, string>
 }
@@ -20,12 +22,13 @@ export interface GatewayProfile {
 export interface GatewayCache {
   readonly source: string
   readonly fetchedAt: string
-  readonly grant: GatewayGrant
+  readonly grants: readonly GatewayGrant[]
 }
 
 export interface GatewayStatus {
   readonly enabled: boolean
   readonly provisioned: boolean
+  readonly gateways: number
   readonly models: number
   readonly fetchedAt?: string
   readonly error?: string

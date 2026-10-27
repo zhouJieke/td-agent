@@ -35,8 +35,25 @@ let defaultSelection: Record<string, string>
 let credentialSets: string[]
 let httpServers: ReturnType<typeof createServer>[]
 
-const profileWrites = () => writes.filter(write => write.ns === 'llm-pi-ai')
-const defaultWrites = () => writes.filter(write => write.ns === 'agent-default-model')
+function profileWrites(): ProfileWrite[] {
+  return writes.filter(write => write.ns === 'llm-pi-ai')
+}
+
+function defaultWrites(): ProfileWrite[] {
+  return writes.filter(write => write.ns === 'agent-default-model')
+}
+
+function writtenRoutes(): string[] {
+  return profileWrites().flatMap(write => write.ops
+    .filter(op => op.op === 'set')
+    .map(op => String(op.path[1])))
+}
+
+function unsetRoutes(): string[] {
+  return profileWrites().flatMap(write => write.ops
+    .filter(op => op.op === 'unset')
+    .map(op => String(op.path[1])))
+}
 
 async function loadModule(): Promise<void> {
   vi.resetModules()
@@ -98,12 +115,15 @@ function seedCache(baseURL: string): void {
   writeFileSync(resolveGatewayCachePath(), JSON.stringify({
     source: `${baseURL}/api/ai/models`,
     fetchedAt: '2026-10-20T00:00:00.000Z',
-    grant: {
+    grants: [{
+      route: 'cached-gw',
       baseURL: `${baseURL}/api/v1`,
       api: 'openai-completions',
-      displayName: 'AI Gateway',
+      displayName: 'Cached Gateway',
       models: [{ id: 'cached-model', contextWindow: 32_000 }],
-    },
+      defaultModel: 'cached-model',
+      declaresDefault: false,
+    }],
   }))
 }
 
@@ -148,7 +168,80 @@ describe('gateway.sync', () => {
       { op: 'set', path: ['provider'], value: 'dsh-backend' },
       { op: 'set', path: ['model'], value: 'deepseek-v3' },
     ])
-    expect(gateway.peek()).toMatchObject({ enabled: true, provisioned: true, models: 2 })
+    expect(gateway.peek()).toMatchObject({ enabled: true, provisioned: true, gateways: 1, models: 2 })
+  })
+
+  it('provisions every gateway in the array with its own credential reference', async () => {
+    const backend = await listen([
+      { route: 'company-gw', apiKey: 'sk-a', models: [{ id: 'm-a' }] },
+      { route: 'vendor-b', api: 'anthropic-messages', apiKey: 'sk-b', models: [{ id: 'm-b', default: true }] },
+    ])
+    process.env.DSH_MODEL_BACKEND_URL = backend
+    bindHost()
+    await expect(gateway.sync()).resolves.toMatchObject({ ok: true, models: 2 })
+    expect(writtenRoutes()).toEqual(['company-gw', 'vendor-b'])
+    expect(credentialSets).toEqual(['COMPANY_GW_API_KEY', 'VENDOR_B_API_KEY'])
+    expect(defaultWrites()[0]?.ops).toEqual([
+      { op: 'set', path: ['provider'], value: 'vendor-b' },
+      { op: 'set', path: ['model'], value: 'm-b' },
+    ])
+    expect(gateway.peek()).toMatchObject({ gateways: 2, models: 2 })
+  })
+
+  it('re-pins the default when its own gateway disappears under a shared model name', async () => {
+    const backend = await listen([{ route: 'a', models: [{ id: 'shared-model' }] }])
+    process.env.DSH_MODEL_BACKEND_URL = backend
+    bindHost()
+    await expect(gateway.sync()).resolves.toMatchObject({ ok: true })
+    expect(defaultWrites().at(-1)?.ops).toEqual([
+      { op: 'set', path: ['provider'], value: 'a' },
+      { op: 'set', path: ['model'], value: 'shared-model' },
+    ])
+
+    const moved = await listen([{ route: 'b', models: [{ id: 'shared-model' }] }])
+    process.env.DSH_MODEL_BACKEND_URL = moved
+    await expect(gateway.sync()).resolves.toMatchObject({ ok: true })
+    expect(unsetRoutes()).toEqual(['a'])
+    expect(defaultWrites().at(-1)?.ops).toEqual([
+      { op: 'set', path: ['provider'], value: 'b' },
+      { op: 'set', path: ['model'], value: 'shared-model' },
+    ])
+  })
+
+  it('provisions a legacy cache entry that carries no route and unsets it later', async () => {
+    mkdirSync(join(home, 'dsh-tauri-model'), { recursive: true })
+    writeFileSync(resolveGatewayCachePath(), JSON.stringify({
+      source: 'https://gw.example.com/api/ai/models',
+      fetchedAt: '2026-10-20T00:00:00.000Z',
+      grant: {
+        baseURL: 'https://gw.example.com/api/v1',
+        api: 'openai-completions',
+        displayName: '公司网关',
+        models: [{ id: 'legacy-model' }],
+      },
+    }))
+    const backend = await listen([{ route: 'ali-chat', models: [{ id: 'm' }] }])
+    process.env.DSH_MODEL_BACKEND_URL = backend
+    bindHost()
+    const stop = gateway.start(60_000)
+    await vi.waitFor(() => expect(unsetRoutes()).toEqual(['dsh-backend']), { timeout: 4_000 })
+    expect(writtenRoutes()).toEqual(['dsh-backend', 'ali-chat'])
+    stop()
+  })
+
+  it('unsets the gateway that disappeared from the array', async () => {
+    const backend = await listen([
+      { route: 'stay', models: [{ id: 'm-1' }] },
+      { route: 'leave', models: [{ id: 'm-2' }] },
+    ])
+    process.env.DSH_MODEL_BACKEND_URL = backend
+    bindHost()
+    await expect(gateway.sync()).resolves.toMatchObject({ ok: true })
+    const trimmed = await listen([{ route: 'stay', models: [{ id: 'm-1' }] }])
+    process.env.DSH_MODEL_BACKEND_URL = trimmed
+    await expect(gateway.sync()).resolves.toMatchObject({ ok: true, applied: true })
+    expect(unsetRoutes()).toEqual(['leave'])
+    expect(gateway.peek()).toMatchObject({ gateways: 1 })
   })
 
   it('sends the login token to the granting interface', async () => {
@@ -156,7 +249,7 @@ describe('gateway.sync', () => {
     const http = createServer((request, response) => {
       rawHeaders.push(...request.rawHeaders)
       response.writeHead(200, { 'content-type': 'application/json' })
-      response.end(JSON.stringify({ models: [{ id: 'm' }] }))
+      response.end(JSON.stringify([{ models: [{ id: 'm' }] }]))
     })
     httpServers.push(http)
     await new Promise<void>(resolve => http.listen(0, '127.0.0.1', () => resolve()))
@@ -182,7 +275,7 @@ describe('gateway.sync', () => {
     process.env.DSH_MODEL_BACKEND_URL = backend
     bindHost()
     await expect(gateway.sync()).resolves.toMatchObject({ ok: true })
-    const failing = await listen({}, 503)
+    const failing = await listen([], 503)
     process.env.DSH_MODEL_BACKEND_URL = failing
     const result = await gateway.sync()
     expect(result.ok).toBe(false)
@@ -198,10 +291,10 @@ describe('gateway.sync', () => {
     await expect(gateway.sync()).resolves.toMatchObject({ ok: true })
     expect(existsSync(resolveGatewayCachePath())).toBe(true)
 
-    const empty = await listen({ models: [] })
+    const empty = await listen([])
     process.env.DSH_MODEL_BACKEND_URL = empty
     await expect(gateway.sync()).resolves.toEqual({ ok: true, applied: true, models: 0 })
-    expect(profileWrites().at(-1)?.ops).toEqual([{ op: 'unset', path: ['providers', 'dsh-backend'] }])
+    expect(unsetRoutes()).toEqual(['dsh-backend'])
     expect(defaultWrites().at(-1)?.ops).toEqual([
       { op: 'unset', path: ['provider'] },
       { op: 'unset', path: ['model'] },
@@ -216,10 +309,10 @@ describe('gateway.sync', () => {
     bindHost()
     await expect(gateway.sync()).resolves.toMatchObject({ ok: true })
 
-    const denied = await listen({}, 401)
+    const denied = await listen([], 401)
     process.env.DSH_MODEL_BACKEND_URL = denied
     await expect(gateway.sync()).resolves.toMatchObject({ ok: false, applied: true, models: 0 })
-    expect(profileWrites().at(-1)?.ops).toEqual([{ op: 'unset', path: ['providers', 'dsh-backend'] }])
+    expect(unsetRoutes()).toEqual(['dsh-backend'])
     expect(gateway.peek()).toMatchObject({ provisioned: false, error: expect.stringContaining('answered 401') })
   })
 
@@ -232,24 +325,24 @@ describe('gateway.sync', () => {
       error: 'model backend url is not configured',
     })
     expect(writes).toHaveLength(0)
-    expect(gateway.peek()).toEqual({ enabled: false, provisioned: false, models: 0 })
+    expect(gateway.peek()).toEqual({ enabled: false, provisioned: false, gateways: 0, models: 0 })
   })
 })
 
 describe('gateway.start', () => {
   it('provisions the cached grant before the backend is reachable again', async () => {
-    const dead = await listen({}, 500)
+    const dead = await listen([], 500)
     seedCache(dead)
     process.env.DSH_MODEL_BACKEND_URL = dead
     bindHost()
     const stop = gateway.start(60_000)
-    await vi.waitFor(() => expect(profileWrites()).toHaveLength(1), { timeout: 4_000 })
+    await vi.waitFor(() => expect(writtenRoutes()).toEqual(['cached-gw']), { timeout: 4_000 })
     expect(profileWrites()[0]?.ops[0]?.value).toMatchObject({
       baseURL: `${dead}/api/v1`,
       models: [{ id: 'cached-model', contextWindow: 32_000 }],
     })
     expect(defaultWrites()[0]?.ops).toEqual([
-      { op: 'set', path: ['provider'], value: 'dsh-backend' },
+      { op: 'set', path: ['provider'], value: 'cached-gw' },
       { op: 'set', path: ['model'], value: 'cached-model' },
     ])
     stop()
@@ -269,6 +362,6 @@ describe('gateway.start', () => {
     bindHost()
     gateway.start(60_000)()
     expect(writes).toHaveLength(0)
-    expect(gateway.peek()).toEqual({ enabled: false, provisioned: false, models: 0 })
+    expect(gateway.peek()).toEqual({ enabled: false, provisioned: false, gateways: 0, models: 0 })
   })
 })

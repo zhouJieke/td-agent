@@ -9,6 +9,10 @@ const DEFAULT_BASE_URL_SUFFIX = '/api/v1'
 
 const DEFAULT_DISPLAY_NAME = 'AI Gateway'
 
+export const FALLBACK_ROUTE = 'dsh-backend'
+
+const ROUTE_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
+
 const PROTOCOLS = new Set(['openai-completions', 'openai-responses', 'anthropic-messages'])
 
 const GRADED_EFFORTS = { off: null, low: 'low', medium: 'medium', high: 'high' }
@@ -74,6 +78,29 @@ export function modelsUrlOf(backend: string): string {
   return `${backend}${MODELS_PATH}`
 }
 
+/** 与官方设置页同一套引用名推导，后台换网关时凭据不会互相覆盖。 */
+export function keyRefOf(route: string): string {
+  return `${route.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_API_KEY`
+}
+
+function routeOf(body: Record<string, unknown>, declaredName: string | undefined, index: number): string {
+  const declared = trimmedText(body.route)?.toLowerCase()
+  if (declared !== undefined && ROUTE_PATTERN.test(declared))
+    return declared
+  const slug = declaredName?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  if (slug !== undefined && ROUTE_PATTERN.test(slug))
+    return slug
+  return index === 0 ? FALLBACK_ROUTE : `${FALLBACK_ROUTE}-${index + 1}`
+}
+
+/** 旧版暂存条目没有 `route`：按同一套规则补出来，好让升级后还能认领并摘除它。 */
+export function routeOfRaw(raw: unknown, index: number): string {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw))
+    return index === 0 ? FALLBACK_ROUTE : `${FALLBACK_ROUTE}-${index + 1}`
+  const body = raw as Record<string, unknown>
+  return routeOf(body, trimmedText(body.name) ?? trimmedText(body.displayName), index)
+}
+
 function modelEntry(value: unknown): Record<string, unknown> | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value))
     return undefined
@@ -108,9 +135,9 @@ export function presetKeyCandidates(id: string): string[] {
       keys.push(value)
   }
   const slash = normalized.lastIndexOf('/')
-  push(normalized)
-  push(slash >= 0 ? normalized.slice(slash + 1) : normalized)
   const bare = slash >= 0 ? normalized.slice(slash + 1) : normalized
+  push(normalized)
+  push(bare)
   const segments = bare.split('-')
   for (let end = segments.length - 1; end > 0; end--) {
     const prefix = segments.slice(0, end).join('-')
@@ -161,7 +188,25 @@ export function fillFromPresets(
   }
 }
 
-export function grantOf(payload: unknown, backend: string): GatewayGrant | undefined {
+/**
+ * 后台返回网关数组（也兼容单个对象）：数组就是全量权威，
+ * 单个元素畸形只丢它自己，不把整批下发一起带走。
+ */
+export function grantsOf(payload: unknown, backend: string): GatewayGrant[] | undefined {
+  const entries = Array.isArray(payload) ? payload : [payload]
+  const grants: GatewayGrant[] = []
+  const taken = new Set<string>()
+  for (const [index, entry] of entries.entries()) {
+    const grant = grantOf(entry, backend, index)
+    if (grant === undefined || taken.has(grant.route))
+      continue
+    taken.add(grant.route)
+    grants.push(grant)
+  }
+  return grants.length === 0 ? undefined : grants
+}
+
+function grantOf(payload: unknown, backend: string, index: number): GatewayGrant | undefined {
   if (typeof payload !== 'object' || payload === null || Array.isArray(payload))
     return undefined
   const body = payload as Record<string, unknown>
@@ -185,14 +230,16 @@ export function grantOf(payload: unknown, backend: string): GatewayGrant | undef
   const baseURL = trimmedText(body.baseURL) ?? trimmedText(body.baseUrl) ?? `${backend}${DEFAULT_BASE_URL_SUFFIX}`
   const api = trimmedText(body.api)
   const apiKey = trimmedText(body.apiKey)
-  const displayName = trimmedText(body.name) ?? trimmedText(body.displayName) ?? DEFAULT_DISPLAY_NAME
+  const declaredName = trimmedText(body.name) ?? trimmedText(body.displayName)
   const headers = headerRecord(body.headers)
   return {
+    route: routeOf(body, declaredName, index),
     baseURL,
     api: api !== undefined && PROTOCOLS.has(api) ? api : DEFAULT_API,
-    displayName,
+    displayName: declaredName ?? DEFAULT_DISPLAY_NAME,
     models,
     defaultModel: defaultModelOf(body, models.map(model => String(model.id)), flagged),
+    declaresDefault: declaresDefault(body, flagged),
     ...apiKey === undefined ? {} : { apiKey },
     ...headers === undefined ? {} : { headers },
   }
@@ -206,25 +253,36 @@ function defaultModelOf(body: Record<string, unknown>, ids: readonly string[], f
   return flagged ?? String(ids[0] ?? '')
 }
 
-/** 后台明确回答「一个模型都没有」，与载荷畸形要区分开：前者是权威撤销。 */
-export function carriesEmptyGrant(payload: unknown): boolean {
-  if (typeof payload !== 'object' || payload === null || Array.isArray(payload))
-    return false
-  const body = payload as Record<string, unknown>
-  if (Array.isArray(body.models))
-    return body.models.length === 0
-  return Array.isArray(body.data) && body.data.length === 0
+function declaresDefault(body: Record<string, unknown>, flagged: string | undefined): boolean {
+  return flagged !== undefined || body.defaultModel !== undefined || body.default !== undefined
 }
 
-export function profileOf(grant: GatewayGrant, keyRef: string): GatewayProfile {
+export function profileOf(grant: GatewayGrant): GatewayProfile {
   return {
     displayName: grant.displayName,
     api: grant.api,
     baseURL: grant.baseURL,
     models: grant.models,
-    ...grant.apiKey === undefined ? {} : { apiKeyEnv: keyRef },
+    ...grant.apiKey === undefined ? {} : { apiKeyEnv: keyRefOf(grant.route) },
     ...grant.headers === undefined ? {} : { headers: grant.headers },
   }
+}
+
+/** 多个网关时只认显式钦定：谁标了默认就用谁，都没标就按数组顺序取第一个。 */
+export function defaultGrantOf(grants: readonly GatewayGrant[]): GatewayGrant | undefined {
+  return grants.find(grant => grant.declaresDefault) ?? grants[0]
+}
+
+/** 后台明确回答「一个模型都没有」，与载荷畸形要区分开：前者是权威撤销。 */
+export function carriesEmptyGrant(payload: unknown): boolean {
+  if (Array.isArray(payload))
+    return payload.length === 0
+  if (typeof payload !== 'object' || payload === null)
+    return false
+  const body = payload as Record<string, unknown>
+  if (Array.isArray(body.models))
+    return body.models.length === 0
+  return Array.isArray(body.data) && body.data.length === 0
 }
 
 export function stableTextOf(value: unknown): string {

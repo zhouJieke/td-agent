@@ -3,14 +3,21 @@ import { describe, expect, it } from 'vitest'
 import {
   backendOf,
   carriesEmptyGrant,
+  defaultGrantOf,
   fillFromPresets,
-  grantOf,
+  grantsOf,
+  keyRefOf,
   modelsUrlOf,
+  presetKeyCandidates,
   profileOf,
   stableTextOf,
 } from './gateway.utils'
 
 const BACKEND = 'https://gw.example.com'
+
+function first(payload: unknown): GatewayGrant | undefined {
+  return grantsOf(payload, BACKEND)?.[0]
+}
 
 describe('backendOf', () => {
   it('adds the https scheme and drops trailing slashes', () => {
@@ -33,19 +40,22 @@ describe('modelsUrlOf', () => {
   })
 })
 
-describe('grantOf', () => {
+describe('grantsOf', () => {
   it('derives the gateway endpoint and defaults from a bare model list', () => {
-    expect(grantOf({ models: [{ id: 'deepseek-chat' }] }, BACKEND)).toMatchObject({
+    expect(first({ models: [{ id: 'deepseek-chat' }] })).toMatchObject({
+      route: 'dsh-backend',
       baseURL: 'https://gw.example.com/api/v1',
       api: 'openai-completions',
       displayName: 'AI Gateway',
       defaultModel: 'deepseek-chat',
+      declaresDefault: false,
       models: [{ id: 'deepseek-chat' }],
     })
   })
 
   it('keeps declared connection facts, trims the key and refuses credential headers', () => {
-    const grant = grantOf({
+    const grant = first({
+      route: 'Company-GW',
       name: '公司网关',
       baseURL: 'https://gw.example.com/v1',
       api: 'anthropic-messages',
@@ -56,8 +66,9 @@ describe('grantOf', () => {
         { id: 'a' },
         { name: 'missing id' },
       ],
-    }, BACKEND)
+    })
     expect(grant).toMatchObject({
+      route: 'company-gw',
       displayName: '公司网关',
       baseURL: 'https://gw.example.com/v1',
       api: 'anthropic-messages',
@@ -66,62 +77,106 @@ describe('grantOf', () => {
       headers: { 'x-tenant': 'tc' },
     })
     expect(grant?.models).toHaveLength(1)
-    expect(grant?.models[0]).toMatchObject({ id: 'a', input: ['text', 'image'], reasoningEfforts: { high: 'high' } })
+  })
+
+  it('falls back to the array position when a name cannot be slugged', () => {
+    const grants = grantsOf([{ models: [{ id: 'a' }] }, { models: [{ id: 'b' }] }], BACKEND)
+    expect(grants?.map(grant => grant.route)).toEqual(['dsh-backend', 'dsh-backend-2'])
+  })
+
+  it('slugifies a latin display name into the route key', () => {
+    expect(first({ name: 'Vendor B', models: [{ id: 'm' }] })?.route).toBe('vendor-b')
   })
 
   it('accepts an OpenAI-style data array and falls back on an unknown protocol', () => {
-    expect(grantOf({ data: [{ id: 'm' }], api: 'grpc' }, BACKEND))
-      .toMatchObject({ api: 'openai-completions', models: [{ id: 'm' }] })
+    expect(first({ data: [{ id: 'm' }], api: 'grpc' })).toMatchObject({ api: 'openai-completions', models: [{ id: 'm' }] })
   })
 
-  it('refuses payloads without an addressable model', () => {
-    expect(grantOf(null, BACKEND)).toBeUndefined()
-    expect(grantOf({ models: [] }, BACKEND)).toBeUndefined()
-    expect(grantOf({ models: [{ name: 'no id' }] }, BACKEND)).toBeUndefined()
-    expect(grantOf({ models: 'deepseek-chat' }, BACKEND)).toBeUndefined()
+  it('drops malformed entries without taking the whole batch down', () => {
+    const grants = grantsOf([{ models: [{ name: 'no id' }] }, null, { models: [{ id: 'good' }] }], BACKEND)
+    expect(grants?.map(grant => grant.models[0]?.id)).toEqual(['good'])
+  })
+
+  it('refuses a payload that carries no addressable model at all', () => {
+    expect(grantsOf(null, BACKEND)).toBeUndefined()
+    expect(grantsOf({ models: [] }, BACKEND)).toBeUndefined()
+    expect(grantsOf({ models: 'deepseek-chat' }, BACKEND)).toBeUndefined()
+  })
+
+  it('keys credentials per gateway so two upstreams never share one reference', () => {
+    expect(keyRefOf('company-gw')).toBe('COMPANY_GW_API_KEY')
+    expect(profileOf({
+      route: 'company-gw',
+      baseURL: 'https://gw/v1',
+      api: 'openai-completions',
+      displayName: 'n',
+      models: [{ id: 'm' }],
+      defaultModel: 'm',
+      declaresDefault: false,
+      apiKey: 'k',
+    }).apiKeyEnv).toBe('COMPANY_GW_API_KEY')
   })
 })
 
-describe('profileOf', () => {
-  it('names the credential reference only when the grant carries a key', () => {
-    const keyed = profileOf(
-      { baseURL: 'https://gw/v1', api: 'openai-completions', displayName: 'n', models: [{ id: 'm' }], defaultModel: 'm', apiKey: 'k' },
-      'DSH_BACKEND_API_KEY',
-    )
-    expect(keyed.apiKeyEnv).toBe('DSH_BACKEND_API_KEY')
-    const bare = profileOf({ baseURL: 'https://gw/v1', api: 'openai-completions', displayName: 'n', models: [{ id: 'm' }], defaultModel: 'm' }, 'DSH_BACKEND_API_KEY')
-    expect('apiKeyEnv' in bare).toBe(false)
-  })
-})
-
-describe('grantOf default model', () => {
+describe('grant default model', () => {
   it('prefers a top-level default over the model order', () => {
-    expect(grantOf({ defaultModel: 'second', models: [{ id: 'first' }, { id: 'second' }] }, BACKEND)?.defaultModel)
-      .toBe('second')
+    expect(first({ defaultModel: 'second', models: [{ id: 'first' }, { id: 'second' }] })?.defaultModel).toBe('second')
   })
 
   it('takes the first model flagged default when no top-level name is given', () => {
-    expect(grantOf({ models: [{ id: 'first' }, { id: 'second', default: true }] }, BACKEND)?.defaultModel)
-      .toBe('second')
+    const grant = first({ models: [{ id: 'first' }, { id: 'second', default: true }] })
+    expect(grant?.defaultModel).toBe('second')
+    expect(grant?.declaresDefault).toBe(true)
   })
 
   it('ignores a declared default the endpoint does not actually grant', () => {
-    expect(grantOf({ defaultModel: 'not-granted', models: [{ id: 'first' }] }, BACKEND)?.defaultModel)
-      .toBe('first')
+    expect(first({ defaultModel: 'not-granted', models: [{ id: 'first' }] })?.defaultModel).toBe('first')
+  })
+
+  it('lets the explicitly marked gateway win the default across several upstreams', () => {
+    const grants = grantsOf([
+      { route: 'a', models: [{ id: 'm-a' }] },
+      { route: 'b', models: [{ id: 'm-b', default: true }] },
+    ], BACKEND)
+    expect(defaultGrantOf(grants ?? [])?.route).toBe('b')
+  })
+
+  it('falls back to the first gateway when nobody declares a default', () => {
+    const grants = grantsOf([{ route: 'a', models: [{ id: 'm-a' }] }, { route: 'b', models: [{ id: 'm-b' }] }], BACKEND)
+    expect(defaultGrantOf(grants ?? [])?.route).toBe('a')
+    expect(defaultGrantOf([])).toBeUndefined()
   })
 
   it('drops the default marker from the projected model entry', () => {
-    const grant = grantOf({ models: [{ id: 'first', default: true, name: '首个' }] }, BACKEND)
-    expect(grant?.models[0]).toEqual({ id: 'first', name: '首个' })
+    expect(first({ models: [{ id: 'first', default: true, name: '首个' }] })?.models[0]).toEqual({ id: 'first', name: '首个' })
+  })
+})
+
+describe('carriesEmptyGrant', () => {
+  it('tells an authoritative empty grant apart from a malformed payload', () => {
+    expect(carriesEmptyGrant([])).toBe(true)
+    expect(carriesEmptyGrant({ models: [] })).toBe(true)
+    expect(carriesEmptyGrant({ data: [] })).toBe(true)
+    expect(carriesEmptyGrant({ models: [{ name: 'no id' }] })).toBe(false)
+    expect(carriesEmptyGrant([null])).toBe(false)
+    expect(carriesEmptyGrant(null)).toBe(false)
+  })
+})
+
+describe('presetKeyCandidates', () => {
+  it('matches the full id before its bare and prefix forms', () => {
+    expect(presetKeyCandidates('Vendor/deepseek-v3-pro')).toEqual(['vendor/deepseek-v3-pro', 'deepseek-v3-pro', 'deepseek-v3', 'deepseek'])
   })
 })
 
 describe('fillFromPresets', () => {
   const grant: GatewayGrant = {
+    route: 'company-gw',
     baseURL: 'https://gw.example.com/api/v1',
     api: 'openai-completions',
     displayName: 'AI Gateway',
     defaultModel: 'deepseek-v3',
+    declaresDefault: false,
     models: [{ id: 'DeepSeek-V3' }, { id: 'kimi-k2', contextWindow: 4096 }],
   }
 
@@ -136,16 +191,6 @@ describe('fillFromPresets', () => {
 
   it('returns the grant untouched when the catalog is unavailable', () => {
     expect(fillFromPresets(grant, undefined)).toBe(grant)
-  })
-})
-
-describe('carriesEmptyGrant', () => {
-  it('tells an authoritative empty grant apart from a malformed payload', () => {
-    expect(carriesEmptyGrant({ models: [] })).toBe(true)
-    expect(carriesEmptyGrant({ data: [] })).toBe(true)
-    expect(carriesEmptyGrant({ models: [{ name: 'no id' }] })).toBe(false)
-    expect(carriesEmptyGrant({ models: 'deepseek-chat' })).toBe(false)
-    expect(carriesEmptyGrant(null)).toBe(false)
   })
 })
 
