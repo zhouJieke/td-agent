@@ -51,7 +51,6 @@ export interface GatewaySettingsEntry {
 }
 
 export interface GatewaySettingsService {
-  get: (ns: string) => unknown
   describe?: () => readonly GatewaySettingsEntry[]
   mutate: (ns: string, ops: readonly GatewaySettingsOp[], expectedRevision?: number) => Promise<void>
 }

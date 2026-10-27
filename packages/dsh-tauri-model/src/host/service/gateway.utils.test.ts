@@ -36,7 +36,7 @@ describe('backendOf', () => {
 
 describe('modelsUrlOf', () => {
   it('keeps every backend interface under the api prefix', () => {
-    expect(modelsUrlOf(BACKEND)).toBe('https://gw.example.com/api/ai/models')
+    expect(modelsUrlOf(BACKEND)).toBe('https://gw.example.com/api/model-provider/config')
   })
 })
 
@@ -103,6 +103,32 @@ describe('grantsOf', () => {
     expect(grantsOf({ models: 'deepseek-chat' }, BACKEND)).toBeUndefined()
   })
 
+  it('accepts the code/data envelope around the gateway array', () => {
+    const grants = grantsOf({
+      code: 0,
+      msg: null,
+      data: [{
+        route: 'company-gw',
+        baseURL: 'https://gw.example.com/v1',
+        api: 'openai-completions',
+        name: '公司网关',
+        apiKey: 'sk-key',
+        models: [
+          { id: 'qwen3.8-max', name: '通义千问 3.8 Max', contextWindow: 262_144, maxTokens: 16_384, input: ['text'], default: true },
+          { id: 'qwen3.7-max', name: '通义千问 3.7 Max', contextWindow: 262_144, maxTokens: 16_384, input: ['text'] },
+        ],
+      }],
+    }, BACKEND)
+    expect(grants?.map(grant => grant.route)).toEqual(['company-gw'])
+    expect(grants?.[0]?.models).toHaveLength(2)
+    expect(grants?.[0]?.defaultModel).toBe('qwen3.8-max')
+    expect(grants?.[0]?.baseURL).toBe('https://gw.example.com/v1')
+  })
+
+  it('still reads a bare data array of models as one gateway listing', () => {
+    expect(first({ data: [{ id: 'm' }] })?.models).toEqual([{ id: 'm' }])
+  })
+
   it('keys credentials per gateway so two upstreams never share one reference', () => {
     expect(keyRefOf('company-gw')).toBe('COMPANY_GW_API_KEY')
     expect(profileOf({
@@ -159,6 +185,8 @@ describe('carriesEmptyGrant', () => {
     expect(carriesEmptyGrant({ data: [] })).toBe(true)
     expect(carriesEmptyGrant({ models: [{ name: 'no id' }] })).toBe(false)
     expect(carriesEmptyGrant([null])).toBe(false)
+    expect(carriesEmptyGrant({ code: 0, data: [] })).toBe(true)
+    expect(carriesEmptyGrant({ code: 0, data: [{ route: 'a', models: [] }] })).toBe(false)
     expect(carriesEmptyGrant(null)).toBe(false)
   })
 })

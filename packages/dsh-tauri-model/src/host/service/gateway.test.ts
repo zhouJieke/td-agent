@@ -66,7 +66,6 @@ async function loadModule(): Promise<void> {
   defaultSelection = { provider: 'deepseek-official', model: 'deepseek-flash' }
   bindHost = () => {
     const settingsService = {
-      get: (ns: string) => ns === 'agent-default-model' ? { ...defaultSelection } : {},
       describe: () => [
         { ns: 'llm-pi-ai', value: {} },
         { ns: 'agent-default-model', value: { ...defaultSelection } },
@@ -113,7 +112,7 @@ async function listen(payload: unknown, status = 200): Promise<string> {
 function seedCache(baseURL: string): void {
   mkdirSync(join(home, 'dsh-tauri-model'), { recursive: true })
   writeFileSync(resolveGatewayCachePath(), JSON.stringify({
-    source: `${baseURL}/api/ai/models`,
+    source: `${baseURL}/api/model-provider/config`,
     fetchedAt: '2026-10-20T00:00:00.000Z',
     grants: [{
       route: 'cached-gw',
@@ -314,6 +313,34 @@ describe('gateway.sync', () => {
     await expect(gateway.sync()).resolves.toMatchObject({ ok: false, applied: true, models: 0 })
     expect(unsetRoutes()).toEqual(['dsh-backend'])
     expect(gateway.peek()).toMatchObject({ provisioned: false, error: expect.stringContaining('answered 401') })
+  })
+
+  it('follows the backend when it moves the designated default', async () => {
+    const backend = await listen({ models: [{ id: 'm-1', default: true }, { id: 'm-2' }] })
+    process.env.DSH_MODEL_BACKEND_URL = backend
+    bindHost()
+    await expect(gateway.sync()).resolves.toMatchObject({ ok: true })
+    expect(defaultWrites()).toHaveLength(1)
+
+    const moved = await listen({ models: [{ id: 'm-1' }, { id: 'm-2', default: true }] })
+    process.env.DSH_MODEL_BACKEND_URL = moved
+    await expect(gateway.sync()).resolves.toMatchObject({ ok: true })
+    expect(defaultWrites().at(-1)?.ops).toEqual([
+      { op: 'set', path: ['provider'], value: 'dsh-backend' },
+      { op: 'set', path: ['model'], value: 'm-2' },
+    ])
+  })
+
+  it('stops following once the user picks a different granted model', async () => {
+    const backend = await listen({ models: [{ id: 'm-1', default: true }, { id: 'm-2' }] })
+    process.env.DSH_MODEL_BACKEND_URL = backend
+    bindHost()
+    await expect(gateway.sync()).resolves.toMatchObject({ ok: true })
+    expect(defaultWrites()).toHaveLength(1)
+
+    defaultSelection.model = 'm-2'
+    await expect(gateway.sync()).resolves.toMatchObject({ ok: true })
+    expect(defaultWrites()).toHaveLength(1)
   })
 
   it('writes nothing when no backend domain is configured', async () => {

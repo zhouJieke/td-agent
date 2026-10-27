@@ -1,7 +1,7 @@
 import type { PresetRow, PresetTable } from '../../shared/model-presets'
 import type { GatewayGrant, GatewayProfile } from './gateway.types'
 
-const MODELS_PATH = '/api/ai/models'
+const MODELS_PATH = '/api/model-provider/config'
 
 const DEFAULT_API = 'openai-completions'
 
@@ -193,7 +193,7 @@ export function fillFromPresets(
  * 单个元素畸形只丢它自己，不把整批下发一起带走。
  */
 export function grantsOf(payload: unknown, backend: string): GatewayGrant[] | undefined {
-  const entries = Array.isArray(payload) ? payload : [payload]
+  const entries = gatewayEntriesOf(payload)
   const grants: GatewayGrant[] = []
   const taken = new Set<string>()
   for (const [index, entry] of entries.entries()) {
@@ -204,6 +204,46 @@ export function grantsOf(payload: unknown, backend: string): GatewayGrant[] | un
     grants.push(grant)
   }
   return grants.length === 0 ? undefined : grants
+}
+
+/**
+ * 载荷形态三选一：网关数组、单个网关对象、`{code,msg,data}` 信封。
+ * 信封里的 `data` 只有在元素本身是网关对象时才当清单用，否则退回 OpenAI 风格的 models。
+ */
+function gatewayEntriesOf(payload: unknown): readonly unknown[] {
+  if (Array.isArray(payload))
+    return payload
+  if (payload === null || typeof payload !== 'object')
+    return [payload]
+  const body = payload as Record<string, unknown>
+  const wrapped = unwrapData(body)
+  return wrapped === undefined ? [body] : wrapped
+}
+
+function unwrapData(body: Record<string, unknown>): readonly unknown[] | undefined {
+  const data = body.data
+  if (!Array.isArray(data))
+    return undefined
+  if (data.some(entry => isGatewayEntry(entry)))
+    return data
+  if (body.models === undefined && !isModelEntry(data[0]))
+    return data
+  return undefined
+}
+
+function isGatewayEntry(value: unknown): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    return false
+  const entry = value as Record<string, unknown>
+  return Array.isArray(entry.models) || Array.isArray(entry.data)
+    || trimmedText(entry.route) !== undefined || trimmedText(entry.baseURL) !== undefined
+}
+
+function isModelEntry(value: unknown): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    return false
+  const entry = value as Record<string, unknown>
+  return typeof entry.id === 'string' && !Array.isArray(entry.models)
 }
 
 function grantOf(payload: unknown, backend: string, index: number): GatewayGrant | undefined {

@@ -38,6 +38,8 @@ const applied = new Map<string, string>()
 
 let granted: readonly GatewayGrant[] = []
 
+let pinned: { provider: string, model: string } | undefined
+
 let lastError: string | undefined
 
 let status: GatewayStatus = { enabled: false, provisioned: false, gateways: 0, models: 0 }
@@ -58,6 +60,7 @@ export const gateway = defineService({
       clearInterval(timer)
       applied.clear()
       granted = []
+      pinned = undefined
       cache = undefined
       lastError = undefined
       inflight = Promise.resolve()
@@ -179,6 +182,7 @@ async function revoke(): Promise<void> {
       { op: 'unset', path: ['model'] },
     ])
   }
+  pinned = undefined
   cache = undefined
   removeCache()
   status = publish()
@@ -199,14 +203,17 @@ async function pinDefaultModel(grants: readonly GatewayGrant[]): Promise<void> {
   const target = defaultGrantOf(grants)
   if (target === undefined || target.defaultModel.length === 0)
     return
+  const current = currentSelection()
+  const followsTarget = current?.provider === target.route && current?.model === target.defaultModel
+  if (followsTarget || userChoseOwnDefault(grants, current)) {
+    return
+  }
   try {
-    if (defaultStillOwned(grants, currentSelection())) {
-      return
-    }
     await settings().mutate(DEFAULT_MODEL_NS, [
       { op: 'set', path: ['provider'], value: target.route },
       { op: 'set', path: ['model'], value: target.defaultModel },
     ])
+    pinned = { provider: target.route, model: target.defaultModel }
   }
   catch (error) {
     console.warn(`[model gateway] default model pin failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -264,6 +271,18 @@ function credentials(): GatewayCredentialsService {
   return getServerContext(server).get('credentials') as unknown as GatewayCredentialsService
 }
 
+/**
+ * 只在「这是用户自己选的」时收手：本进程没钉过却已指向授权模型，或用户在我们钉完之后
+ * 改选了别的授权模型。后台改钦定（当前值仍等于我们上次钉的）必须跟随，否则钦定只能生效一次。
+ */
+function userChoseOwnDefault(grants: readonly GatewayGrant[], current?: { provider?: string, model?: string }): boolean {
+  if (current === undefined || !defaultStillOwned(grants, current))
+    return false
+  if (pinned === undefined)
+    return true
+  return current.provider !== pinned.provider || current.model !== pinned.model
+}
+
 /** 用户当前用的模型仍在授权网关里时不抢改默认；上游被摘掉则重新钦定。 */
 function defaultStillOwned(grants: readonly GatewayGrant[], current?: { provider?: string, model?: string }): boolean {
   if (current?.model === undefined)
@@ -291,15 +310,13 @@ function currentSelection(): { provider?: string, model?: string } | undefined {
   }
 }
 
-/** 必须读合并后的生效值：`get(ns)` 只给 bundle/base 层，看不到写进 profile 的配置。 */
+/** 必须读 describe() 的生效值：这个核心版本的 settings 服务没有 `get`，base 层也看不到 profile 写入。 */
 function effectiveSection(ns: string): unknown {
   const service = settings()
-  if (typeof service.describe === 'function') {
-    const entry = service.describe().find(item => item.ns === ns)
-    if (entry !== undefined)
-      return entry.value
-  }
-  return service.get(ns)
+  const describe = service.describe
+  if (typeof describe !== 'function')
+    return undefined
+  return describe.call(service).find(item => item.ns === ns)?.value
 }
 
 function readCache(): GatewayCache | undefined {
