@@ -107,13 +107,13 @@ export function SettingsTrigger({ wide, useSessions, getEmployee, signOut }: Set
       >
         <div className="flex flex-col gap-[8px] border-t border-border-l3 px-[8px] py-[8px]" style={{ minWidth: 240, maxWidth: 320 }}>
           <If cond={employee !== undefined || loadingEmployee || !getEmployee}>
-            <div className="flex items-center gap-[6px]">
+            <div className="flex min-w-0 items-center gap-[6px] text-[13px] leading-[20px]">
               <Person width={14} height={14} aria-hidden className="shrink-0 text-secondary" />
               <div className="min-w-0 flex-1">
                 <If cond={employee !== undefined}>
-                  <div className="flex min-w-0 flex-wrap items-center gap-[8px] text-[13px] leading-[20px]">
-                    <span className="min-w-0 max-w-full break-all font-medium">{employee?.employeeName}</span>
-                    <span className="min-w-0 max-w-full break-all text-[12px] text-secondary">{employee?.employeeNumber}</span>
+                  <div className="flex min-w-0 items-center gap-[8px]">
+                    <span className="min-w-0 truncate font-medium leading-[20px]" title={employee?.employeeName}>{employee?.employeeName}</span>
+                    <span className="min-w-0 truncate leading-[20px] text-secondary" title={employee?.employeeNumber}>{employee?.employeeNumber}</span>
                   </div>
                 </If>
                 <If cond={loadingEmployee}><span role="status">{locale.text('employeeLoading')}</span></If>
