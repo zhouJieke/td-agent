@@ -560,6 +560,10 @@ impl AuthService {
             .ok_or_else(|| "DESKTOP_AUTH_SESSION_MISSING".into())
     }
 
+    pub fn api_base(&self) -> Result<String, String> {
+        Ok(self.endpoint()?.to_string().trim_end_matches('/').to_string())
+    }
+
     pub async fn request(&self, method: &str, path: &str, body: Value) -> Result<Value, String> {
         let method = match method {
             "GET" => Method::GET,
@@ -688,7 +692,7 @@ impl TokenSession {
 async fn read_json<T: DeserializeOwned>(mut response: Response) -> Result<T, String> {
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| "DESKTOP_AUTH_NETWORK")? {
-        if bytes.len() + chunk.len() > 65_536 {
+        if bytes.len() + chunk.len() > 2_097_152 {
             return Err("DESKTOP_AUTH_RESPONSE_INVALID".into());
         }
         bytes.extend_from_slice(&chunk);

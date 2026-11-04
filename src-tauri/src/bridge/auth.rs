@@ -60,6 +60,13 @@ pub async fn desktop_auth_access_token(
 }
 
 #[tauri::command]
+pub fn desktop_auth_api_base(
+    auth: tauri::State<'_, AuthService>,
+) -> Result<String, String> {
+    auth.api_base()
+}
+
+#[tauri::command]
 pub async fn desktop_auth_request(
     auth: tauri::State<'_, AuthService>,
     method: String,

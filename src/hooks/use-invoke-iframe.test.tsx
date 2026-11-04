@@ -55,12 +55,28 @@ describe('设置账号命令桥', () => {
     expect(auth.session).toBeNull()
   })
 
-  it('不会向帧开放 token 或任意鉴权请求命令', () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  it('鉴权业务请求命令按原参数转发给 Rust 并回传信封', async () => {
+    const envelope = { code: 0, msg: null, data: true }
+    bridge.invoke.mockResolvedValue(envelope)
     const postMessage = mount()
-    for (const cmd of ['desktop_auth_access_token', 'desktop_auth_request'])
-      bridge.receive!({ type: 'dsh://tauri:invoke', cmd, nonce: cmd }, { origin: 'http://127.0.0.1:3081' })
-    expect(bridge.invoke).not.toHaveBeenCalled()
-    expect(postMessage).not.toHaveBeenCalled()
+    bridge.receive!({ type: 'dsh://tauri:invoke', cmd: 'desktop_auth_request', nonce: 'save', args: { method: 'POST', path: '/api/employee-skills/user/TD000001', body: { skillNames: ['skill-a'] } } }, { origin: 'http://127.0.0.1:3081' })
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith({ type: 'dsh://tauri:reply', nonce: 'save', ok: true, value: envelope }, 'http://127.0.0.1:3081'))
+    expect(bridge.invoke).toHaveBeenCalledWith('desktop_auth_request', { method: 'POST', path: '/api/employee-skills/user/TD000001', body: { skillNames: ['skill-a'] } })
+  })
+
+  it('请求命令缺省方法与载荷时按 GET 空体转发', async () => {
+    bridge.invoke.mockResolvedValue({ code: 0, msg: null, data: null })
+    const postMessage = mount()
+    bridge.receive!({ type: 'dsh://tauri:invoke', cmd: 'desktop_auth_request', nonce: 'list', args: { path: '/api/employee-skills/common' } }, { origin: 'http://127.0.0.1:3081' })
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith({ type: 'dsh://tauri:reply', nonce: 'list', ok: true, value: { code: 0, msg: null, data: null } }, 'http://127.0.0.1:3081'))
+    expect(bridge.invoke).toHaveBeenCalledWith('desktop_auth_request', { method: 'GET', path: '/api/employee-skills/common', body: null })
+  })
+
+  it('访问令牌命令放行给帧内，供插件直连外部业务后端自附 Bearer', async () => {
+    bridge.invoke.mockResolvedValue('access-token')
+    const postMessage = mount()
+    bridge.receive!({ type: 'dsh://tauri:invoke', cmd: 'desktop_auth_access_token', nonce: 'token' }, { origin: 'http://127.0.0.1:3081' })
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith({ type: 'dsh://tauri:reply', nonce: 'token', ok: true, value: 'access-token' }, 'http://127.0.0.1:3081'))
+    expect(bridge.invoke).toHaveBeenCalledWith('desktop_auth_access_token', undefined)
   })
 })

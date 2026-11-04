@@ -1,0 +1,72 @@
+{
+  "name": "dsh-tauri-skill-hub",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "DSH Tauri 技能中心：以用户 id 为主线浏览企业公用技能与个人可用技能，并支持技能上传与用户授权管理。当前为 UI 阶段，数据由内存 mock 提供，Nacos 落库与用户信息接口已在传输层预留。",
+  "author": "Hairyf <wwu710632@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/dsh-tauri-desk/dsh-tauri-plugins#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-tauri-desk/dsh-tauri-plugins.git"
+  },
+  "bugs": "https://github.com/dsh-tauri-desk/dsh-tauri-plugins/issues",
+  "keywords": [
+    "dsh",
+    "plugin",
+    "dsh-plugin",
+    "skill",
+    "enterprise",
+    "nacos",
+    "tauri",
+    "deepseek-harness"
+  ],
+  "sideEffects": false,
+  "exports": {
+    ".": "./dist/index.js",
+    "./client": "./dist/client.cjs",
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "cordis.patch.yml",
+    "dist"
+  ],
+  "engines": {
+    "dsh": ">=0.1.7-rc.1"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-primitives",
+        "dsh-tauri",
+        "dsh-tauri-ui"
+      ],
+      "external": [
+        "dsh-tauri/client",
+        "dsh-tauri-ui/client"
+      ],
+      "platform": "web"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "prepublishOnly": "nr build",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc"
+  },
+  "devDependencies": {
+    "dsh-tauri": "workspace:*",
+    "dsh-tauri-tsdown": "workspace:*",
+    "dsh-tauri-ui": "workspace:*",
+    "react": "catalog:runtime",
+    "tsdown": "catalog:cli"
+  }
+}

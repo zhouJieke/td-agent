@@ -37,6 +37,13 @@ const ALLOWED_INVOKE_CMDS = new Set([
   'is_dev_build',
   'desktop_auth_employee',
   'desktop_auth_logout',
+  // 带登录态的同源业务请求：命令侧只放行 /api/** 并自动附 Bearer（见 service/auth.rs），token 不进帧内。
+  'desktop_auth_request',
+  // 取当前访问令牌：供帧内插件直连外部业务后端（如本地技能服务）时自附 Bearer。
+  // 注意：该命令会把 token 交给帧内，放宽了「token 不进前端」的限制，仅按需开放。
+  'desktop_auth_access_token',
+  // 暴露登录后端基地址，供插件日志输出完整绝对请求地址。
+  'desktop_auth_api_base',
   // dsh-tauri 客户端接管官方登录：账号流进入 waiting-browser 时把授权地址交给系统浏览器
   // （命令自身只放行 http(s)，见 bridge/system_os.rs）。
   'open_external_url',
@@ -45,6 +52,12 @@ const ALLOWED_INVOKE_CMDS = new Set([
   // 帧内据此命令读取系统剪贴板纯文本（命令侧无参、只读，见 bridge/clipboard.rs）。
   'read_clipboard_text',
 ])
+
+const AUTH_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
+
+function authMethodOf(value: unknown): typeof AUTH_METHODS[number] | undefined {
+  return AUTH_METHODS.find(method => method === value)
+}
 
 export function useInvokeIframe(iframeRef: RefObject<HTMLIFrameElement | null>): void {
   useIframeMessage<InvokeBridgeRequest>(iframeRef, (data, { origin }) => {
@@ -71,6 +84,8 @@ export function useInvokeIframe(iframeRef: RefObject<HTMLIFrameElement | null>):
       request = auth.employee()
     else if (cmd === 'desktop_auth_logout')
       request = auth.logout()
+    else if (cmd === 'desktop_auth_request')
+      request = auth.request(args?.path as string, { method: authMethodOf(args?.method), body: args?.body })
     else
       request = invoke<unknown>(cmd, args)
     void request
