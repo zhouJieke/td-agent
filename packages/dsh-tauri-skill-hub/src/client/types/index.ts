@@ -76,6 +76,12 @@ export interface EmployeeDeptVO {
   departmentName: string | null
 }
 
+/** 本地技能上传成功回执。 */
+export interface UploadedSkill {
+  skillName: string
+  version: string
+}
+
 /** Action 的统一返回面。 */
 export interface ActionResult {
   ok: boolean

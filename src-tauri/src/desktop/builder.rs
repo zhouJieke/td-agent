@@ -1528,6 +1528,7 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::bridge::desktop_auth_access_token,
         crate::bridge::desktop_auth_api_base,
         crate::bridge::desktop_auth_request,
+        crate::bridge::desktop_auth_upload,
         crate::bridge::install_dependencies,
         crate::bridge::check_dsh_update,
         crate::bridge::launch_harness,

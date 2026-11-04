@@ -23,6 +23,8 @@ const zh = {
   'enterprise.empty': '暂无企业公用技能。',
   'mine.hint': '{name} 已配置的技能及其全部版本。',
   'mine.empty': '当前还没有配置任何技能。',
+  'mine.upload': '上传技能',
+  'mine.uploading': '上传中…',
   'mine.noVersions': '（无版本）',
   'mine.version': '版本',
   'mine.status': '状态',
@@ -49,6 +51,7 @@ const zh = {
   'manage.emptyWarn': '保存空名单将清空该用户的全部技能',
   'manage.save': '保存名单',
   'feedback.saved': '已保存 {name} 的技能名单（{count} 个）',
+  'feedback.uploaded': '技能 {name} 已上传并发布（版本 {version}）',
   'feedback.failed': '操作失败',
 }
 
@@ -76,6 +79,8 @@ const en: Record<LocaleKey, string> = {
   'enterprise.empty': 'No enterprise skills yet.',
   'mine.hint': 'Skills configured for {name}, with all their versions.',
   'mine.empty': 'No skills configured yet.',
+  'mine.upload': 'Upload skill',
+  'mine.uploading': 'Uploading…',
   'mine.noVersions': '(no versions)',
   'mine.version': 'Version',
   'mine.status': 'Status',
@@ -102,6 +107,7 @@ const en: Record<LocaleKey, string> = {
   'manage.emptyWarn': 'Saving an empty roster clears all skills for this user',
   'manage.save': 'Save roster',
   'feedback.saved': 'Saved {count} skills for {name}',
+  'feedback.uploaded': 'Uploaded skill {name} (version {version})',
   'feedback.failed': 'Operation failed',
 }
 

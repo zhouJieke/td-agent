@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use reqwest::{Client, Method, Response, StatusCode, Url};
+use reqwest::{multipart::Part, Client, Method, Response, StatusCode, Url};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -224,6 +224,61 @@ impl AuthService {
             .send()
             .await
             .map_err(|_| "DESKTOP_AUTH_NETWORK".into())
+    }
+
+    async fn send_upload(
+        &self,
+        path: &str,
+        file_name: &str,
+        content_type: &str,
+        bytes: &[u8],
+        token: &str,
+    ) -> Result<Response, String> {
+        let base = self.endpoint()?;
+        let url = base
+            .join(path)
+            .map_err(|_| "DESKTOP_AUTH_REQUEST_INVALID")?;
+        if url.origin() != base.origin() {
+            return Err("DESKTOP_AUTH_REQUEST_INVALID".into());
+        }
+        let resolved_name = if file_name.trim().is_empty() {
+            "skill.zip"
+        } else {
+            file_name.trim()
+        };
+        let mut part = Part::bytes(bytes.to_vec()).file_name(resolved_name.to_string());
+        if !content_type.trim().is_empty() {
+            part = part
+                .mime_str(content_type.trim())
+                .map_err(|_| "DESKTOP_AUTH_REQUEST_INVALID")?;
+        }
+        let form = reqwest::multipart::Form::new().part("file", part);
+        Client::builder()
+            .timeout(Duration::from_secs(15))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|_| "DESKTOP_AUTH_NETWORK")?
+            .request(Method::POST, url)
+            .bearer_auth(token)
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|_| "DESKTOP_AUTH_NETWORK".into())
+    }
+
+    fn validate_api_path(&self, path: &str) -> Result<(), String> {
+        let base = self.endpoint()?;
+        let url = base
+            .join(path)
+            .map_err(|_| "DESKTOP_AUTH_REQUEST_INVALID")?;
+        if !path.starts_with("/api/")
+            || !url.path().starts_with("/api/")
+            || url.origin() != base.origin()
+            || url.fragment().is_some()
+        {
+            return Err("DESKTOP_AUTH_REQUEST_INVALID".into());
+        }
+        Ok(())
     }
 
     async fn post(&self, path: &str, body: Value) -> Result<Response, String> {
@@ -573,17 +628,7 @@ impl AuthService {
             "DELETE" => Method::DELETE,
             _ => return Err("DESKTOP_AUTH_REQUEST_INVALID".into()),
         };
-        let url = self
-            .endpoint()?
-            .join(path)
-            .map_err(|_| "DESKTOP_AUTH_REQUEST_INVALID")?;
-        if !path.starts_with("/api/")
-            || !url.path().starts_with("/api/")
-            || url.origin() != self.endpoint()?.origin()
-            || url.fragment().is_some()
-        {
-            return Err("DESKTOP_AUTH_REQUEST_INVALID".into());
-        }
+        self.validate_api_path(path)?;
         let mut token = self.access_token().await?;
         let mut response = self.send(method.clone(), path, &body, Some(&token)).await?;
         if response.status() == StatusCode::UNAUTHORIZED {
@@ -621,6 +666,51 @@ impl AuthService {
                 error
             }
         })
+    }
+
+    pub async fn upload(
+        &self,
+        path: &str,
+        file_name: &str,
+        content_type: &str,
+        body: Vec<u8>,
+    ) -> Result<Value, String> {
+        self.validate_api_path(path)?;
+        let mut token = self.access_token().await?;
+        let mut response = self
+            .send_upload(path, file_name, content_type, &body, &token)
+            .await?;
+        if response.status() == StatusCode::UNAUTHORIZED {
+            token = self
+                .current(Some(&token))
+                .await?
+                .map(|(_, token)| token)
+                .ok_or("DESKTOP_AUTH_SESSION_MISSING")?;
+            response = self
+                .send_upload(path, file_name, content_type, &body, &token)
+                .await?;
+            if response.status() == StatusCode::UNAUTHORIZED {
+                let mut tokens = self.tokens.lock().await;
+                if tokens
+                    .as_ref()
+                    .is_some_and(|current| current.data.access_token == token)
+                {
+                    self.invalidated.store(true, Ordering::Relaxed);
+                    *tokens = None;
+                    self.vault
+                        .access("session".into(), VaultAction::Delete)
+                        .await?;
+                }
+                return Err("DESKTOP_AUTH_SESSION_MISSING".into());
+            }
+        }
+        if !response.status().is_success() {
+            return Err(format!("DESKTOP_AUTH_HTTP_{}", response.status().as_u16()));
+        }
+        if response.status() == StatusCode::NO_CONTENT {
+            return Ok(Value::Null);
+        }
+        read_json(response).await
     }
 
     #[cfg(test)]

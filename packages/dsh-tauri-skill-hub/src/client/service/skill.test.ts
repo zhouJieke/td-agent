@@ -2,8 +2,8 @@ import type { EmployeeDeptVO, EmployeeProfile, SkillPage, UserSkillDetails } fro
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { store } from '../store'
 import { fetchAuth } from './auth'
-import { fetchCatalogSkills, fetchCommonSkills, fetchEmployees, fetchUserProfile, fetchUserSkills, saveUserSkills } from './remote'
-import { fetchSkillHub, loadSkillHub, saveUserSkillNames, selectManageUser } from './skill'
+import { fetchCatalogSkills, fetchCommonSkills, fetchEmployees, fetchUserProfile, fetchUserSkills, saveUserSkills, uploadSkillZip } from './remote'
+import { fetchSkillHub, loadSkillHub, saveUserSkillNames, selectManageUser, uploadMySkill } from './skill'
 
 vi.mock('./remote', () => ({
   fetchCommonSkills: vi.fn(),
@@ -12,6 +12,7 @@ vi.mock('./remote', () => ({
   fetchUserProfile: vi.fn(),
   saveUserSkills: vi.fn(),
   fetchEmployees: vi.fn(),
+  uploadSkillZip: vi.fn(),
 }))
 
 vi.mock('./auth', () => ({
@@ -71,6 +72,7 @@ beforeEach(() => {
   vi.mocked(fetchUserProfile).mockReset()
   vi.mocked(saveUserSkills).mockReset()
   vi.mocked(fetchEmployees).mockReset()
+  vi.mocked(uploadSkillZip).mockReset()
 })
 
 describe('登录态编排', () => {
@@ -184,7 +186,7 @@ describe('配置对象切换', () => {
 })
 
 describe('技能名单保存', () => {
-  it('保存成功后回拉最新名单，反馈名取「姓名 · 工号」', async () => {
+  it('保存成功后回拉最新名单，反馈名优先「姓名 · 部门」', async () => {
     store.skill.setEmployees(EMPLOYEES)
     vi.mocked(saveUserSkills).mockResolvedValue(true)
     vi.mocked(fetchUserSkills).mockResolvedValue(mine('E10001', ['a', 'b']))
@@ -195,7 +197,7 @@ describe('技能名单保存', () => {
     expect(vi.mocked(saveUserSkills)).toHaveBeenCalledWith('E10001', ['a', 'b'])
     expect(store.skill.mine?.skillNames).toEqual(['a', 'b'])
     expect(store.skill.manageMine?.skillNames).toEqual(['a', 'b'])
-    expect(store.skill.feedback).toMatchObject({ kind: 'saved', name: '张三 · E10001', count: 2 })
+    expect(store.skill.feedback).toMatchObject({ kind: 'saved', name: '张三 · 技术部', count: 2 })
   })
 
   it('保存他人名单时只更新目标名单，不动当前用户数据', async () => {
@@ -208,7 +210,7 @@ describe('技能名单保存', () => {
 
     expect(store.skill.mine?.skillNames).toEqual(['a'])
     expect(store.skill.manageMine?.skillNames).toEqual(['b'])
-    expect(store.skill.feedback).toMatchObject({ kind: 'saved', name: '李四 · E10002', count: 1 })
+    expect(store.skill.feedback).toMatchObject({ kind: 'saved', name: '李四', count: 1 })
   })
 
   it('保存失败给出 failed 反馈', async () => {
@@ -218,5 +220,33 @@ describe('技能名单保存', () => {
 
     expect(result).toEqual({ ok: false, error: '技能名称数组不能为空' })
     expect(store.skill.feedback).toMatchObject({ kind: 'failed', error: '技能名称数组不能为空' })
+  })
+})
+
+describe('我的技能上传', () => {
+  it('上传成功后刷新我的技能和全量目录，并给出 uploaded 反馈', async () => {
+    store.skill.setManageUser('E10001')
+    vi.mocked(uploadSkillZip).mockResolvedValue({ skillName: 'demo-skill', version: '1.0.0' })
+    vi.mocked(fetchUserSkills).mockResolvedValue(mine('E10001', ['a', 'demo-skill']))
+    vi.mocked(fetchCatalogSkills).mockResolvedValue(page(['a', 'demo-skill']))
+
+    const file = { name: 'demo.zip' } as File
+    const result = await uploadMySkill(file)
+
+    expect(result).toEqual({ ok: true })
+    expect(vi.mocked(uploadSkillZip)).toHaveBeenCalledWith(file)
+    expect(store.skill.mine?.skillNames).toEqual(['a', 'demo-skill'])
+    expect(store.skill.manageMine?.skillNames).toEqual(['a', 'demo-skill'])
+    expect(store.skill.catalog.map(item => item.name)).toEqual(['a', 'demo-skill'])
+    expect(store.skill.feedback).toMatchObject({ kind: 'uploaded', skillName: 'demo-skill', version: '1.0.0' })
+  })
+
+  it('上传失败给出 failed 反馈', async () => {
+    vi.mocked(uploadSkillZip).mockRejectedValue(new Error('技能 ZIP 不能为空且不能超过 10 MB'))
+
+    const result = await uploadMySkill({ name: 'bad.zip' } as File)
+
+    expect(result).toEqual({ ok: false, error: '技能 ZIP 不能为空且不能超过 10 MB' })
+    expect(store.skill.feedback).toMatchObject({ kind: 'failed', error: '技能 ZIP 不能为空且不能超过 10 MB' })
   })
 })

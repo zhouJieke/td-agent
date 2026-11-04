@@ -72,6 +72,16 @@ describe('设置账号命令桥', () => {
     expect(bridge.invoke).toHaveBeenCalledWith('desktop_auth_request', { method: 'GET', path: '/api/employee-skills/common', body: null })
   })
 
+  it('上传命令按原参数转发给 Rust 并回传信封', async () => {
+    const envelope = { code: 0, msg: null, data: { skillName: 'demo', version: '1.0.0' } }
+    bridge.invoke.mockResolvedValue(envelope)
+    const postMessage = mount()
+    const args = { path: '/api/employee-skills/upload', fileName: 'demo.zip', contentType: 'application/zip', body: [1, 2, 3] }
+    bridge.receive!({ type: 'dsh://tauri:invoke', cmd: 'desktop_auth_upload', nonce: 'upload', args }, { origin: 'http://127.0.0.1:3081' })
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith({ type: 'dsh://tauri:reply', nonce: 'upload', ok: true, value: envelope }, 'http://127.0.0.1:3081'))
+    expect(bridge.invoke).toHaveBeenCalledWith('desktop_auth_upload', args)
+  })
+
   it('访问令牌命令放行给帧内，供插件直连外部业务后端自附 Bearer', async () => {
     bridge.invoke.mockResolvedValue('access-token')
     const postMessage = mount()

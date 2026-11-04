@@ -1,6 +1,6 @@
 import { defineService } from 'dsh-tauri'
 
-const SKILL_BACKEND_BASE = 'http://127.0.0.1:8099'
+const DEFAULT_SKILL_BACKEND_BASE = 'http://127.0.0.1:8099'
 
 interface ProxyResult {
   status: number
@@ -31,6 +31,10 @@ export const employeeSkills = defineService({
   employees(authorization: string | undefined): Promise<ProxyResult> {
     return request('get', '/api/employee-skills/employees', authorization)
   },
+
+  upload(authorization: string | undefined, file: ArrayBuffer, contentType: string, backendBase?: string): Promise<ProxyResult> {
+    return requestRaw('post', '/api/employee-skills/upload', authorization, file, contentType, backendBase)
+  },
 })
 
 function pagingOf(pageNo?: string, pageSize?: string): string {
@@ -49,7 +53,7 @@ async function request(
   authorization: string | undefined,
   body?: unknown,
 ): Promise<ProxyResult> {
-  const response = await fetch(`${SKILL_BACKEND_BASE}${path}`, {
+  const response = await fetch(`${skillBackendBase()}${path}`, {
     method: method.toUpperCase(),
     headers: {
       ...(authorization === undefined ? {} : { authorization }),
@@ -58,6 +62,49 @@ async function request(
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
   return { status: response.status, payload: await payloadOf(response) }
+}
+
+async function requestRaw(
+  method: 'get' | 'post',
+  path: string,
+  authorization: string | undefined,
+  body: BodyInit,
+  contentType: string,
+  backendBase?: string,
+): Promise<ProxyResult> {
+  const response = await fetch(`${skillBackendBase(backendBase)}${path}`, {
+    method: method.toUpperCase(),
+    headers: {
+      ...(authorization === undefined ? {} : { authorization }),
+      ...(contentType.length === 0 ? {} : { 'content-type': contentType }),
+    },
+    body,
+  })
+  return { status: response.status, payload: await payloadOf(response) }
+}
+
+function skillBackendBase(overrideBase?: string): string {
+  const preferred = normalizeBase(overrideBase)
+  if (preferred !== null)
+    return preferred
+  const raw = process.env.DSH_SKILL_BACKEND_BASE_URL
+  return normalizeBase(raw) ?? DEFAULT_SKILL_BACKEND_BASE
+}
+
+function normalizeBase(raw: unknown): string | null {
+  if (typeof raw !== 'string' || raw.trim().length === 0)
+    return null
+  try {
+    const parsed = new URL(raw.trim())
+    if (!['http:', 'https:'].includes(parsed.protocol))
+      return null
+    if (parsed.username.length > 0 || parsed.password.length > 0)
+      return null
+    return parsed.toString().replace(/\/+$/, '')
+  }
+  catch {
+    return null
+  }
 }
 
 async function payloadOf(response: Response): Promise<unknown> {

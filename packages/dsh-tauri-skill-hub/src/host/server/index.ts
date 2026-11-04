@@ -4,6 +4,7 @@ import {
   commonSkillsGet,
   employeesGet,
   profileGet,
+  skillUploadPost,
   skillsCatalogGet,
   userSkillsGet,
   userSkillsPost,
@@ -17,4 +18,5 @@ export const server = defineWebServer((app) => {
   app.get('/api/tauri/skill-hub/employee-skills/user/:userId/profile', profileGet)
   app.post('/api/tauri/skill-hub/employee-skills/user/:userId', userSkillsPost)
   app.get('/api/tauri/skill-hub/employee-skills/employees', employeesGet)
+  app.post('/api/tauri/skill-hub/employee-skills/upload', skillUploadPost)
 })

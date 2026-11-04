@@ -1,6 +1,6 @@
 import type { EmployeeInfo } from 'dsh-tauri/client'
 import type { EmployeeDeptVO, EmployeeProfile, SkillSummary, SkillTab, UserSkillDetails } from '../../types'
-import type { SkillFeedbackKind, SkillHubState } from './skill.types'
+import type { SkillHubState } from './skill.types'
 import { defineStore } from 'dsh-tauri/client'
 
 export const skill = defineStore({
@@ -65,14 +65,30 @@ export const skill = defineStore({
       this.error = error
       this.loading = false
     },
-    notify(kind: SkillFeedbackKind, name = '', count = 0, error?: string) {
+    notifySaved(name: string, count: number) {
       this.feedbackSeq += 1
       this.feedback = {
         seq: this.feedbackSeq,
-        kind,
+        kind: 'saved',
         name,
         count,
-        ...(error === undefined ? {} : { error }),
+      }
+    },
+    notifyUploaded(skillName: string, version: string) {
+      this.feedbackSeq += 1
+      this.feedback = {
+        seq: this.feedbackSeq,
+        kind: 'uploaded',
+        skillName,
+        version,
+      }
+    },
+    notifyFailed(error: string) {
+      this.feedbackSeq += 1
+      this.feedback = {
+        seq: this.feedbackSeq,
+        kind: 'failed',
+        error,
       }
     },
     dismissFeedback(seq?: number) {

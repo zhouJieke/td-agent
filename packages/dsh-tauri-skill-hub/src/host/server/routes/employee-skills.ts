@@ -49,3 +49,12 @@ export const employeesGet = defineEventHandler(async (event) => {
   event.res.status = status
   return payload
 })
+
+export const skillUploadPost = defineEventHandler(async (event) => {
+  const contentType = event.req.headers.get('content-type') ?? ''
+  const backendBase = event.req.headers.get('x-skill-backend-base') ?? undefined
+  const file = await event.req.arrayBuffer()
+  const { status, payload } = await employeeSkills.upload(authOf(event), file, contentType, backendBase)
+  event.res.status = status
+  return payload
+})

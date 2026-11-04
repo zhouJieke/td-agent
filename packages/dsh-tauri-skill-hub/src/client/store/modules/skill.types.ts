@@ -1,19 +1,28 @@
 import type { EmployeeInfo } from 'dsh-tauri/client'
 import type { EmployeeDeptVO, EmployeeProfile, SkillSummary, SkillTab, UserSkillDetails } from '../../types'
 
-/** 一次用户可感知的操作结果，由 Toast 呈现（kind → 文案在面板里查词典）。 */
-export type SkillFeedbackKind = 'saved' | 'failed'
-
-export interface SkillFeedback {
+export interface SkillSavedFeedback {
   seq: number
-  kind: SkillFeedbackKind
-  /** 被配置用户的展示名。 */
+  kind: 'saved'
   name: string
-  /** 保存后的技能条数。 */
   count: number
-  /** `failed` 的原始错误信息。 */
-  error?: string
 }
+
+export interface SkillUploadedFeedback {
+  seq: number
+  kind: 'uploaded'
+  skillName: string
+  version: string
+}
+
+export interface SkillFailedFeedback {
+  seq: number
+  kind: 'failed'
+  error: string
+}
+
+/** 一次用户可感知的操作结果，由 Toast 呈现（kind → 文案在面板里查词典）。 */
+export type SkillFeedback = SkillSavedFeedback | SkillUploadedFeedback | SkillFailedFeedback
 
 /** 面板可变状态：三份接口数据是唯一真值，页签与检索词是视图状态。 */
 export interface SkillHubState {

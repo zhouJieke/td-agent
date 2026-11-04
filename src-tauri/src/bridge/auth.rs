@@ -76,6 +76,17 @@ pub async fn desktop_auth_request(
     auth.request(&method, &path, body).await
 }
 
+#[tauri::command]
+pub async fn desktop_auth_upload(
+    auth: tauri::State<'_, AuthService>,
+    path: String,
+    file_name: String,
+    content_type: String,
+    body: Vec<u8>,
+) -> Result<serde_json::Value, String> {
+    auth.upload(&path, &file_name, &content_type, body).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,6 +103,7 @@ mod tests {
         let handler: fn(tauri::ipc::Invoke<tauri::test::MockRuntime>) -> bool = tauri::generate_handler![
             desktop_auth_access_token,
             desktop_auth_request,
+            desktop_auth_upload,
             desktop_auth_employee
         ];
         let app = mock_builder()
@@ -108,6 +120,7 @@ mod tests {
         for command in [
             "desktop_auth_access_token",
             "desktop_auth_request",
+            "desktop_auth_upload",
             "desktop_auth_employee",
         ] {
             for (origin, allowed) in [
@@ -115,6 +128,16 @@ mod tests {
                 ("tauri://localhost", true),
             ] {
                 reached.store(false, Ordering::Relaxed);
+                let body = if command == "desktop_auth_upload" {
+                    serde_json::json!({
+                        "path": "/api/employee-skills/upload",
+                        "fileName": "demo.zip",
+                        "contentType": "application/zip",
+                        "body": [1, 2, 3]
+                    })
+                } else {
+                    serde_json::json!({"method":"GET","path":"/api/private","body":null})
+                };
                 let origin = if allowed && cfg!(any(windows, target_os = "android")) {
                     "http://tauri.localhost"
                 } else {
@@ -127,9 +150,7 @@ mod tests {
                         callback: tauri::ipc::CallbackFn(0),
                         error: tauri::ipc::CallbackFn(1),
                         url: origin.parse().unwrap(),
-                        body: tauri::ipc::InvokeBody::Json(
-                            serde_json::json!({"method":"GET","path":"/api/private","body":null}),
-                        ),
+                        body: tauri::ipc::InvokeBody::Json(body),
                         headers: Default::default(),
                         invoke_key: INVOKE_KEY.into(),
                     },

@@ -1,9 +1,9 @@
-import type { EmployeeDeptVO, EmployeeProfile, SkillPage, UserSkillDetails } from '../types'
+import type { EmployeeDeptVO, EmployeeProfile, SkillPage, UploadedSkill, UserSkillDetails } from '../types'
 import { invoke } from 'dsh-tauri/client'
 import { PAGE_SIZE, SKILL_API_BASE } from '../constants'
 
 /**
- * service/remote.ts — 传输层：技能数据经宿主同源代理转发
+ * service/remote.ts — 传输层：技能数据统一经 Rust 鉴权命令转发
  * `SKILL_API_BASE`（/api）的 `/employee-skills/**`。
  *
  * 鉴权：业务请求统一走 `desktop_auth_request`，由 Rust 侧自动携带 Bearer 并处理续期；
@@ -36,6 +36,12 @@ function authApiBase(): Promise<string> {
   return authApiBasePromise
 }
 
+function unwrapEnvelope<T>(envelope: Envelope<T>): T {
+  if (envelope.code !== 0)
+    throw new Error(envelope.msg ?? 'SKILL_REQUEST_FAILED')
+  return envelope.data as T
+}
+
 async function call<T>(method: 'get' | 'post', path: string, body?: unknown): Promise<T> {
   const url = `${SKILL_API_BASE}${path}`
   const base = await authApiBase()
@@ -54,9 +60,35 @@ async function call<T>(method: 'get' | 'post', path: string, body?: unknown): Pr
     throw error
   }
   console.warn(`[skill-hub] response ${method.toUpperCase()} ${absoluteUrl}`, envelope)
-  if (envelope.code !== 0)
-    throw new Error(envelope.msg ?? 'SKILL_REQUEST_FAILED')
-  return envelope.data as T
+  return unwrapEnvelope(envelope)
+}
+
+async function upload<T>(file: File): Promise<T> {
+  const path = `${SKILL_API_BASE}/employee-skills/upload`
+  const base = await authApiBase()
+  const absoluteUrl = base.length > 0 ? `${base}${path}` : path
+  const body = Array.from(new Uint8Array(await file.arrayBuffer()))
+  console.warn(`[skill-hub] request POST ${absoluteUrl}`)
+  let envelope: Envelope<T>
+  try {
+    envelope = await invoke<Envelope<T>>('desktop_auth_upload', {
+      path,
+      fileName: file.name,
+      contentType: file.type,
+      body,
+    })
+  }
+  catch (error) {
+    console.warn(`[skill-hub] response POST ${absoluteUrl} failed`, error)
+    const message = String(error)
+    if (message === 'DESKTOP_AUTH_SESSION_MISSING')
+      throw new Error('登录状态已失效，请重新登录')
+    if (message === 'DESKTOP_AUTH_HTTP_404')
+      throw new Error('上传接口不存在：POST /api/employee-skills/upload')
+    throw error
+  }
+  console.warn(`[skill-hub] response POST ${absoluteUrl}`, envelope)
+  return unwrapEnvelope(envelope)
 }
 
 function pageQuery({ pageNo, pageSize }: SkillPageQuery): string {
@@ -107,4 +139,9 @@ export function saveUserSkills(userId: string, skillNames: readonly string[]): P
 /** 接口 6：全量员工姓名与部门（一次返回，不分页；只取在职员工）。 */
 export function fetchEmployees(): Promise<EmployeeDeptVO[]> {
   return call<EmployeeDeptVO[]>('get', '/employee-skills/employees')
+}
+
+/** 接口 7：上传本地技能 ZIP。 */
+export function uploadSkillZip(file: File): Promise<UploadedSkill> {
+  return upload<UploadedSkill>(file)
 }

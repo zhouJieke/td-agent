@@ -2,7 +2,7 @@ import type { ActionResult } from '../types'
 import { store } from '../store'
 import { employeeLabel, findEmployee } from '../store/modules/skill.utils'
 import { fetchAuth } from './auth'
-import { fetchCatalogSkills, fetchCommonSkills, fetchEmployees, fetchUserProfile, fetchUserSkills, saveUserSkills } from './remote'
+import { fetchCatalogSkills, fetchCommonSkills, fetchEmployees, fetchUserProfile, fetchUserSkills, saveUserSkills, uploadSkillZip } from './remote'
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -10,7 +10,7 @@ function messageOf(error: unknown): string {
 
 function fail(error: unknown): ActionResult {
   const message = messageOf(error)
-  store.skill.notify('failed', '', 0, message)
+  store.skill.notifyFailed(message)
   return { ok: false, error: message }
 }
 
@@ -66,7 +66,7 @@ export async function selectManageUser(userId: string): Promise<void> {
   }
   catch (error) {
     store.skill.setManageMine(null)
-    store.skill.notify('failed', '', 0, messageOf(error))
+    store.skill.notifyFailed(messageOf(error))
   }
   finally {
     store.skill.setManageLoading(false)
@@ -82,7 +82,29 @@ export async function saveUserSkillNames(userId: string, skillNames: readonly st
       store.skill.setMine(mine)
     store.skill.setManageMine(mine)
     const label = employeeLabel(findEmployee(store.skill.employees, userId), userId)
-    store.skill.notify('saved', label, mine.skillNames.length)
+    store.skill.notifySaved(label, mine.skillNames.length)
+    return { ok: true }
+  }
+  catch (error) {
+    return fail(error)
+  }
+}
+
+export async function uploadMySkill(file: File): Promise<ActionResult> {
+  const userId = store.skill.employee?.employeeNumber
+  if (typeof userId !== 'string' || userId.trim().length === 0)
+    return fail(new Error('请先登录'))
+  try {
+    const uploaded = await uploadSkillZip(file)
+    const [mine, catalog] = await Promise.all([
+      fetchUserSkills(userId),
+      fetchCatalogSkills(),
+    ])
+    store.skill.setMine(mine)
+    if (userId === store.skill.manageUserId)
+      store.skill.setManageMine(mine)
+    store.skill.setCatalog(catalog.items)
+    store.skill.notifyUploaded(uploaded.skillName, uploaded.version)
     return { ok: true }
   }
   catch (error) {

@@ -1,9 +1,10 @@
-import type { ReactElement } from 'react'
+import type { ChangeEvent, ReactElement } from 'react'
 import type { Translate } from '../locales/index.types'
 import type { SkillDetail, UserSkillDetails } from '../types'
-import { Action, Card, ChevronDown, GraduationCap, Icon, Tag, Text, TriangleExclamation } from 'dsh-tauri-ui/client'
+import { Action, Button, Card, ChevronDown, GraduationCap, Icon, Tag, Text, TriangleExclamation } from 'dsh-tauri-ui/client'
 import { isEmpty } from 'dsh-tauri/client'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { uploadMySkill } from '../service/skill'
 import { skillTitle } from '../store/modules/skill.utils'
 
 interface MineViewProps {
@@ -83,9 +84,31 @@ function DetailCard({ t, detail }: { t: Translate, detail: SkillDetail }): React
 }
 
 export function MineView({ t, mine, hint, emptyText }: MineViewProps): ReactElement {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [pending, setPending] = useState(false)
+
+  async function pick(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (file === undefined)
+      return
+    setPending(true)
+    try {
+      await uploadMySkill(file)
+    }
+    finally {
+      setPending(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-[12px]">
-      <p className="m-0 text-secondary text-[13px] leading-[20px]">{hint}</p>
+      <div className="flex flex-wrap items-center justify-between gap-[8px]">
+        <p className="m-0 text-secondary text-[13px] leading-[20px]">{hint}</p>
+        <Button type="button" variant="add" disabled={pending} onClick={() => fileRef.current?.click()}>
+          {pending ? t('mine.uploading') : t('mine.upload')}
+        </Button>
+      </div>
       {mine === null || mine.skills.length === 0
         ? <Text tone="tertiary" size="sm" className="py-[32px] text-center">{emptyText}</Text>
         : (
@@ -111,6 +134,13 @@ export function MineView({ t, mine, hint, emptyText }: MineViewProps): ReactElem
               ))}
             </div>
           )}
+      <input
+        ref={fileRef}
+        type="file"
+        hidden
+        accept=".zip,application/zip,application/x-zip-compressed"
+        onChange={(event) => { void pick(event) }}
+      />
     </div>
   )
 }

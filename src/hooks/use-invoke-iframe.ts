@@ -39,6 +39,8 @@ const ALLOWED_INVOKE_CMDS = new Set([
   'desktop_auth_logout',
   // 带登录态的同源业务请求：命令侧只放行 /api/** 并自动附 Bearer（见 service/auth.rs），token 不进帧内。
   'desktop_auth_request',
+  // 上传文件走 Rust 侧 multipart 转发，保持与 desktop_auth_request 一致的后端基址与鉴权。
+  'desktop_auth_upload',
   // 取当前访问令牌：供帧内插件直连外部业务后端（如本地技能服务）时自附 Bearer。
   // 注意：该命令会把 token 交给帧内，放宽了「token 不进前端」的限制，仅按需开放。
   'desktop_auth_access_token',

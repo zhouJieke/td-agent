@@ -16,8 +16,10 @@ function feedbackText(feedback: SkillFeedback, t: Translate): string {
   switch (feedback.kind) {
     case 'saved':
       return t('feedback.saved', { name: feedback.name, count: feedback.count })
+    case 'uploaded':
+      return t('feedback.uploaded', { name: feedback.skillName, version: feedback.version })
     case 'failed':
-      return `${t('feedback.failed')}${feedback.error === undefined ? '' : `: ${feedback.error}`}`
+      return `${t('feedback.failed')}: ${feedback.error}`
   }
 }
 
