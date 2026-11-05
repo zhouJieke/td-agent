@@ -698,6 +698,9 @@ pub async fn launch(app_handle: tauri::AppHandle) -> Result<(), String> {
     if let Err(e) = crate::service::patch::renderer::apply(&app_handle) {
         log::warn!("renderer SlotOutlet patch failed: {e}");
     }
+    if let Err(e) = crate::service::patch::branding::apply(&app_handle) {
+        log::warn!("desktop branding patch failed: {e}");
+    }
     // composer 可用性：官方 ConversationRoot 对「不属于任何工作区的空白会话」把
     // composer 换成「选择工作区」触发器（`inert` 只看 chipTitle，而 chipTitle 只来自
     // 工作区），于是 dsh-tauri-ui 的「未分组」新会话无法输入。补丁放宽该判定（会话已有

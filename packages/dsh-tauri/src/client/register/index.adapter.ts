@@ -523,6 +523,9 @@ export function defineAdapter(ctx: unknown, options: DefineAdapterOptions = {}):
   const sessions = surface.sessions ?? {}
   const workspaces = surface.workspaces ?? {}
   const capabilityChecks: Record<AdapterCapability, () => boolean> = {
+    'branding.desktop': () => typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).has('dshDesktop')
+      && !('ReactNativeWebView' in window),
     'sessions.list': () => typeof sessions.list?.getSnapshot === 'function',
     'sessions.provideInfo': () => typeof sessions.provideInfo === 'function',
     'sessions.create': () => typeof sessions.create === 'function',

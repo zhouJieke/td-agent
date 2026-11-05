@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "DSH Tauri",
+  "productName": "Td-Agent",
   "version": "0.24.6-beta.1",
   "identifier": "dsh-tauri",
   "build": {
@@ -76,7 +76,7 @@
         "componentRefs": ["CleanupLegacyShortcuts"]
       }
     },
-    "shortDescription": "Desktop application for DeepSeek Harness",
-    "longDescription": "A native desktop application for running DeepSeek Harness (dsh) locally with one-click install and zero configuration."
+    "shortDescription": "Td-Agent AI desktop workspace",
+    "longDescription": "Td-Agent is a native AI desktop workspace powered by DeepSeek Harness (dsh), with one-click local setup."
   }
 }

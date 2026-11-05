@@ -84,22 +84,22 @@ export function SkillHubPanel({ t }: { t: Translate }): ReactElement {
                     {state.loading && state.common.length === 0
                       ? <Text tone="tertiary" size="sm">{t('loading')}</Text>
                       : activeTab === 'mine'
-                          ? (
-                              <MineView
-                                t={t}
-                                mine={state.mine}
-                                hint={t('mine.hint', { name: displayName })}
-                                emptyText={t('mine.empty')}
-                              />
-                            )
-                          : (
-                              <SkillCatalog
-                                t={t}
-                                hint={t('enterprise.hint')}
-                                skills={state.common}
-                                emptyText={t('enterprise.empty')}
-                              />
-                            )}
+                        ? (
+                            <MineView
+                              t={t}
+                              mine={state.mine}
+                              hint={t('mine.hint', { name: displayName })}
+                              emptyText={t('mine.empty')}
+                            />
+                          )
+                        : (
+                            <SkillCatalog
+                              t={t}
+                              hint={t('enterprise.hint')}
+                              skills={state.common}
+                              emptyText={t('enterprise.empty')}
+                            />
+                          )}
                   </div>
                 </>
               )}

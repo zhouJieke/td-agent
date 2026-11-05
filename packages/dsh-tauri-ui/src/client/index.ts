@@ -3,6 +3,7 @@ import type { ClientContext } from 'dsh-tauri/client'
 import { PLUGIN_ID } from '../shared/constants'
 import { HERO_WORKSPACE_EFFECT, LOCALE_EFFECT, NEW_SESSION_EFFECT, OBSTRUCTIONS_EFFECT, SECTIONS_EFFECT, SETTINGS_EFFECT, SETTINGS_OPEN_EFFECT, STYLES_EFFECT, UNGROUPED_NEW_SESSION_EFFECT } from './constants'
 import { locale } from './locales'
+import { registerBranding } from './register/branding'
 import { composerResumeFeature } from './register/composer-resume'
 import { registerContinueNotice } from './register/continue-notice'
 import { registerDesktopSettings } from './register/desktop-settings'
@@ -36,6 +37,7 @@ const COMPOSER_RESUME_EFFECT = `${PLUGIN_ID}: composer resume`
 const CONTINUE_NOTICE_EFFECT = `${PLUGIN_ID}: continue notice`
 
 export function apply(ctx: ClientContext): void {
+  ctx.effect(registerBranding, `${PLUGIN_ID}: branding`)
   ctx.effect(locale.registerLocale, LOCALE_EFFECT)
   ctx.effect(registerStyles, STYLES_EFFECT)
   ctx.effect(registerSettingsSections, SECTIONS_EFFECT)

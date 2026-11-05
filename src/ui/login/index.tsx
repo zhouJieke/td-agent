@@ -182,7 +182,7 @@ export function Login({ onContinue }: { onContinue: () => void }) {
       <header className="login-header">
         <div className="login-brand">
           <img src="/favicon.svg" alt="" width="32" height="32" />
-          <span>HARNESS</span>
+          <span>{t('app.name')}</span>
           <span className="login-desktop-label">{t('login.desktop')}</span>
         </div>
         <div className="login-header-actions">

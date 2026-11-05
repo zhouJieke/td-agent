@@ -4,8 +4,8 @@ import {
   commonSkillsGet,
   employeesGet,
   profileGet,
-  skillUploadPost,
   skillsCatalogGet,
+  skillUploadPost,
   userSkillsGet,
   userSkillsPost,
 } from './routes/employee-skills'

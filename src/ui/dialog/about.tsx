@@ -9,6 +9,7 @@ import { useStore } from 'valtio-define'
 import { Info } from '@/components/info'
 import { store } from '@/store'
 import { silence } from '@/utils/silence'
+import { BRAND_NAME } from '../../../assets/branding'
 
 export interface DesktopAboutDialogProps extends PropsWithOverlays {}
 
@@ -39,7 +40,7 @@ export function DesktopAboutDialog(props: DesktopAboutDialogProps) {
                 <img src="/favicon.svg" alt={t('about.title')} className="w-12 h-12 rounded-md" />
 
                 <div className="text-base font-semibold text-ink">
-                  {about?.poweredBy ?? 'DeepSeek Harness Desktop'}
+                  {about?.poweredBy ?? BRAND_NAME}
                 </div>
                 <Description className="text-xs">
                   {t('about.powered_by')}
