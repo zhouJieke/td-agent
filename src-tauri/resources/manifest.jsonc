@@ -118,6 +118,18 @@
         "repo": "https://github.com/dsh-tauri-desk/deepseek-harness-desktop/tree/main/packages/dsh-tauri-scheduler"
       },
       {
+        "id": "dsh-tauri-skill-hub",
+        "spec": "dsh-tauri-skill-hub",
+        "name": "DSH Tauri Skill Hub",
+        "repo": "https://gitee.com/zhaoq20205/deepseek-harness-desktop/tree/master-plus-v.0.0.1/packages/dsh-tauri-skill-hub"
+      },
+      {
+        "id": "dsh-tauri-token-stats",
+        "spec": "dsh-tauri-token-stats",
+        "name": "DSH Tauri Token Stats",
+        "repo": "https://gitee.com/zhaoq20205/deepseek-harness-desktop/tree/master-plus-v.0.0.1/packages/dsh-tauri-token-stats"
+      },
+      {
         "id": "dsh-tauri-archive",
         "spec": "dsh-tauri-archive",
         "name": "DSH Tauri Archive",

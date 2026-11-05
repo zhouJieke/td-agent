@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { readManifest } from '../scripts/bundle-metadata.mjs'
 
 const BUNDLE_MANIFEST = new URL('../packages/dsh-tauri-bundle/package.json', import.meta.url)
 const RESOURCE_NODE_MODULES = new URL('../src-tauri/resources/node_modules/', import.meta.url)
@@ -32,6 +33,12 @@ function packageJsonFiles(root: URL): string[] {
   }
   return files
 }
+
+it('registers every shipped desktop plugin in the startup manifest', () => {
+  const manifest = readManifest(fileURLToPath(new URL('../', import.meta.url)))
+  const plugins = manifest.plugins as { 'built-in': Array<{ id: string }> }
+  expect(plugins['built-in'].map(plugin => plugin.id).sort()).toEqual(bundledPluginNames().sort())
+})
 
 describe.skipIf(!BUILT)('bundled plugin resource closure', () => {
   it('contains every bundled plugin with a valid entry', () => {

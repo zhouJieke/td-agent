@@ -30,47 +30,6 @@ pub struct LatestDshPkg {
     pub digest: Option<String>,
 }
 
-fn oss_pkg_info(version: &str, asset_url: String, checksums: &str) -> Result<LatestDshPkg, String> {
-    semver::Version::parse(version).map_err(|e| format!("DSH_OSS_VERSION_INVALID: {e}"))?;
-    let filename = asset_url.rsplit('/').next().unwrap_or_default();
-    let digest = checksums
-        .lines()
-        .filter_map(|line| line.split_once(char::is_whitespace))
-        .find_map(|(digest, name)| {
-            (name.trim_start_matches([' ', '*']) == filename).then_some(digest)
-        })
-        .filter(|digest| digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()))
-        .ok_or_else(|| format!("DSH_OSS_CHECKSUM_INVALID: missing valid SHA-256 for {filename}"))?
-        .to_ascii_lowercase();
-    Ok(LatestDshPkg {
-        tag: format!("dsh-{version}-oss{digest}"),
-        commit: digest.clone(),
-        asset_url,
-        digest: Some(format!("sha256:{digest}")),
-    })
-}
-
-async fn fetch_oss_dsh_pkg(app_handle: &tauri::AppHandle) -> Result<LatestDshPkg, String> {
-    let version = config::recommended_dsh_version(app_handle)
-        .ok_or("DSH_OSS_VERSION_MISSING: recommended core version is not configured")?;
-    let asset_url = config::get_dsh_download_url()?;
-    let checksums = config::proxy::http_client_builder(app_handle)?
-        .user_agent("deepseek-harness-desktop")
-        .timeout(std::time::Duration::from_secs(20))
-        .build()
-        .map_err(|e| format!("DSH_OSS_CHECKSUM_FAILED: {e}"))?
-        .get(format!("{asset_url}.sha256"))
-        .send()
-        .await
-        .map_err(|e| format!("DSH_OSS_CHECKSUM_FAILED: {e}"))?
-        .error_for_status()
-        .map_err(|e| format!("DSH_OSS_CHECKSUM_FAILED: {e}"))?
-        .text()
-        .await
-        .map_err(|e| format!("DSH_OSS_CHECKSUM_FAILED: {e}"))?;
-    oss_pkg_info(&version, asset_url, &checksums)
-}
-
 /// 构造带 User-Agent 与超时的 GitHub 请求客户端。
 fn github_client(app_handle: &tauri::AppHandle) -> Result<reqwest::Client, String> {
     config::proxy::http_client_builder(app_handle)?
@@ -286,9 +245,6 @@ async fn fetch_dsh_digest_from_expanded_assets(
 pub async fn fetch_latest_dsh_pkg_info(
     app_handle: &tauri::AppHandle,
 ) -> Result<LatestDshPkg, String> {
-    if config::use_oss_dsh_core() {
-        return fetch_oss_dsh_pkg(app_handle).await;
-    }
     let client = github_client(app_handle)?;
     let expected_name = config::get_dsh_download_url()?
         .rsplit('/')
@@ -459,13 +415,6 @@ pub async fn fetch_dsh_pkg_asset(
     app_handle: &tauri::AppHandle,
     tag: &str,
 ) -> Result<LatestDshPkg, String> {
-    if config::use_oss_dsh_core() {
-        let info = fetch_oss_dsh_pkg(app_handle).await?;
-        if info.tag != tag {
-            return Err(format!("DSH_OSS_VERSION_UNAVAILABLE: {tag} is no longer available from the configured OSS source"));
-        }
-        return Ok(info);
-    }
     let client = github_client(app_handle)?;
     let expected_name = config::get_dsh_download_url()?
         .rsplit('/')
@@ -675,9 +624,6 @@ pub fn resolve_update(
     if record_matches_latest_release(record_commit, record_tag, latest) {
         return UpdateCheck::UpToDate;
     }
-    if latest.asset_url.starts_with(config::DSH_CORE_OSS_URL) {
-        return UpdateCheck::UpdateAvailable;
-    }
     // 文件已经是“最新版本”，此时需要甄别记录是否滞后（同样按语义化版本比较）
     let record_behind_latest = |record_version: &str| -> bool {
         match (
@@ -762,13 +708,6 @@ async fn fetch_dsh_pkg_releases_from_html(
 pub async fn fetch_dsh_pkg_releases(
     app_handle: &tauri::AppHandle,
 ) -> Result<Vec<DshPkgReleaseMeta>, String> {
-    if config::use_oss_dsh_core() {
-        let info = fetch_oss_dsh_pkg(app_handle).await?;
-        return Ok(vec![DshPkgReleaseMeta {
-            prerelease: is_preview_tag(&info.tag),
-            tag: info.tag,
-        }]);
-    }
     let client = github_client(app_handle)?;
     let mut all_releases = Vec::new();
     let mut page = 1;
@@ -833,10 +772,6 @@ pub async fn fetch_dsh_pkg_releases(
 pub async fn fetch_dsh_pkg_tags(
     app_handle: &tauri::AppHandle,
 ) -> Result<Vec<(String, String)>, String> {
-    if config::use_oss_dsh_core() {
-        let info = fetch_oss_dsh_pkg(app_handle).await?;
-        return Ok(vec![(info.tag, info.commit)]);
-    }
     let client = github_client(app_handle)?;
     let tags: serde_json::Value = github_api_get(
         &client,
@@ -863,100 +798,6 @@ pub async fn fetch_dsh_pkg_tags(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn oss_metadata_uses_checksum_identity_and_preserves_core_version() {
-        let asset = format!(
-            "{}deepseek-harness-pkg-macos-arm64.zip",
-            config::DSH_CORE_OSS_URL
-        );
-        let digest = "2f49723dac9271747d4baeda537ab08b59820e43a8bcfbd3ccf00f12c129c581";
-        let body = format!("{digest}  deepseek-harness-pkg-macos-arm64.zip\n");
-        let info = oss_pkg_info("0.2.1-rc.2", asset.clone(), &body).unwrap();
-        assert_eq!(info.asset_url, asset);
-        assert_eq!(
-            info.digest.as_deref(),
-            Some(format!("sha256:{digest}").as_str())
-        );
-        assert_eq!(info.commit, digest);
-        assert_eq!(info.tag, format!("dsh-0.2.1-rc.2-oss{digest}"));
-        assert_eq!(
-            parse_version_from_tag(&info.tag).as_deref(),
-            Some("0.2.1-rc.2")
-        );
-        assert!(!is_preview_tag(&info.tag));
-        assert_eq!(
-            resolve_update(None, None, Some("0.2.1-rc.2"), &info, &[]),
-            UpdateCheck::UpdateAvailable
-        );
-        assert_eq!(
-            resolve_update(
-                Some(&info.commit),
-                Some(&info.tag),
-                Some("0.2.1-rc.2"),
-                &info,
-                &[]
-            ),
-            UpdateCheck::UpToDate
-        );
-        assert_eq!(
-            resolve_update(
-                Some("upstream"),
-                Some("dsh-0.2.1-rc.2-previous"),
-                Some("0.2.1-rc.2"),
-                &info,
-                &[]
-            ),
-            UpdateCheck::UpdateAvailable
-        );
-        let changed = oss_pkg_info(
-            "0.2.1-rc.2",
-            asset,
-            &format!("{}  deepseek-harness-pkg-macos-arm64.zip", "a".repeat(64)),
-        )
-        .unwrap();
-        assert_eq!(
-            resolve_update(
-                Some(&info.commit),
-                Some(&info.tag),
-                Some("0.2.1-rc.2"),
-                &changed,
-                &[]
-            ),
-            UpdateCheck::UpdateAvailable
-        );
-    }
-
-    #[test]
-    fn oss_metadata_rejects_missing_malformed_and_wrong_asset_checksums() {
-        let asset = format!(
-            "{}deepseek-harness-pkg-macos-arm64.zip",
-            config::DSH_CORE_OSS_URL
-        );
-        for body in [
-            String::new(),
-            "invalid  deepseek-harness-pkg-macos-arm64.zip".to_string(),
-            format!("{}  other.zip", "a".repeat(64)),
-            format!("{}  deepseek-harness-pkg-macos-arm64.zip", "g".repeat(64)),
-        ] {
-            assert!(oss_pkg_info("0.2.1-rc.2", asset.clone(), &body)
-                .unwrap_err()
-                .starts_with("DSH_OSS_CHECKSUM_INVALID:"));
-        }
-        let body = format!(
-            "{} *deepseek-harness-pkg-macos-arm64.zip\r\n",
-            "A".repeat(64)
-        );
-        assert_eq!(
-            oss_pkg_info("0.2.1-rc.2", asset.clone(), &body)
-                .unwrap()
-                .commit,
-            "a".repeat(64)
-        );
-        assert!(oss_pkg_info("invalid", asset, &body)
-            .unwrap_err()
-            .starts_with("DSH_OSS_VERSION_INVALID:"));
-    }
 
     fn latest(tag: &str, commit: &str) -> LatestDshPkg {
         LatestDshPkg {

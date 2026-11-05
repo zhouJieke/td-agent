@@ -171,18 +171,22 @@ describe('navbar build channel', () => {
     expect(screen.queryByTestId('navbar-test-update-dialog')).toBeNull()
   })
 
-  it('stable keeps its success update chip and opens the update dialog on click', async () => {
+  it('stable hides the update chip while manual checks still open the update dialog', async () => {
     desktopUpdater.updateInfo = UPDATE_INFO
+    checkDesktopUpdate.mockResolvedValue(UPDATE_INFO)
+    await client.prefetchQuery({ queryKey: queryKeys.appIdentifier, queryFn: getIdentifier })
     renderNavbar()
 
-    const chip = (await screen.findByText('更新可用')).closest('[data-slot="chip"]')!
-    expect(chip.classList.contains('chip--success')).toBe(true)
+    expect(screen.queryByText('更新可用')).toBeNull()
     expect(screen.queryByText('夜间构建版本')).toBeNull()
-    fireEvent.click(chip)
+    fireEvent.click(await screen.findByTestId('dsh-navbar-menu-help'))
+    fireEvent.click(await screen.findByTestId('dsh-navbar-item-check-update'))
     await screen.findByTestId('navbar-test-update-dialog')
+    expect(checkDesktopUpdate).toHaveBeenCalledOnce()
+    expect(screen.queryByText('更新可用')).toBeNull()
   })
 
-  it('stable adds and removes the update chip when updateInfo changes', async () => {
+  it('stable keeps the update chip hidden when updateInfo changes', async () => {
     renderNavbar()
     await waitFor(() => expect(client.getQueryState(queryKeys.appIdentifier)?.status).toBe('success'))
     expect(screen.queryByText('更新可用')).toBeNull()
@@ -191,7 +195,7 @@ describe('navbar build channel', () => {
     act(() => {
       desktopUpdater.updateInfo = UPDATE_INFO
     })
-    await screen.findByText('更新可用')
+    expect(screen.queryByText('更新可用')).toBeNull()
     act(() => {
       desktopUpdater.updateInfo = null
     })
@@ -199,7 +203,7 @@ describe('navbar build channel', () => {
   })
 
   it.each([
-    { identifier: 'dsh-tauri', label: '更新可用', absent: '夜间构建版本' },
+    { identifier: 'dsh-tauri', label: null, absent: '夜间构建版本' },
     { identifier: 'dsh-tauri-nightly', label: '夜间构建版本', absent: '更新可用' },
   ])('pending identifier hides both chips until $identifier is known', async ({ identifier, label, absent }) => {
     const pending = Promise.withResolvers<string>()
@@ -213,7 +217,10 @@ describe('navbar build channel', () => {
     await act(async () => {
       pending.resolve(identifier)
     })
-    await screen.findByText(label)
+    await waitFor(() => expect(client.getQueryState(queryKeys.appIdentifier)?.status).toBe('success'))
+    if (label !== null)
+      await screen.findByText(label)
+    expect(screen.queryByText('更新可用')).toBeNull()
     expect(screen.queryByText(absent)).toBeNull()
   })
 

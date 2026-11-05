@@ -67,6 +67,11 @@ function deferred<T>() {
 }
 
 describe('settings synchronization across windows', () => {
+  it('defaults automatic updates to off before hydration', () => {
+    expect(setting.auto_update).toBe(false)
+    expect(setting.hydrated).toBe(false)
+  })
+
   it('applies native settings updates after initial hydration', async () => {
     await nativeUpdate(mocks.saved)
     await nativeUpdate({ ...mocks.saved, appearance: { palette: 'amber', terminal: true, opacity: 80 } })

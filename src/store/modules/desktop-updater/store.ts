@@ -14,19 +14,6 @@ let checkTask: Promise<DesktopUpdateInfo | null> | null = null
 let downloadTask: Promise<void> | null = null
 let downloadAndOpenTask: Promise<boolean> | null = null
 
-/**
- * 桌面端自更新模块：检查新版本 → 静默下载安装包 → 打开安装器完成升级。
- *
- * 与 `updater` 模块（dsh 内核更新）区分：本模块针对桌面应用自身。
- * 轮询检查低频触发（见 `layout/index.tsx` 的 `useIntervalFn`），Rust 侧每次实时查询、
- * 不做缓存，由低频轮询避免 GitHub 未认证限流。
- *
- * 交互约定：
- * - 检测到新版本即**静默下载**，不弹右下角 toast、不打断用户；进度只在
- *   「检查更新」/「更新可用」chip 打开的对话框里展示；
- * - 用户没在对话框里安装时，Rust 侧会在应用退出时自动打开已下载的安装器
- *   （见 service::update::pending），仅在设置页「自动更新」开启时生效。
- */
 export const desktopUpdater = defineStore({
   state: () => ({
     /** 发现的新版本信息（null 表示暂无） */

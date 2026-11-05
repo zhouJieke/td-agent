@@ -253,7 +253,7 @@ fn local_link_target_exists(spec: &str, profile: &Path) -> bool {
     } else {
         profile.join(path)
     };
-    resolved.is_dir()
+    resolved.join("package.json").is_file()
 }
 
 /// 判断 pnpm 写入 profile 的依赖值与期望的 `link:` 捆绑路径是否一致。
@@ -446,7 +446,9 @@ mod tests {
     #[test]
     fn local_link_dep_detects_only_directory_specs() {
         // link:/file: 前缀 → 本地目录链接（含历史遗留 file: 形式）
-        assert!(is_local_link_dep("link:C:/Apps/dsh/resources/internal-plugins/dsh-tauri"));
+        assert!(is_local_link_dep(
+            "link:C:/Apps/dsh/resources/internal-plugins/dsh-tauri"
+        ));
         assert!(is_local_link_dep("file:/Applications/.../dsh-tauri-ui"));
         // 无前缀的裸路径、registry 版本、git 引用都不是本地链接，绝不能误卸
         assert!(!is_local_link_dep("dsh-tauri@0.2.0"));
@@ -456,16 +458,40 @@ mod tests {
     }
 
     #[test]
+    fn retired_plugin_directories_without_a_package_manifest_are_dangling() {
+        let root = tempfile::tempdir().unwrap();
+        let profile = root.path().join("profiles/tauri");
+        let retired = root.path().join("packages/dsh-tauri-pet");
+        std::fs::create_dir_all(retired.join("dist")).unwrap();
+        std::fs::create_dir_all(&profile).unwrap();
+        let manifest = serde_json::json!({
+            "dependencies": {
+                "dsh-tauri-pet": format!("link:{}", retired.display()),
+                "current-plugin": format!("link:{}", retired.display()),
+                "community-plugin": "1.0.0"
+            },
+            "dsh": {"profile": {"bundles": ["dsh-tauri-pet", "current-plugin", "community-plugin"]}}
+        });
+        let keep = HashSet::from(["current-plugin"]);
+        assert_eq!(
+            collect_dangling_local_link_deps(&manifest, &keep, &profile),
+            vec!["dsh-tauri-pet"]
+        );
+        assert!(retired.join("dist").is_dir());
+        std::fs::write(retired.join("package.json"), "{}").unwrap();
+        assert!(collect_dangling_local_link_deps(&manifest, &keep, &profile).is_empty());
+    }
+
+    #[test]
     fn dangling_local_link_deps_exclude_presets_and_registry_specs() {
-        let root = std::env::temp_dir().join(format!(
-            "dsh-dangling-link-deps-{}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("dsh-dangling-link-deps-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let profile = root.join("profile");
         let alive = root.join("packages/dsh-tauri-ui");
         std::fs::create_dir_all(&profile).unwrap();
         std::fs::create_dir_all(&alive).unwrap();
+        std::fs::write(alive.join("package.json"), "{}").unwrap();
         let alive_spec = format!("link:{}", alive.to_string_lossy());
 
         let manifest = serde_json::json!({
@@ -484,7 +510,10 @@ mod tests {
 
         assert_eq!(
             dangling,
-            vec!["dsh-tauri-panel".to_string(), "dsh-tauri-scheduler".to_string()]
+            vec![
+                "dsh-tauri-panel".to_string(),
+                "dsh-tauri-scheduler".to_string()
+            ]
         );
         let _ = std::fs::remove_dir_all(root);
     }

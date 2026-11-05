@@ -1,9 +1,12 @@
 use std::path::Path;
 
-use crate::utils::{patch_core_file, patch_dsh, PatchOutcome};
+use crate::utils::{patch_core_file, PatchOutcome};
 
 const CLIENT: &str = "node_modules/@deepseek-ai/dsh-client-ui-layout/lib/client.js";
+const CONVERSATION_CLIENT: &str =
+    "node_modules/@deepseek-ai/dsh-client-ui-conversation/lib/client.js";
 const ORIGINAL: &str = "const productTitle = \"DeepSeek Harness\";";
+const DESKTOP_CONDITION: &str = "new URLSearchParams(globalThis.location.search).has(\"dshDesktop\") && !(\"ReactNativeWebView\" in globalThis)";
 
 fn patch_source(source: &str) -> PatchOutcome {
     let prefix = "const productTitle = new URLSearchParams(globalThis.location.search).has(\"dshDesktop\") && !(\"ReactNativeWebView\" in globalThis) ? ";
@@ -31,17 +34,79 @@ fn patch_source(source: &str) -> PatchOutcome {
     PatchOutcome::Patched(source.replacen(anchor, &replacement, 1))
 }
 
+fn patch_conversation(source: &str) -> PatchOutcome {
+    let mut patched = source.to_string();
+    for (key, original, replacement) in [
+        ("hero.headline", "TaskPulse", "探索未至之境"),
+        ("hero.preview", "牛逼版", "预览版"),
+    ] {
+        let anchor = format!("\"{key}\": {}", serde_json::to_string(original).unwrap());
+        let replacement = format!(
+            "\"{key}\": {DESKTOP_CONDITION} ? {} : {}",
+            serde_json::to_string(replacement).unwrap(),
+            serde_json::to_string(original).unwrap()
+        );
+        patched = patched.replace(&anchor, &replacement);
+    }
+    if patched == source {
+        return if source.contains("\"hero.headline\": \"探索未至之境\"")
+            || source.contains(&format!("\"hero.headline\": {DESKTOP_CONDITION} ?"))
+        {
+            PatchOutcome::AlreadyPatched
+        } else {
+            PatchOutcome::AnchorMissing
+        };
+    }
+    PatchOutcome::Patched(patched)
+}
+
 pub fn apply_at(core_dir: &Path) -> Result<(), String> {
-    patch_core_file(core_dir, CLIENT, patch_source)
+    patch_core_file(core_dir, CLIENT, patch_source)?;
+    patch_core_file(core_dir, CONVERSATION_CLIENT, patch_conversation)
 }
 
 pub fn apply(app_handle: &tauri::AppHandle) -> Result<(), String> {
-    patch_dsh(app_handle, CLIENT, patch_source)
+    apply_at(&crate::service::core::active_core_dir(app_handle))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn desktop_bundle_patches_the_nested_oss_conversation() {
+        let root = std::env::temp_dir().join(format!(
+            "desktop-branding-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let client = root.join("node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-client-ui-conversation/lib/client.js");
+        std::fs::create_dir_all(client.parent().unwrap()).unwrap();
+        std::fs::write(
+            &client,
+            "{\"hero.headline\": \"TaskPulse\", \"hero.preview\": \"牛逼版\"}",
+        )
+        .unwrap();
+        apply_at(&root).unwrap();
+        let patched = std::fs::read_to_string(&client).unwrap();
+        apply_at(&root).unwrap();
+        assert_eq!(std::fs::read_to_string(&client).unwrap(), patched);
+        std::fs::remove_dir_all(&root).unwrap();
+        assert!(patched.contains("探索未至之境"));
+        assert!(patched.contains("预览版"));
+        assert!(patched.contains(".has(\"dshDesktop\")"));
+        assert!(patched.contains("ReactNativeWebView"));
+    }
+
+    #[test]
+    fn conversation_copy_preserves_the_development_headline() {
+        let source = "{\"hero.headline\": \"探索未至之境\", \"hero.preview\": \"预览版\"}";
+        assert_eq!(patch_conversation(source), PatchOutcome::AlreadyPatched);
+        assert_eq!(patch_conversation("{}"), PatchOutcome::AnchorMissing);
+    }
 
     #[test]
     fn desktop_title_preserves_the_original_web_and_mobile_name() {
