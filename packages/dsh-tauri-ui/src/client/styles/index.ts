@@ -135,9 +135,6 @@ const TAILWINDCSS_GENERATED = `
   .m-2 {
     margin: calc(var(--spacing) * 2);
   }
-  .-mx-\\[2px\\] {
-    margin-inline: calc(2px * -1);
-  }
   .mx-0 {
     margin-inline: calc(var(--spacing) * 0);
   }
@@ -225,6 +222,9 @@ const TAILWINDCSS_GENERATED = `
   .-ml-1 {
     margin-left: calc(var(--spacing) * -1);
   }
+  .ml-0 {
+    margin-left: calc(var(--spacing) * 0);
+  }
   .ml-\\[-6px\\] {
     margin-left: -6px;
   }
@@ -261,9 +261,6 @@ const TAILWINDCSS_GENERATED = `
   .block {
     display: block;
   }
-  .block\\! {
-    display: block !important;
-  }
   .contents {
     display: contents;
   }
@@ -290,6 +287,10 @@ const TAILWINDCSS_GENERATED = `
   }
   .\\[field-sizing\\:content\\] {
     field-sizing: content;
+  }
+  .size-\\[36px\\]\\! {
+    width: 36px !important;
+    height: 36px !important;
   }
   .h-\\[0\\.5px\\] {
     height: 0.5px;
@@ -501,9 +502,6 @@ const TAILWINDCSS_GENERATED = `
   .w-\\[calc\\(28px\\+var\\(--dsh-content-font-delta\\,0px\\)\\)\\] {
     width: calc(28px + var(--dsh-content-font-delta,0px));
   }
-  .w-\\[calc\\(100\\%\\+4px\\)\\] {
-    width: calc(100% + 4px);
-  }
   .w-\\[calc\\(100\\%_-_2_\\*_var\\(--dsh-composer-side-clearance\\)_-_4_\\*_var\\(--dsh-composer-dock-inset\\)\\)\\] {
     width: calc(100% - 2 * var(--dsh-composer-side-clearance) - 4 * var(--dsh-composer-dock-inset));
   }
@@ -521,9 +519,6 @@ const TAILWINDCSS_GENERATED = `
   }
   .w-full {
     width: 100%;
-  }
-  .w-full\\! {
-    width: 100% !important;
   }
   .w-max {
     width: max-content;
@@ -700,9 +695,6 @@ const TAILWINDCSS_GENERATED = `
   }
   .justify-start {
     justify-content: flex-start;
-  }
-  .gap-0 {
-    gap: calc(var(--spacing) * 0);
   }
   .gap-8 {
     gap: calc(var(--spacing) * 8);
@@ -1001,6 +993,9 @@ const TAILWINDCSS_GENERATED = `
   .p-0 {
     padding: calc(var(--spacing) * 0);
   }
+  .p-0\\! {
+    padding: calc(var(--spacing) * 0) !important;
+  }
   .p-1 {
     padding: calc(var(--spacing) * 1);
   }
@@ -1150,9 +1145,6 @@ const TAILWINDCSS_GENERATED = `
   }
   .pr-\\[6px\\] {
     padding-right: 6px;
-  }
-  .pr-\\[10px\\] {
-    padding-right: 10px;
   }
   .pr-\\[12px\\] {
     padding-right: 12px;
