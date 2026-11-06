@@ -77,20 +77,32 @@ pub fn get_node_download_url() -> Result<String, String> {
 fn dsh_pkg_asset_filename(os: &str, arch: &str) -> Result<String, String> {
     match (os, arch) {
         ("windows", _) => Ok("deepseek-harness-pkg-windows.zip".to_string()),
-        ("macos", "aarch64") => Ok("deepseek-harness-pkg-macos-arm64.zip".to_string()),
-        ("macos", "x86_64") => Ok("deepseek-harness-pkg-macos-x64.zip".to_string()),
-        ("linux", "x86_64") => Ok("deepseek-harness-pkg-linux.zip".to_string()),
-        ("linux", "aarch64") => Ok("deepseek-harness-pkg-linux-arm64.zip".to_string()),
+        ("macos", "aarch64" | "arm64") => Ok("deepseek-harness-pkg-macos-arm64.zip".to_string()),
+        ("macos", "x86_64" | "x64") => Ok("deepseek-harness-pkg-macos-x64.zip".to_string()),
+        ("linux", "x86_64" | "x64") => Ok("deepseek-harness-pkg-linux.zip".to_string()),
+        ("linux", "aarch64" | "arm64") => Ok("deepseek-harness-pkg-linux-arm64.zip".to_string()),
         _ => Err(format!("Unsupported platform: {} {}", os, arch)),
     }
 }
 
 /// 打包的 DeepSeek Harness 发行版下载地址（GitHub 官方直连，首选源）
 pub fn get_dsh_download_url() -> Result<String, String> {
+    let arch = if prefer_bundled_node_runtime() {
+        None
+    } else {
+        get_local_node_path()
+            .and_then(|node| node_version_output(&node, &["-p", "process.arch"]))
+            .filter(|output| output.status.success())
+            .and_then(|output| String::from_utf8(output.stdout).ok())
+            .map(|arch| arch.trim().to_string())
+    };
     Ok(format!(
         "{}{}",
         DSH_CORE_URL,
-        dsh_pkg_asset_filename(env::consts::OS, env::consts::ARCH)?
+        dsh_pkg_asset_filename(
+            env::consts::OS,
+            arch.as_deref().unwrap_or(env::consts::ARCH)
+        )?
     ))
 }
 
@@ -109,14 +121,9 @@ pub fn mirror_download_urls(asset_url: &str) -> Vec<String> {
 /// `releases/download/<tag>/`，镜像/直连与平台文件名逻辑与最新版完全一致
 /// （GitHub 的 tag 下载路径是固定的 release 资产地址，可被确定性推导）。
 pub fn get_dsh_download_url_for_tag(tag: &str) -> Result<String, String> {
-    let base = DSH_CORE_URL.replace(
+    Ok(get_dsh_download_url()?.replace(
         "releases/latest/download/",
         &format!("releases/download/{tag}/"),
-    );
-    Ok(format!(
-        "{}{}",
-        base,
-        dsh_pkg_asset_filename(env::consts::OS, env::consts::ARCH)?
     ))
 }
 
@@ -1164,6 +1171,33 @@ mod tests {
             "deepseek-harness-pkg-linux-arm64.zip"
         );
         assert!(dsh_pkg_asset_filename("linux", "riscv64").is_err());
+    }
+
+    #[test]
+    fn dsh_download_urls_match_the_selected_node_architecture() {
+        let node = get_local_node_path().expect("Node.js is required for runtime asset tests");
+        let output = std::process::Command::new(node)
+            .args(["-p", "process.arch"])
+            .env_remove("NODE_OPTIONS")
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let arch = String::from_utf8(output.stdout).unwrap();
+        let filename = match (env::consts::OS, arch.trim()) {
+            ("macos", "arm64") => "deepseek-harness-pkg-macos-arm64.zip",
+            ("macos", "x64") => "deepseek-harness-pkg-macos-x64.zip",
+            ("linux", "arm64") => "deepseek-harness-pkg-linux-arm64.zip",
+            ("linux", "x64") => "deepseek-harness-pkg-linux.zip",
+            ("windows", _) => "deepseek-harness-pkg-windows.zip",
+            other => panic!("unsupported runtime target: {other:?}"),
+        };
+        assert_eq!(
+            get_dsh_download_url().unwrap().rsplit('/').next(),
+            Some(filename)
+        );
+        let tagged = get_dsh_download_url_for_tag("dsh-fixture-tag").unwrap();
+        assert!(tagged.contains("/releases/download/dsh-fixture-tag/"));
+        assert_eq!(tagged.rsplit('/').next(), Some(filename));
     }
 
     #[test]

@@ -101,11 +101,11 @@ try {
     const isPackageDir = (entry) => entry.isDirectory() || entry.isSymbolicLink();
     for (const entry of readdirSync(nodeModules, { withFileTypes: true })) {
       if (!isPackageDir(entry)) continue;
-      if (entry.name === '.bin' || entry.name === '.pnpm') continue;
+      if (entry.name.startsWith('.')) continue;
       if (entry.name.startsWith('@')) {
         const scope = join(nodeModules, entry.name);
         for (const inner of readdirSync(scope, { withFileTypes: true })) {
-          if (isPackageDir(inner)) collect(join(scope, inner.name), entry.name + '/' + inner.name);
+          if (!inner.name.startsWith('.') && isPackageDir(inner)) collect(join(scope, inner.name), entry.name + '/' + inner.name);
         }
         continue;
       }
@@ -349,25 +349,23 @@ pub(crate) async fn prepare_active_runtime(app_handle: &AppHandle) -> Result<(),
         }]);
     }
 
-    // 1) 平台可选依赖（sharp/koffi）缺失：沿用按核心清单安装目标平台包的修复路径。
-    //    先做这一步：它只补平台/架构包、与运行时无关，补齐后再判断 ABI 才有意义。
-    if probe.has_platform_import_failure() {
-        let packages = native_package_plan(&core_root, &target);
-        if packages.is_empty() {
-            return Err(format!(
-                "CORE_NATIVE_DEPENDENCY_UNRESOLVED: no optional package version matches {}:{} in {}",
-                target.platform,
-                target.arch,
-                core_root.display()
-            ));
-        }
+    let packages = native_package_plan(&core_root, &target, &probe);
+    if packages.is_empty() && probe.has_platform_import_failure() {
+        return Err(format!(
+            "CORE_NATIVE_DEPENDENCY_UNRESOLVED: no optional package version matches {}:{} in {}",
+            target.platform,
+            target.arch,
+            core_root.display()
+        ));
+    }
+    if !packages.is_empty() {
         log::warn!(
-            "CORE_NATIVE_DEPENDENCY_REPAIR: importing sharp/koffi failed for {}:{}, installing {:?}",
+            "CORE_NATIVE_DEPENDENCY_REPAIR: native dependencies failed for {}:{}, installing {:?}",
             target.platform,
             target.arch,
             packages
         );
-        install_native_packages(&core_root, &target, &packages).await?;
+        install_native_packages(&core_root, &node, &target, &packages).await?;
         let Some(next) = reprobe_after_repair(&node, &core_root).await else {
             return Ok(());
         };
@@ -1625,13 +1623,7 @@ fn npm_cli_path_for(node: &Path) -> Option<PathBuf> {
     candidates.into_iter().find(|candidate| candidate.is_file())
 }
 
-/// 决定需要补齐的原生依赖安装参数。
-///
-/// 优先从已安装的根包 `sharp`/`koffi` 的 `optionalDependencies` 取目标平台包的
-/// 精确版本并显式安装（轻量、不改核心依赖声明）。任一根包缺失时退化为安装根包
-/// 名（不带版本），由 npm 以核心 `package.json` + lockfile 解析正确版本 —— 这样
-/// 即使整个核心闭包被删也能恢复，且不硬编码版本号。
-fn native_package_plan(core_root: &Path, target: &NodeTarget) -> Vec<String> {
+fn native_package_plan(core_root: &Path, target: &NodeTarget, probe: &NativeProbe) -> Vec<String> {
     let node_modules = core_root.join("node_modules");
     let sharp = node_modules.join("sharp");
     let koffi = node_modules.join("koffi");
@@ -1643,22 +1635,49 @@ fn native_package_plan(core_root: &Path, target: &NodeTarget) -> Vec<String> {
     let sharp_libvips = format!("@img/sharp-libvips-{}-{}", target.platform, target.arch);
     let koffi_runtime = format!("@koromix/koffi-{}-{}", target.platform, target.arch);
 
-    for (name, optional) in [
-        (sharp_runtime.as_str(), &sharp_optional),
-        (sharp_libvips.as_str(), &sharp_optional),
-        (koffi_runtime.as_str(), &koffi_optional),
-    ] {
-        if let Some(version) = optional.get(name) {
-            packages.push(format!("{name}@{version}"));
+    let mut missing = Vec::new();
+    if probe.has_platform_import_failure() {
+        for (name, optional) in [
+            (sharp_runtime.as_str(), &sharp_optional),
+            (sharp_libvips.as_str(), &sharp_optional),
+            (koffi_runtime.as_str(), &koffi_optional),
+        ] {
+            if let Some(version) = optional.get(name) {
+                packages.push(format!("{name}@{version}"));
+            }
         }
+        missing.extend(["sharp", "koffi"]);
     }
-    // 根包本身缺失（核心闭包被删/损坏）时无法从清单取版本，退化为安装根包名，
-    // 由 npm 以核心 package.json + lockfile 解析正确版本（不硬编码版本号）。
-    if !sharp.is_dir() && !packages.iter().any(|p| p == "sharp") {
-        packages.push("sharp".to_string());
-    }
-    if !koffi.is_dir() && !packages.iter().any(|p| p == "koffi") {
-        packages.push("koffi".to_string());
+    missing.extend(
+        probe
+            .failures()
+            .iter()
+            .filter(|failure| failure.kind == "addon" && !failure.abi)
+            .map(|failure| failure.name.as_str()),
+    );
+    let lock = std::fs::read_to_string(core_root.join("package-lock.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok());
+    let mut seen = HashSet::new();
+    for name in missing {
+        if !is_safe_package_name(name)
+            || name.split('/').any(|part| part.starts_with('.'))
+            || !seen.insert(name)
+            || read_package_version(&node_modules.join(name).join("package.json")).is_some()
+        {
+            continue;
+        }
+        let version = lock
+            .as_ref()
+            .and_then(|lock| lock.get("packages"))
+            .and_then(|packages| packages.get(format!("node_modules/{name}")))
+            .and_then(|package| package.get("version"))
+            .and_then(|version| version.as_str());
+        match version {
+            Some(version) => packages.push(format!("{name}@{version}")),
+            None if matches!(name, "sharp" | "koffi") => packages.push(name.to_string()),
+            None => {}
+        }
     }
     packages
 }
@@ -1688,45 +1707,100 @@ fn read_optional_dependencies(path: &Path) -> HashMap<String, String> {
 
 async fn install_native_packages(
     core_root: &Path,
+    node: &Path,
     target: &NodeTarget,
     packages: &[String],
 ) -> Result<(), String> {
     let core_root = core_root.to_path_buf();
+    let node = node.to_path_buf();
     let target = target.clone();
     let packages = packages.to_vec();
-    let result = tokio::task::spawn_blocking(move || {
-        let program = if cfg!(windows) {
-            OsString::from("npm.cmd")
-        } else {
-            OsString::from("npm")
-        };
-        let mut args = vec![
+    tokio::task::spawn_blocking(move || {
+        let io_error = |e| format!("CORE_NATIVE_DEPENDENCY_REPAIR_FAILED: {e}");
+        let staging = tempfile::Builder::new()
+            .prefix(".native-repair-")
+            .tempdir_in(&core_root)
+            .map_err(io_error)?;
+        std::fs::write(staging.path().join("package.json"), r#"{"private":true}"#)
+            .map_err(io_error)?;
+        let npmrc = core_root.join(".npmrc");
+        if npmrc.is_file() {
+            std::fs::copy(npmrc, staging.path().join(".npmrc")).map_err(io_error)?;
+        }
+        let (program, mut args) = npm_command(&node);
+        args.extend([
             OsString::from("install"),
             OsString::from("--no-save"),
             OsString::from("--package-lock=false"),
+            OsString::from("--no-audit"),
+            OsString::from("--no-fund"),
+            OsString::from("--install-strategy=nested"),
             OsString::from("--include=optional"),
             OsString::from(format!("--os={}", target.platform)),
             OsString::from(format!("--cpu={}", target.arch)),
-        ];
+        ]);
         args.extend(packages.into_iter().map(OsString::from));
-        run_process_with_timeout(
+        let result = run_process_with_timeout(
             &program,
             &args,
-            &core_root,
+            staging.path(),
             NATIVE_REPAIR_TIMEOUT,
             "npm install",
-        )
+        )?;
+        if !result.status.success() {
+            return Err(format!(
+                "CORE_NATIVE_DEPENDENCY_REPAIR_FAILED: npm exited with {}: {}",
+                result.status,
+                command_output_tail(&result)
+            ));
+        }
+        let modules = staging.path().join("node_modules");
+        let mut pending = vec![modules.clone()];
+        while let Some(dir) = pending.pop() {
+            for entry in std::fs::read_dir(dir).map_err(io_error)? {
+                let entry = entry.map_err(io_error)?;
+                let name = entry.file_name();
+                if name.to_string_lossy().starts_with('.') {
+                    continue;
+                }
+                let source = entry.path();
+                if source.parent() == Some(modules.as_path())
+                    && name.to_string_lossy().starts_with('@')
+                {
+                    pending.push(source);
+                    continue;
+                }
+                let relative = source.strip_prefix(&modules).unwrap();
+                let destination = core_root.join("node_modules").join(relative);
+                ensure_non_link_directory(destination.parent().unwrap(), &core_root)?;
+                let backup = staging.path().join("backup").join(relative);
+                let replaced = match std::fs::symlink_metadata(&destination) {
+                    Ok(_) => {
+                        std::fs::create_dir_all(backup.parent().unwrap()).map_err(io_error)?;
+                        std::fs::rename(&destination, &backup).map_err(io_error)?;
+                        true
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+                    Err(e) => return Err(io_error(e)),
+                };
+                if let Err(error) = std::fs::rename(&source, &destination) {
+                    if replaced {
+                        if let Err(restore_error) = std::fs::rename(&backup, &destination) {
+                            let preserved = staging.keep();
+                            return Err(format!(
+                                "CORE_NATIVE_DEPENDENCY_REPAIR_FAILED: {error}; restore failed: {restore_error}; backup retained in {}",
+                                preserved.display()
+                            ));
+                        }
+                    }
+                    return Err(io_error(error));
+                }
+            }
+        }
+        Ok(())
     })
     .await
-    .map_err(|e| format!("CORE_NATIVE_DEPENDENCY_REPAIR_FAILED: {e}"))??;
-    if !result.status.success() {
-        return Err(format!(
-            "CORE_NATIVE_DEPENDENCY_REPAIR_FAILED: npm exited with {}: {}",
-            result.status,
-            command_output_tail(&result)
-        ));
-    }
-    Ok(())
+    .map_err(|e| format!("CORE_NATIVE_DEPENDENCY_REPAIR_FAILED: {e}"))?
 }
 
 fn run_command(
@@ -1833,6 +1907,15 @@ fn command_output_tail(output: &std::process::Output) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn missing_platform_probe() -> NativeProbe {
+        NativeProbe::Failed(vec![NativeProbeFailure {
+            kind: "import".into(),
+            name: "sharp".into(),
+            message: "Cannot find module 'sharp'".into(),
+            abi: false,
+        }])
+    }
 
     #[test]
     fn early_preparation_requires_shared_links_pruning_and_same_node_stamp() {
@@ -2328,12 +2411,12 @@ mod tests {
         std::fs::create_dir_all(root.join("node_modules/koffi")).unwrap();
         std::fs::write(
             root.join("node_modules/sharp/package.json"),
-            r#"{"optionalDependencies":{"@img/sharp-darwin-arm64":"0.9.0","@img/sharp-libvips-darwin-arm64":"1.2.0"}}"#,
+            r#"{"version":"0.9.0","optionalDependencies":{"@img/sharp-darwin-arm64":"0.9.0","@img/sharp-libvips-darwin-arm64":"1.2.0"}}"#,
         )
         .unwrap();
         std::fs::write(
             root.join("node_modules/koffi/package.json"),
-            r#"{"optionalDependencies":{"@koromix/koffi-darwin-arm64":"8.7.0"}}"#,
+            r#"{"version":"8.7.0","optionalDependencies":{"@koromix/koffi-darwin-arm64":"8.7.0"}}"#,
         )
         .unwrap();
         let plan = native_package_plan(
@@ -2342,6 +2425,7 @@ mod tests {
                 platform: "darwin".into(),
                 arch: "arm64".into(),
             },
+            &missing_platform_probe(),
         );
         assert_eq!(
             plan,
@@ -2352,6 +2436,313 @@ mod tests {
             ]
         );
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn native_repair_installs_without_resolving_core_dependencies() {
+        let root = tempfile::tempdir().unwrap();
+        let core = root.path().join("core");
+        std::fs::create_dir_all(core.join("node_modules/unrelated")).unwrap();
+        std::fs::create_dir_all(core.join("node_modules/@img/repair-fixture")).unwrap();
+        std::fs::create_dir_all(core.join("node_modules/@img/unrelated")).unwrap();
+        let manifest = r#"{"name":"repair-core","version":"1.0.0","dependencies":{"unrelated":"file:missing-core-dependency"}}"#;
+        std::fs::write(core.join("package.json"), manifest).unwrap();
+        std::fs::write(core.join("node_modules/unrelated/keep"), "unchanged").unwrap();
+        std::fs::write(core.join("node_modules/@img/unrelated/keep"), "unchanged").unwrap();
+        std::fs::write(core.join("node_modules/@img/repair-fixture/stale"), "old").unwrap();
+        std::fs::write(
+            core.join(".npmrc"),
+            format!(
+                "offline=true\naudit=false\nfund=false\ncache={}\n",
+                root.path()
+                    .join("cache")
+                    .display()
+                    .to_string()
+                    .replace('\\', "/")
+            ),
+        )
+        .unwrap();
+        let archive = root.path().join("native.tgz");
+        let gzip = flate2::write::GzEncoder::new(
+            std::fs::File::create(&archive).unwrap(),
+            flate2::Compression::default(),
+        );
+        let mut tar = tar::Builder::new(gzip);
+        for (path, body) in [
+            (
+                "package/package.json",
+                r#"{"name":"@img/repair-fixture","version":"1.0.0","main":"index.js","dependencies":{"repair-transitive":"1.0.0"},"bundledDependencies":["repair-transitive"]}"#,
+            ),
+            (
+                "package/index.js",
+                "module.exports = require('repair-transitive');",
+            ),
+            (
+                "package/node_modules/repair-transitive/package.json",
+                r#"{"name":"repair-transitive","version":"1.0.0","main":"index.js"}"#,
+            ),
+            (
+                "package/node_modules/repair-transitive/index.js",
+                "module.exports = 42;",
+            ),
+        ] {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(body.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            tar.append_data(&mut header, path, body.as_bytes()).unwrap();
+        }
+        tar.into_inner().unwrap().finish().unwrap();
+
+        let node =
+            crate::config::get_local_node_path().expect("Node.js is required for npm repair tests");
+        install_native_packages(
+            &core,
+            &node,
+            &NodeTarget {
+                platform: "darwin".into(),
+                arch: "arm64".into(),
+            },
+            &[archive.to_string_lossy().into_owned()],
+        )
+        .await
+        .expect("native repair must not resolve the unrelated core dependency");
+
+        let output = run_command(
+            &node,
+            &[
+                "-e".into(),
+                "process.stdout.write(String(require('@img/repair-fixture')))".into(),
+            ],
+            &core,
+        )
+        .unwrap();
+        assert!(output.status.success(), "{}", command_output_tail(&output));
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), "42");
+        assert!(!core.join("node_modules/@img/repair-fixture/stale").exists());
+        assert_eq!(
+            std::fs::read_to_string(core.join("package.json")).unwrap(),
+            manifest
+        );
+        assert_eq!(
+            std::fs::read_to_string(core.join("node_modules/unrelated/keep")).unwrap(),
+            "unchanged"
+        );
+        assert_eq!(
+            std::fs::read_to_string(core.join("node_modules/@img/unrelated/keep")).unwrap(),
+            "unchanged"
+        );
+        assert!(!core.join("node_modules/repair-transitive").exists());
+        assert!(std::fs::read_dir(&core).unwrap().all(|entry| !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".native-repair-")));
+    }
+
+    #[test]
+    fn native_plan_restores_partial_package_directories_from_locked_versions() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("node_modules/sharp/dist")).unwrap();
+        std::fs::create_dir_all(root.path().join("node_modules/koffi/vendor")).unwrap();
+        std::fs::write(root.path().join("package-lock.json"), r#"{"packages":{"node_modules/sharp":{"version":"0.35.5"},"node_modules/koffi":{"version":"3.3.3"}}}"#).unwrap();
+        assert_eq!(
+            native_package_plan(
+                root.path(),
+                &NodeTarget {
+                    platform: "darwin".into(),
+                    arch: "arm64".into()
+                },
+                &missing_platform_probe(),
+            ),
+            vec!["sharp@0.35.5", "koffi@3.3.3"]
+        );
+    }
+
+    #[test]
+    fn native_plan_restores_unreadable_manifests_without_a_lockfile() {
+        for manifest in [None, Some("{broken"), Some("{}")] {
+            let root = tempfile::tempdir().unwrap();
+            for name in ["sharp", "koffi"] {
+                let dir = root.path().join("node_modules").join(name);
+                std::fs::create_dir_all(&dir).unwrap();
+                if let Some(manifest) = manifest {
+                    std::fs::write(dir.join("package.json"), manifest).unwrap();
+                }
+            }
+            assert_eq!(
+                native_package_plan(
+                    root.path(),
+                    &NodeTarget {
+                        platform: "darwin".into(),
+                        arch: "arm64".into()
+                    },
+                    &missing_platform_probe(),
+                ),
+                vec!["sharp", "koffi"],
+                "manifest: {manifest:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn native_probe_ignores_npm_replacement_directories() {
+        let root = tempfile::tempdir().unwrap();
+        for name in ["sharp", "koffi"] {
+            let dir = root.path().join("node_modules").join(name);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("index.js"), "module.exports = {};").unwrap();
+        }
+        for name in [
+            ".node-addon-require-builtin-darwin-x64-6po3YFNl",
+            "@scope/.retired-addon",
+        ] {
+            let dir = root.path().join("node_modules").join(name);
+            std::fs::create_dir_all(dir.join("prebuilt")).unwrap();
+            std::fs::write(
+                dir.join("index.js"),
+                "throw new Error('No usable prebuilt binary found in darwin-x64');",
+            )
+            .unwrap();
+        }
+        let node = crate::config::get_local_node_path()
+            .expect("Node.js is required for native probe tests");
+        let output = run_probe_script(&node, root.path());
+        assert!(output.status.success(), "{}", command_output_tail(&output));
+        assert_eq!(
+            parse_native_probe_failures(&String::from_utf8_lossy(&output.stdout)),
+            Some(vec![])
+        );
+    }
+
+    #[test]
+    fn native_plan_restores_damaged_addons_from_locked_versions() {
+        let root = tempfile::tempdir().unwrap();
+        for name in ["sharp", "koffi"] {
+            let dir = root.path().join("node_modules").join(name);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("package.json"), r#"{"version":"1.0.0"}"#).unwrap();
+            std::fs::write(dir.join("index.js"), "module.exports = {};").unwrap();
+        }
+        std::fs::create_dir_all(root.path().join("node_modules/node-pty/prebuilds")).unwrap();
+        std::fs::write(
+            root.path().join("package-lock.json"),
+            r#"{"packages":{"node_modules/node-pty":{"version":"1.2.0-beta.15"}}}"#,
+        )
+        .unwrap();
+        let node = crate::config::get_local_node_path()
+            .expect("Node.js is required for native probe tests");
+        let output = run_probe_script(&node, root.path());
+        assert!(output.status.success(), "{}", command_output_tail(&output));
+        let failures =
+            parse_native_probe_failures(&String::from_utf8_lossy(&output.stdout)).unwrap();
+        assert_eq!(
+            failures
+                .iter()
+                .map(|failure| failure.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["node-pty"]
+        );
+        assert_eq!(
+            native_package_plan(
+                root.path(),
+                &NodeTarget {
+                    platform: "darwin".into(),
+                    arch: "arm64".into()
+                },
+                &NativeProbe::Failed(failures),
+            ),
+            vec!["node-pty@1.2.0-beta.15"]
+        );
+    }
+
+    #[test]
+    fn native_plan_reinstalls_only_locked_damaged_non_abi_addons() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("node_modules/healthy")).unwrap();
+        std::fs::write(
+            root.path().join("node_modules/healthy/package.json"),
+            r#"{"version":"1.0.0"}"#,
+        )
+        .unwrap();
+        std::fs::write(root.path().join("package-lock.json"), r#"{"packages":{"node_modules/node-pty":{"version":"1.2.0-beta.15"},"node_modules/healthy":{"version":"1.0.0"},"node_modules/.retired":{"version":"1.0.0"},"node_modules/abi-addon":{"version":"1.0.0"},"node_modules/../escape":{"version":"1.0.0"}}}"#).unwrap();
+        let failures = [
+            "node-pty",
+            "node-pty",
+            "healthy",
+            "untracked",
+            ".retired",
+            "../escape",
+            "abi-addon",
+        ]
+        .into_iter()
+        .map(|name| NativeProbeFailure {
+            kind: "addon".into(),
+            name: name.into(),
+            message: "load failed".into(),
+            abi: name == "abi-addon",
+        })
+        .collect();
+        assert_eq!(
+            native_package_plan(
+                root.path(),
+                &NodeTarget {
+                    platform: "darwin".into(),
+                    arch: "arm64".into()
+                },
+                &NativeProbe::Failed(failures)
+            ),
+            vec!["node-pty@1.2.0-beta.15"]
+        );
+    }
+
+    #[tokio::test]
+    async fn native_repair_install_failure_preserves_existing_packages() {
+        let root = tempfile::tempdir().unwrap();
+        let core = root.path().join("core");
+        std::fs::create_dir_all(core.join("node_modules/koffi")).unwrap();
+        std::fs::write(core.join("package.json"), r#"{"private":true}"#).unwrap();
+        std::fs::write(core.join("node_modules/koffi/keep"), "unchanged").unwrap();
+        std::fs::write(
+            core.join(".npmrc"),
+            format!(
+                "offline=true\ncache={}\n",
+                root.path()
+                    .join("cache")
+                    .display()
+                    .to_string()
+                    .replace('\\', "/")
+            ),
+        )
+        .unwrap();
+        let archive = root.path().join("invalid.tgz");
+        std::fs::write(&archive, "invalid archive").unwrap();
+        let error = install_native_packages(
+            &core,
+            &crate::config::get_local_node_path()
+                .expect("Node.js is required for npm repair tests"),
+            &NodeTarget {
+                platform: "darwin".into(),
+                arch: "arm64".into(),
+            },
+            &[archive.to_string_lossy().into_owned()],
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            error.starts_with("CORE_NATIVE_DEPENDENCY_REPAIR_FAILED: npm exited with"),
+            "{error}"
+        );
+        assert!(error.contains("TAR_BAD_ARCHIVE"), "{error}");
+        assert_eq!(
+            std::fs::read_to_string(core.join("node_modules/koffi/keep")).unwrap(),
+            "unchanged"
+        );
+        assert!(std::fs::read_dir(&core).unwrap().all(|entry| !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".native-repair-")));
     }
 
     /// 普通用户（无管理员/开发者模式）下 `symlink_dir` 会以 os error 1314 失败，
