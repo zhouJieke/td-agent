@@ -2,7 +2,7 @@
   "name": "dsh-tauri-skill-hub",
   "type": "module",
   "version": "0.1.0",
-  "description": "DSH Tauri 技能中心：以用户 id 为主线浏览企业公用技能与个人可用技能，并支持技能上传与用户授权管理。当前为 UI 阶段，数据由内存 mock 提供，Nacos 落库与用户信息接口已在传输层预留。",
+  "description": "DSH Tauri 技能中心：浏览企业公用及个人技能，上传技能并下载到本地内核使用。",
   "author": "Hairyf <wwu710632@gmail.com>",
   "license": "MIT",
   "homepage": "https://github.com/dsh-tauri-desk/dsh-tauri-plugins#readme",

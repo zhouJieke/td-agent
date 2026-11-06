@@ -13,6 +13,8 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 
+const MAX_SKILL_DOWNLOAD_BYTES: usize = 32 * 1024 * 1024;
+
 pub struct AuthService {
     pending: Mutex<HashMap<String, PendingLogin>>,
     tokens: Mutex<Option<TokenSession>>,
@@ -646,28 +648,29 @@ impl AuthService {
     }
 
     pub fn api_base(&self) -> Result<String, String> {
-        Ok(self.endpoint()?.to_string().trim_end_matches('/').to_string())
+        Ok(self
+            .endpoint()?
+            .to_string()
+            .trim_end_matches('/')
+            .to_string())
     }
 
-    pub async fn request(&self, method: &str, path: &str, body: Value) -> Result<Value, String> {
-        let method = match method {
-            "GET" => Method::GET,
-            "POST" => Method::POST,
-            "PUT" => Method::PUT,
-            "PATCH" => Method::PATCH,
-            "DELETE" => Method::DELETE,
-            _ => return Err("DESKTOP_AUTH_REQUEST_INVALID".into()),
-        };
+    async fn send_authorized(
+        &self,
+        method: Method,
+        path: &str,
+        body: &Value,
+    ) -> Result<Response, String> {
         self.validate_api_path(path)?;
         let mut token = self.access_token().await?;
-        let mut response = self.send(method.clone(), path, &body, Some(&token)).await?;
+        let mut response = self.send(method.clone(), path, body, Some(&token)).await?;
         if response.status() == StatusCode::UNAUTHORIZED {
             token = self
                 .current(Some(&token))
                 .await?
                 .map(|(_, token)| token)
                 .ok_or("DESKTOP_AUTH_SESSION_MISSING")?;
-            response = self.send(method, path, &body, Some(&token)).await?;
+            response = self.send(method, path, body, Some(&token)).await?;
             if response.status() == StatusCode::UNAUTHORIZED {
                 let mut tokens = self.tokens.lock().await;
                 if tokens
@@ -683,6 +686,19 @@ impl AuthService {
                 return Err("DESKTOP_AUTH_SESSION_MISSING".into());
             }
         }
+        Ok(response)
+    }
+
+    pub async fn request(&self, method: &str, path: &str, body: Value) -> Result<Value, String> {
+        let method = match method {
+            "GET" => Method::GET,
+            "POST" => Method::POST,
+            "PUT" => Method::PUT,
+            "PATCH" => Method::PATCH,
+            "DELETE" => Method::DELETE,
+            _ => return Err("DESKTOP_AUTH_REQUEST_INVALID".into()),
+        };
+        let response = self.send_authorized(method, path, &body).await?;
         if !response.status().is_success() {
             return Err(format!("DESKTOP_AUTH_HTTP_{}", response.status().as_u16()));
         }
@@ -696,6 +712,56 @@ impl AuthService {
                 error
             }
         })
+    }
+
+    pub async fn download_skill(&self, name: &str) -> Result<Vec<u8>, String> {
+        crate::service::skill::validate_name(name)?;
+        let path = format!("/api/employee-skills/download?skillName={name}");
+        let mut response = self
+            .send_authorized(Method::GET, &path, &Value::Null)
+            .await?;
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.split(';').next())
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase();
+        if status != StatusCode::OK {
+            let detail = if content_type == "application/json" {
+                match read_json::<Value>(response).await {
+                    Ok(body) => body
+                        .get("msg")
+                        .and_then(Value::as_str)
+                        .filter(|message| !message.trim().is_empty())
+                        .unwrap_or("request failed")
+                        .to_string(),
+                    Err(error) => error,
+                }
+            } else {
+                "request failed".into()
+            };
+            return Err(format!("SKILL_DOWNLOAD_HTTP_{}: {detail}", status.as_u16()));
+        }
+        if content_type != "application/zip" {
+            return Err("SKILL_DOWNLOAD_RESPONSE_INVALID: expected application/zip".into());
+        }
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_SKILL_DOWNLOAD_BYTES as u64)
+        {
+            return Err("SKILL_DOWNLOAD_TOO_LARGE: ZIP exceeds 32 MiB".into());
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(|_| "DESKTOP_AUTH_NETWORK")? {
+            if chunk.len() > MAX_SKILL_DOWNLOAD_BYTES - bytes.len() {
+                return Err("SKILL_DOWNLOAD_TOO_LARGE: ZIP exceeds 32 MiB".into());
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        Ok(bytes)
     }
 
     pub async fn upload(
@@ -887,6 +953,17 @@ mod tests {
     }
 
     async fn backend(responses: Vec<(u16, Value)>, gate: Option<Arc<Notify>>) -> Backend {
+        let responses = responses
+            .into_iter()
+            .map(|(status, body)| (status, "application/json", body.to_string().into_bytes()))
+            .collect();
+        backend_raw(responses, gate).await
+    }
+
+    async fn backend_raw(
+        responses: Vec<(u16, &'static str, Vec<u8>)>,
+        gate: Option<Arc<Notify>>,
+    ) -> Backend {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let endpoint = format!("http://{}", listener.local_addr().unwrap());
         let requests = Arc::new(Mutex::new(Vec::new()));
@@ -894,7 +971,7 @@ mod tests {
         let headers = Arc::new(Mutex::new(Vec::new()));
         let captured_headers = headers.clone();
         let task = tokio::spawn(async move {
-            for (status, body) in responses {
+            for (status, content_type, body) in responses {
                 let (mut socket, _) = listener.accept().await.unwrap();
                 let mut bytes = Vec::new();
                 let mut buffer = [0; 4096];
@@ -939,8 +1016,8 @@ mod tests {
                 if let Some(gate) = &gate {
                     gate.notified().await;
                 }
-                let body = body.to_string();
-                socket.write_all(format!("HTTP/1.1 {status} Result\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+                socket.write_all(format!("HTTP/1.1 {status} Result\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).as_bytes()).await.unwrap();
+                socket.write_all(&body).await.unwrap();
             }
         });
         let vault = Arc::new(MemoryVault::default());
@@ -1147,6 +1224,124 @@ mod tests {
         assert_eq!(url, "https://other.example");
         assert!(auth.model_backend.lock().await.is_none());
         assert!(server.requests.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn skill_download_returns_zip_bytes_using_the_authenticated_endpoint() {
+        let zip = b"PK\x03\x04example".to_vec();
+        let server = backend_raw(vec![(200, "application/zip", zip.clone())], None).await;
+        *server.auth.tokens.lock().await = Some(
+            TokenSession::new(serde_json::from_value(token("access", "refresh")).unwrap()).unwrap(),
+        );
+
+        assert_eq!(server.auth.download_skill("demo-skill").await.unwrap(), zip);
+        assert_eq!(
+            server.requests.lock().await[0].0,
+            "GET /api/employee-skills/download?skillName=demo-skill HTTP/1.1"
+        );
+        assert!(server.headers.lock().await[0]
+            .to_lowercase()
+            .contains("authorization: bearer access"));
+    }
+
+    #[tokio::test]
+    async fn skill_download_refreshes_expired_tokens_before_retrying() {
+        let zip = b"PK\x03\x04example".to_vec();
+        let server = backend_raw(
+            vec![
+                (401, "application/json", b"{}".to_vec()),
+                (
+                    200,
+                    "application/json",
+                    token("new-access", "new-refresh").to_string().into_bytes(),
+                ),
+                (200, "application/zip", zip.clone()),
+            ],
+            None,
+        )
+        .await;
+        *server.auth.tokens.lock().await = Some(
+            TokenSession::new(serde_json::from_value(token("old-access", "old-refresh")).unwrap())
+                .unwrap(),
+        );
+
+        assert_eq!(server.auth.download_skill("demo").await.unwrap(), zip);
+        let headers = server.headers.lock().await;
+        assert!(headers[0]
+            .to_lowercase()
+            .contains("authorization: bearer old-access"));
+        assert!(headers[2]
+            .to_lowercase()
+            .contains("authorization: bearer new-access"));
+        assert_eq!(
+            server.requests.lock().await[1].0,
+            "POST /desktop/api/refresh HTTP/1.1"
+        );
+    }
+
+    #[tokio::test]
+    async fn skill_download_surfaces_backend_errors_and_rejects_non_zip_successes() {
+        let server = backend_raw(
+            vec![
+                (
+                    404,
+                    "application/json",
+                    br#"{"code":1,"msg":"skill unavailable","data":null}"#.to_vec(),
+                ),
+                (200, "application/json", br#"{"code":1}"#.to_vec()),
+            ],
+            None,
+        )
+        .await;
+        *server.auth.tokens.lock().await = Some(
+            TokenSession::new(serde_json::from_value(token("access", "refresh")).unwrap()).unwrap(),
+        );
+
+        assert_eq!(
+            server.auth.download_skill("missing").await.unwrap_err(),
+            "SKILL_DOWNLOAD_HTTP_404: skill unavailable"
+        );
+        assert_eq!(
+            server.auth.download_skill("demo").await.unwrap_err(),
+            "SKILL_DOWNLOAD_RESPONSE_INVALID: expected application/zip"
+        );
+    }
+
+    #[tokio::test]
+    async fn skill_download_rejects_partial_responses_and_surfaces_access_errors() {
+        let server = backend_raw(
+            vec![
+                (206, "application/zip", b"PK\x03\x04partial".to_vec()),
+                (
+                    403,
+                    "application/json",
+                    br#"{"code":403,"msg":"access denied"}"#.to_vec(),
+                ),
+                (
+                    502,
+                    "application/json",
+                    br#"{"code":1,"msg":"service unavailable","data":null}"#.to_vec(),
+                ),
+            ],
+            None,
+        )
+        .await;
+        *server.auth.tokens.lock().await = Some(
+            TokenSession::new(serde_json::from_value(token("access", "refresh")).unwrap()).unwrap(),
+        );
+
+        assert_eq!(
+            server.auth.download_skill("demo").await.unwrap_err(),
+            "SKILL_DOWNLOAD_HTTP_206: request failed"
+        );
+        assert_eq!(
+            server.auth.download_skill("demo").await.unwrap_err(),
+            "SKILL_DOWNLOAD_HTTP_403: access denied"
+        );
+        assert_eq!(
+            server.auth.download_skill("demo").await.unwrap_err(),
+            "SKILL_DOWNLOAD_HTTP_502: service unavailable"
+        );
     }
 
     #[tokio::test]

@@ -18,8 +18,35 @@ function feedbackText(feedback: SkillFeedback, t: Translate): string {
       return t('feedback.saved', { name: feedback.name, count: feedback.count })
     case 'uploaded':
       return t('feedback.uploaded', { name: feedback.skillName, version: feedback.version })
-    case 'failed':
+    case 'downloaded': {
+      switch (feedback.status) {
+        case 'ready':
+          return t('feedback.downloaded', { name: feedback.skillName })
+        case 'pending':
+          return t('feedback.downloadPending', { name: feedback.skillName })
+        case 'shadowed':
+          return t('feedback.downloadShadowed', { name: feedback.skillName })
+        case 'not-invocable':
+          return t('feedback.downloadNotInvocable', { name: feedback.skillName })
+        case 'unavailable':
+          return feedback.detail === undefined
+            ? t('feedback.downloadUnavailable', { name: feedback.skillName })
+            : `${t('feedback.downloadUnavailable', { name: feedback.skillName })} (${feedback.detail})`
+      }
+      throw new Error(`Unknown skill installation status: ${String(feedback.status)}`)
+    }
+    case 'failed': {
+      const code = feedback.error.split(':', 1)[0]
+      if (code === 'SKILL_ALREADY_EXISTS')
+        return t('feedback.skillExists')
+      if (code === 'SKILL_NAME_INVALID')
+        return t('feedback.invalidSkillName')
+      if (code === 'SKILL_NOT_USER_INVOCABLE')
+        return t('feedback.notInvocable')
+      if (code === 'DESKTOP_AUTH_SESSION_MISSING')
+        return t('feedback.sessionExpired')
       return `${t('feedback.failed')}: ${feedback.error}`
+    }
   }
 }
 
@@ -27,6 +54,8 @@ export function SkillHubPanel({ t }: { t: Translate }): ReactElement {
   const state = useStore(store.skill)
   const displayName = state.profile?.employeeName ?? state.employee?.employeeName ?? ''
   const activeTab = state.tab === 'mine' ? 'mine' : 'enterprise'
+  const warning = state.feedback?.kind === 'failed'
+    || (state.feedback?.kind === 'downloaded' && state.feedback.status !== 'ready')
   useWatchImmediate([state.tab], () => {
     void loadSkillHub()
   })
@@ -109,8 +138,8 @@ export function SkillHubPanel({ t }: { t: Translate }): ReactElement {
           : (
               <Toast
                 key={state.feedback.seq}
-                tone={state.feedback.kind === 'failed' ? undefined : 'success'}
-                icon={state.feedback.kind === 'failed' ? <Icon as={TriangleExclamation} size={16} /> : undefined}
+                tone={warning ? undefined : 'success'}
+                icon={warning ? <Icon as={TriangleExclamation} size={16} /> : undefined}
                 text={feedbackText(state.feedback, t)}
                 onDone={() => store.skill.dismissFeedback(state.feedback?.seq)}
               />
