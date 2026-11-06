@@ -61,9 +61,7 @@ pub async fn desktop_auth_access_token(
 }
 
 #[tauri::command]
-pub fn desktop_auth_api_base(
-    auth: tauri::State<'_, Arc<AuthService>>,
-) -> Result<String, String> {
+pub fn desktop_auth_api_base(auth: tauri::State<'_, Arc<AuthService>>) -> Result<String, String> {
     auth.api_base()
 }
 
@@ -88,6 +86,21 @@ pub async fn desktop_auth_upload(
     auth.upload(&path, &file_name, &content_type, body).await
 }
 
+#[tauri::command]
+pub async fn desktop_install_employee_skill<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    auth: tauri::State<'_, Arc<AuthService>>,
+    skill_name: String,
+) -> Result<(), String> {
+    auth.access_token().await?;
+    let home = crate::config::get_dsh_data_path(&app);
+    crate::service::skill::ensure_available(&home, &skill_name)?;
+    let bytes = auth.download_skill(&skill_name).await?;
+    tokio::task::spawn_blocking(move || crate::service::skill::install(&home, &skill_name, &bytes))
+        .await
+        .map_err(|error| format!("SKILL_INSTALL_FAILED: {error}"))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,6 +118,7 @@ mod tests {
             desktop_auth_access_token,
             desktop_auth_request,
             desktop_auth_upload,
+            desktop_install_employee_skill,
             desktop_auth_employee
         ];
         let app = mock_builder()
@@ -122,6 +136,7 @@ mod tests {
             "desktop_auth_access_token",
             "desktop_auth_request",
             "desktop_auth_upload",
+            "desktop_install_employee_skill",
             "desktop_auth_employee",
         ] {
             for (origin, allowed) in [
@@ -136,6 +151,8 @@ mod tests {
                         "contentType": "application/zip",
                         "body": [1, 2, 3]
                     })
+                } else if command == "desktop_install_employee_skill" {
+                    serde_json::json!({"skillName":"demo"})
                 } else {
                     serde_json::json!({"method":"GET","path":"/api/private","body":null})
                 };

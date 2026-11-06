@@ -106,6 +106,12 @@ brew install dsh-tauri/desktop/deepseek-harness
 - Ejecutar localmente no significa estar totalmente sin conexión: modelos, instalación de plugins, actualizaciones pueden usar red.
 - Para problemas de pantalla, Wayland, AppImage y permisos en Linux, consultá la [documentación de instalación y solución de problemas](https://dshtauri.mintlify.site).
 
+### Centro de habilidades empresariales
+
+Si el centro de habilidades está habilitado, iniciá sesión con tu cuenta empresarial y descargá habilidades desde **Habilidades empresariales** o **Mis habilidades**. Cuando el núcleo confirme la carga, escribí `/nombre-de-habilidad` en una conversación, por ejemplo `/tdks-frontend-design`.
+
+Las descargas no sobrescriben habilidades locales con el mismo nombre. La carga puede demorar; si no se completa, revisá la función de habilidades de Extensiones y actualizá la lista o reiniciá. Una habilidad del workspace o del agente puede tener prioridad sobre otra con el mismo nombre.
+
 ### Proxy del escritorio
 
 - Configurá un proxy HTTP, HTTPS, SOCKS5 o SOCKS5H en **Configuración → Aplicación → URL del proxy**.

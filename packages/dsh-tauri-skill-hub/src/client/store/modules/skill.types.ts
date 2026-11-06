@@ -1,5 +1,8 @@
 import type { EmployeeInfo } from 'dsh-tauri/client'
+import type { GetApiTauriSkillHubLocalSkillResponse } from '../../apis/index.type'
 import type { EmployeeDeptVO, EmployeeProfile, SkillSummary, SkillTab, UserSkillDetails } from '../../types'
+
+export type SkillInstallStatus = Extract<GetApiTauriSkillHubLocalSkillResponse, { status: string }>['status']
 
 export interface SkillSavedFeedback {
   seq: number
@@ -15,6 +18,14 @@ export interface SkillUploadedFeedback {
   version: string
 }
 
+export interface SkillDownloadedFeedback {
+  seq: number
+  kind: 'downloaded'
+  skillName: string
+  status: SkillInstallStatus
+  detail?: string
+}
+
 export interface SkillFailedFeedback {
   seq: number
   kind: 'failed'
@@ -22,7 +33,7 @@ export interface SkillFailedFeedback {
 }
 
 /** 一次用户可感知的操作结果，由 Toast 呈现（kind → 文案在面板里查词典）。 */
-export type SkillFeedback = SkillSavedFeedback | SkillUploadedFeedback | SkillFailedFeedback
+export type SkillFeedback = SkillSavedFeedback | SkillUploadedFeedback | SkillDownloadedFeedback | SkillFailedFeedback
 
 /** 面板可变状态：三份接口数据是唯一真值，页签与检索词是视图状态。 */
 export interface SkillHubState {
@@ -49,6 +60,7 @@ export interface SkillHubState {
   tab: SkillTab
   keyword: string
   loading: boolean
+  downloading: readonly string[]
   error: string
   feedback: SkillFeedback | null
   feedbackSeq: number

@@ -1,8 +1,13 @@
+import type { SkillInstallStatus } from '../store/modules/skill.types'
 import type { ActionResult } from '../types'
+import { invoke } from 'dsh-tauri/client'
+import { getLocalSkill } from '../apis'
 import { store } from '../store'
 import { employeeLabel, findEmployee } from '../store/modules/skill.utils'
 import { fetchAuth } from './auth'
 import { fetchCatalogSkills, fetchCommonSkills, fetchEmployees, fetchUserProfile, fetchUserSkills, saveUserSkills, uploadSkillZip } from './remote'
+
+const INSTALL_STATUSES: readonly SkillInstallStatus[] = ['ready', 'pending', 'shadowed', 'not-invocable', 'unavailable']
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -109,5 +114,33 @@ export async function uploadMySkill(file: File): Promise<ActionResult> {
   }
   catch (error) {
     return fail(error)
+  }
+}
+
+export async function downloadSkill(name: string): Promise<ActionResult> {
+  if (store.skill.downloading.includes(name))
+    return fail(new Error('SKILL_DOWNLOAD_IN_PROGRESS'))
+  store.skill.startDownload(name)
+  try {
+    await invoke<void>('desktop_install_employee_skill', { skillName: name }, { timeoutMs: 90_000 })
+    try {
+      const result = await getLocalSkill({ name }, { timeout: 6_500 })
+      if ('error' in result)
+        throw new Error(result.error)
+      if (!INSTALL_STATUSES.includes(result.status))
+        throw new Error('SKILL_STATUS_INVALID')
+      store.skill.notifyDownloaded(name, result.status)
+    }
+    catch (error) {
+      console.error('[skill-hub] Failed to verify installed skill:', error)
+      store.skill.notifyDownloaded(name, 'unavailable', messageOf(error))
+    }
+    return { ok: true }
+  }
+  catch (error) {
+    return fail(error)
+  }
+  finally {
+    store.skill.finishDownload(name)
   }
 }

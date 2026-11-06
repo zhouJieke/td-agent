@@ -1,9 +1,16 @@
 import type { EmployeeDeptVO, EmployeeProfile, SkillPage, UserSkillDetails } from '../types'
+import { invoke } from 'dsh-tauri/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { getLocalSkill } from '../apis'
 import { store } from '../store'
 import { fetchAuth } from './auth'
 import { fetchCatalogSkills, fetchCommonSkills, fetchEmployees, fetchUserProfile, fetchUserSkills, saveUserSkills, uploadSkillZip } from './remote'
-import { fetchSkillHub, loadSkillHub, saveUserSkillNames, selectManageUser, uploadMySkill } from './skill'
+import { downloadSkill, fetchSkillHub, loadSkillHub, saveUserSkillNames, selectManageUser, uploadMySkill } from './skill'
+
+vi.mock('dsh-tauri/client', async importOriginal => ({
+  ...await importOriginal<typeof import('dsh-tauri/client')>(),
+  invoke: vi.fn(),
+}))
 
 vi.mock('./remote', () => ({
   fetchCommonSkills: vi.fn(),
@@ -17,6 +24,10 @@ vi.mock('./remote', () => ({
 
 vi.mock('./auth', () => ({
   fetchAuth: vi.fn(),
+}))
+
+vi.mock('../apis', () => ({
+  getLocalSkill: vi.fn(),
 }))
 
 function page(names: string[]): SkillPage {
@@ -64,6 +75,8 @@ beforeEach(() => {
   store.skill.setManageMine(null)
   store.skill.setManageLoading(false)
   store.skill.setError('')
+  for (const name of store.skill.downloading)
+    store.skill.finishDownload(name)
   store.skill.dismissFeedback()
   vi.mocked(fetchAuth).mockReset()
   vi.mocked(fetchCommonSkills).mockReset()
@@ -73,6 +86,9 @@ beforeEach(() => {
   vi.mocked(saveUserSkills).mockReset()
   vi.mocked(fetchEmployees).mockReset()
   vi.mocked(uploadSkillZip).mockReset()
+  vi.mocked(invoke).mockReset()
+  vi.mocked(getLocalSkill).mockReset()
+  vi.mocked(getLocalSkill).mockResolvedValue({ status: 'ready' })
 })
 
 describe('登录态编排', () => {
@@ -248,5 +264,77 @@ describe('我的技能上传', () => {
 
     expect(result).toEqual({ ok: false, error: '技能 ZIP 不能为空且不能超过 10 MB' })
     expect(store.skill.feedback).toMatchObject({ kind: 'failed', error: '技能 ZIP 不能为空且不能超过 10 MB' })
+  })
+})
+
+describe('技能下载与安装', () => {
+  it('安装成功后提示可使用的技能命令', async () => {
+    vi.mocked(invoke).mockResolvedValue(undefined)
+
+    await expect(downloadSkill('demo-skill')).resolves.toEqual({ ok: true })
+
+    expect(invoke).toHaveBeenCalledExactlyOnceWith(
+      'desktop_install_employee_skill',
+      { skillName: 'demo-skill' },
+      { timeoutMs: 90_000 },
+    )
+    expect(store.skill.downloading).toEqual([])
+    expect(getLocalSkill).toHaveBeenCalledExactlyOnceWith({ name: 'demo-skill' }, { timeout: 6_500 })
+    expect(store.skill.feedback).toMatchObject({ kind: 'downloaded', skillName: 'demo-skill', status: 'ready' })
+  })
+
+  it('下载期间保持对应技能的繁忙状态并阻止重复请求', async () => {
+    let finish!: () => void
+    vi.mocked(invoke).mockReturnValue(new Promise<void>((resolve) => {
+      finish = resolve
+    }))
+
+    const first = downloadSkill('demo')
+    expect(store.skill.downloading).toEqual(['demo'])
+    await expect(downloadSkill('demo')).resolves.toEqual({ ok: false, error: 'SKILL_DOWNLOAD_IN_PROGRESS' })
+    expect(invoke).toHaveBeenCalledTimes(1)
+    finish()
+    await expect(first).resolves.toEqual({ ok: true })
+    expect(store.skill.downloading).toEqual([])
+  })
+
+  it('安装失败释放繁忙状态并展示具体错误', async () => {
+    vi.mocked(invoke).mockRejectedValue(new Error('SKILL_DOWNLOAD_HTTP_404: skill unavailable'))
+
+    await expect(downloadSkill('missing')).resolves.toEqual({
+      ok: false,
+      error: 'SKILL_DOWNLOAD_HTTP_404: skill unavailable',
+    })
+    expect(store.skill.downloading).toEqual([])
+    expect(store.skill.feedback).toMatchObject({
+      kind: 'failed',
+      error: 'SKILL_DOWNLOAD_HTTP_404: skill unavailable',
+    })
+  })
+
+  it('已安装但被同名技能遮蔽时不提示可立即调用', async () => {
+    vi.mocked(invoke).mockResolvedValue(undefined)
+    vi.mocked(getLocalSkill).mockResolvedValue({ status: 'shadowed' })
+
+    await expect(downloadSkill('demo')).resolves.toEqual({ ok: true })
+
+    expect(store.skill.feedback).toMatchObject({ kind: 'downloaded', skillName: 'demo', status: 'shadowed' })
+  })
+
+  it('安装完成后无法确认内核状态时保留文件并显示错误详情', async () => {
+    vi.mocked(invoke).mockResolvedValue(undefined)
+    vi.mocked(getLocalSkill).mockRejectedValue(new Error('kernel unavailable'))
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(downloadSkill('demo')).resolves.toEqual({ ok: true })
+
+    expect(store.skill.feedback).toMatchObject({
+      kind: 'downloaded',
+      skillName: 'demo',
+      status: 'unavailable',
+      detail: 'kernel unavailable',
+    })
+    expect(log).toHaveBeenCalledOnce()
+    log.mockRestore()
   })
 })

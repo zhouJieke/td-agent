@@ -104,6 +104,12 @@ brew install dsh-tauri/desktop/deepseek-harness
 - 本地运行不等于完全离线：模型服务、插件安装、更新仍可能联网。
 - Linux 显示、Wayland、AppImage 与权限问题的处理见[安装与故障排查文档](https://dshtauri.mintlify.site/zh-CN/help/troubleshooting)。
 
+### 企业技能中心
+
+启用技能中心并登录企业账号后，可在“企业公用技能”或“我的技能”中下载技能。内核确认加载后，在会话中输入 `/技能名`，例如 `/tdks-frontend-design`。
+
+下载不会覆盖本地同名技能。加载可能需要短暂等待；若未加载，请检查扩展的技能功能并刷新技能列表或重启。不同工作区或智能体的同名技能可能有更高优先级，实际调用以当前会话为准。
+
 ### 桌面代理
 
 - 在**配置 → 应用 → 代理地址**设置 HTTP、HTTPS、SOCKS5 或 SOCKS5H 代理。

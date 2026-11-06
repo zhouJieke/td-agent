@@ -65,4 +65,33 @@ describe('upstream H3 API generation', () => {
     expect(types).toContain('id: string')
     expect(types).not.toMatch(/response\s*=\s*unknown/i)
   }, 30_000)
+
+  it('generates the skill-hub local skill query and status contract with the existing transport', async () => {
+    const input = 'packages/dsh-tauri-skill-hub/src/host/server/index.ts'
+    const target = configuration.servers.find(server => server.input === input)
+    expect(target).toEqual({
+      input,
+      output: {
+        main: 'packages/dsh-tauri-skill-hub/src/client/apis/index.ts',
+        type: 'packages/dsh-tauri-skill-hub/src/client/apis/index.type.ts',
+      },
+    })
+    if (target === undefined)
+      throw new Error('Missing skill-hub API configuration')
+    if (typeof configuration.preset !== 'function')
+      throw new TypeError('Expected configured API pipeline')
+    const config = { ...fixture(), input: target.input }
+    await configuration.preset(config)
+    const output = config.output as { main: string, type: string }
+    const code = readFileSync(output.main, 'utf8')
+    const types = readFileSync(output.type, 'utf8')
+
+    expect(code).toContain('import { ofetch } from "dsh-tauri/client"')
+    expect(code).toContain('import type { FetchOptions } from "dsh-tauri/client"')
+    expect(code).toContain('export function getLocalSkill(params?: Types.GetApiTauriSkillHubLocalSkillQuery, options?: FetchOptions)')
+    expect(code).toContain('"/api/tauri/skill-hub/local-skill", { method: "get", params, ...options }')
+    expect(types).toContain('GetApiTauriSkillHubLocalSkillResponse = { status: "ready" | "pending" | "shadowed" | "not-invocable" | "unavailable" } | { error: string }')
+    expect(types).toContain('name?: GetApiTauriSkillHubLocalSkillQueryName')
+    expect(types).toContain('GetApiTauriSkillHubLocalSkillQueryName = undefined | string')
+  }, 30_000)
 })
