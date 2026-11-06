@@ -82,6 +82,21 @@ describe('设置账号命令桥', () => {
     expect(bridge.invoke).toHaveBeenCalledWith('desktop_auth_upload', args)
   })
 
+  it('安装技能命令只转发技能名并回传结果', async () => {
+    bridge.invoke.mockResolvedValue(undefined)
+    const postMessage = mount()
+    bridge.receive!({ type: 'dsh://tauri:invoke', cmd: 'desktop_install_employee_skill', nonce: 'skill', args: { skillName: 'demo', path: 'ignored', body: 'ignored' } }, { origin: 'http://127.0.0.1:3081' })
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith({ type: 'dsh://tauri:reply', nonce: 'skill', ok: true, value: undefined }, 'http://127.0.0.1:3081'))
+    expect(bridge.invoke).toHaveBeenCalledExactlyOnceWith('desktop_install_employee_skill', { skillName: 'demo' })
+  })
+
+  it('安装技能命令拒绝非字符串名称', async () => {
+    const postMessage = mount()
+    bridge.receive!({ type: 'dsh://tauri:invoke', cmd: 'desktop_install_employee_skill', nonce: 'invalid', args: { skillName: 123 } }, { origin: 'http://127.0.0.1:3081' })
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith({ type: 'dsh://tauri:reply', nonce: 'invalid', ok: false, error: 'SKILL_NAME_INVALID' }, 'http://127.0.0.1:3081'))
+    expect(bridge.invoke).not.toHaveBeenCalled()
+  })
+
   it('访问令牌命令放行给帧内，供插件直连外部业务后端自附 Bearer', async () => {
     bridge.invoke.mockResolvedValue('access-token')
     const postMessage = mount()

@@ -1,6 +1,6 @@
 import type { EmployeeInfo } from 'dsh-tauri/client'
 import type { EmployeeDeptVO, EmployeeProfile, SkillSummary, SkillTab, UserSkillDetails } from '../../types'
-import type { SkillHubState } from './skill.types'
+import type { SkillHubState, SkillInstallStatus } from './skill.types'
 import { defineStore } from 'dsh-tauri/client'
 
 export const skill = defineStore({
@@ -18,6 +18,7 @@ export const skill = defineStore({
     tab: 'enterprise',
     keyword: '',
     loading: false,
+    downloading: [],
     error: '',
     feedback: null,
     feedbackSeq: 0,
@@ -61,6 +62,12 @@ export const skill = defineStore({
     setLoading(loading: boolean) {
       this.loading = loading
     },
+    startDownload(name: string) {
+      this.downloading = [...this.downloading, name]
+    },
+    finishDownload(name: string) {
+      this.downloading = this.downloading.filter(item => item !== name)
+    },
     setError(error: string) {
       this.error = error
       this.loading = false
@@ -81,6 +88,16 @@ export const skill = defineStore({
         kind: 'uploaded',
         skillName,
         version,
+      }
+    },
+    notifyDownloaded(skillName: string, status: SkillInstallStatus, detail?: string) {
+      this.feedbackSeq += 1
+      this.feedback = {
+        seq: this.feedbackSeq,
+        kind: 'downloaded',
+        skillName,
+        status,
+        ...(detail === undefined ? {} : { detail }),
       }
     },
     notifyFailed(error: string) {

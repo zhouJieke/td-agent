@@ -6,6 +6,7 @@ import { isEmpty } from 'dsh-tauri/client'
 import { useRef, useState } from 'react'
 import { uploadMySkill } from '../service/skill'
 import { skillTitle } from '../store/modules/skill.utils'
+import { SkillDownload } from './skill-download'
 
 interface MineViewProps {
   t: Translate
@@ -76,6 +77,7 @@ function DetailCard({ t, detail }: { t: Translate, detail: SkillDetail }): React
             title={expanded ? t('skill.collapse') : t('skill.expand')}
             onClick={() => setExpanded(value => !value)}
           />
+          <SkillDownload t={t} name={summary.name} />
         </Card.End>
       </Card.Header>
       {expanded ? <VersionRows t={t} detail={detail} /> : null}
@@ -109,15 +111,17 @@ export function MineView({ t, mine, hint, emptyText }: MineViewProps): ReactElem
           {pending ? t('mine.uploading') : t('mine.upload')}
         </Button>
       </div>
-      {mine === null || mine.skills.length === 0
+      {mine === null || (mine.skills.length === 0 && mine.failed.length === 0)
         ? <Text tone="tertiary" size="sm" className="py-[32px] text-center">{emptyText}</Text>
-        : (
-            <Card.List className="gap-[8px]">
-              {mine.skills.map(detail => (
-                <DetailCard key={`${detail.summary.namespaceId}/${detail.summary.name}`} t={t} detail={detail} />
-              ))}
-            </Card.List>
-          )}
+        : mine.skills.length === 0
+          ? null
+          : (
+              <Card.List className="gap-[8px]">
+                {mine.skills.map(detail => (
+                  <DetailCard key={`${detail.summary.namespaceId}/${detail.summary.name}`} t={t} detail={detail} />
+                ))}
+              </Card.List>
+            )}
       {mine === null || mine.failed.length === 0
         ? null
         : (
@@ -127,10 +131,13 @@ export function MineView({ t, mine, hint, emptyText }: MineViewProps): ReactElem
                 {t('mine.failedTitle', { count: mine.failed.length })}
               </span>
               {mine.failed.map(item => (
-                <span key={item.name} className="text-tertiary text-[12px] leading-[18px]">
-                  <span className="font-mono text-secondary">{item.name}</span>
-                  {isEmpty(item.reason) ? null : ` · ${item.reason}`}
-                </span>
+                <div key={item.name} className="flex items-center justify-between gap-[8px] text-tertiary text-[12px] leading-[18px]">
+                  <span>
+                    <span className="font-mono text-secondary">{item.name}</span>
+                    {isEmpty(item.reason) ? null : ` · ${item.reason}`}
+                  </span>
+                  <SkillDownload t={t} name={item.name} />
+                </div>
               ))}
             </div>
           )}

@@ -105,6 +105,12 @@ brew install dsh-tauri/desktop/deepseek-harness
 - Local execution is not fully offline: model services, plugin installation, updates can still use network.
 - For Linux display, Wayland, AppImage, and permission workarounds, see the [installation and troubleshooting docs](https://dshtauri.mintlify.site/en/help/troubleshooting).
 
+### Enterprise Skill Hub
+
+When Skill Hub is enabled, sign in with your enterprise account and download skills from **Enterprise skills** or **My skills**. Once the core confirms a skill is loaded, enter `/skill-name` in a conversation, for example `/tdks-frontend-design`.
+
+Downloads do not overwrite local skills with the same name. Loading may take a moment; if it does not complete, check the Extensions skill feature and refresh the skills list or restart. Workspace- or agent-scoped skills may take precedence over a skill with the same name.
+
 ### Desktop proxy
 
 - Set an HTTP, HTTPS, SOCKS5, or SOCKS5H proxy in **Configuration → Application → Proxy URL**.

@@ -5,6 +5,7 @@ import { original } from 'dsh-h3/genapi'
 
 const plugins = [
   'dsh-tauri-extension',
+  'dsh-tauri-skill-hub',
   'dsh-tauri-scheduler',
   'dsh-tauri-rightclick',
   'dsh-tauri-archive',
@@ -36,7 +37,7 @@ export default defineConfig({
   ),
   meta: { import: { http: 'dsh-tauri/client' } },
   transform: {
-    operation: name => name.replace(/ApiTauri(?:Extension|Scheduler|Rightclick|Archive|Experimental|Model|Ui|Notification|Worktree|Bridge|Remote)/, ''),
+    operation: name => name.replace(/ApiTauri(?:Extension|SkillHub|Scheduler|Rightclick|Archive|Experimental|Model|Ui|Notification|Worktree|Bridge|Remote)/, ''),
   },
   patch: { operations: { post: 'postWorktree', delete: 'deleteWorktree' } },
   servers: [

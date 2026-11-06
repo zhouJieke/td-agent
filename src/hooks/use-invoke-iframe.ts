@@ -41,6 +41,7 @@ const ALLOWED_INVOKE_CMDS = new Set([
   'desktop_auth_request',
   // 上传文件走 Rust 侧 multipart 转发，保持与 desktop_auth_request 一致的后端基址与鉴权。
   'desktop_auth_upload',
+  'desktop_install_employee_skill',
   // 取当前访问令牌：供帧内插件直连外部业务后端（如本地技能服务）时自附 Bearer。
   // 注意：该命令会把 token 交给帧内，放宽了「token 不进前端」的限制，仅按需开放。
   'desktop_auth_access_token',
@@ -82,14 +83,23 @@ export function useInvokeIframe(iframeRef: RefObject<HTMLIFrameElement | null>):
     }
     // 统一以字符串承载错误（command 已按约定 `Result<_, String>` 返回带前缀 error）。
     let request: Promise<unknown>
-    if (cmd === 'desktop_auth_employee')
+    if (cmd === 'desktop_auth_employee') {
       request = auth.employee()
-    else if (cmd === 'desktop_auth_logout')
+    }
+    else if (cmd === 'desktop_auth_logout') {
       request = auth.logout()
-    else if (cmd === 'desktop_auth_request')
+    }
+    else if (cmd === 'desktop_auth_request') {
       request = auth.request(args?.path as string, { method: authMethodOf(args?.method), body: args?.body })
-    else
+    }
+    else if (cmd === 'desktop_install_employee_skill') {
+      request = typeof args?.skillName === 'string'
+        ? auth.installEmployeeSkill(args.skillName)
+        : Promise.reject(new Error('SKILL_NAME_INVALID'))
+    }
+    else {
       request = invoke<unknown>(cmd, args)
+    }
     void request
       .then(value => reply({ ok: true, value }))
       .catch((error: unknown) => {

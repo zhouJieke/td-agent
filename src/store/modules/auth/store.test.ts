@@ -191,6 +191,27 @@ describe('桌面登录状态', () => {
     await expect(auth.request('/api/private', { method: 'POST', body: { name: 'demo' } })).resolves.toEqual({ saved: true })
     expect(ipc.invoke).toHaveBeenCalledWith('desktop_auth_request', { method: 'POST', path: '/api/private', body: { name: 'demo' } })
   })
+
+  it('技能安装失败导致会话失效时清除登录态', async () => {
+    auth.session = session
+    ipc.invoke.mockRejectedValueOnce('DESKTOP_AUTH_SESSION_MISSING')
+    await expect(auth.installEmployeeSkill('demo')).rejects.toBe('DESKTOP_AUTH_SESSION_MISSING')
+    expect(ipc.invoke).toHaveBeenCalledWith('desktop_install_employee_skill', { skillName: 'demo' })
+    expect(auth.session).toBeNull()
+  })
+
+  it('退出登录后技能安装的迟到结果不会恢复旧会话', async () => {
+    let resolve!: (value: unknown) => void
+    ipc.invoke.mockImplementationOnce(() => new Promise((done) => {
+      resolve = done
+    }))
+    const installing = auth.installEmployeeSkill('demo')
+    const result = expect(installing).rejects.toThrow('DESKTOP_AUTH_SESSION_MISSING')
+    auth.completeLogout(6)
+    resolve(undefined)
+    await result
+    expect(auth.session).toBeNull()
+  })
   it('续期时凭据库被锁定则清除界面登录态并交付重试错误', async () => {
     auth.session = session
     ipc.invoke.mockRejectedValueOnce('DESKTOP_AUTH_VAULT_UNAVAILABLE')
