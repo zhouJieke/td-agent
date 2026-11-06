@@ -386,13 +386,6 @@ pub fn install_macos_menu(app: &tauri::AppHandle<Wry>) -> tauri::Result<()> {
         None::<&str>,
     )?;
     let about_separator = PredefinedMenuItem::separator(app)?;
-    let check_update = MenuItem::with_id(
-        app,
-        "desktop-check-update",
-        crate::config::i18n::t("menu.check_update"),
-        true,
-        None::<&str>,
-    )?;
     let settings_separator = PredefinedMenuItem::separator(app)?;
     let services =
         PredefinedMenuItem::services(app, Some(&crate::config::i18n::t("menu.services")))?;
@@ -416,7 +409,6 @@ pub fn install_macos_menu(app: &tauri::AppHandle<Wry>) -> tauri::Result<()> {
             &about,
             &about_separator,
             &config,
-            &check_update,
             &settings_separator,
             &services,
             &services_separator,
@@ -1661,7 +1653,7 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
     }
 
     let builder = builder
-        .manage(crate::service::auth::AuthService::default())
+        .manage(std::sync::Arc::new(crate::service::auth::AuthService::default()))
         .setup(|app| {
             let app_handle = app.handle().clone();
             crate::desktop::autostart::init(&app_handle)?;
@@ -1734,7 +1726,6 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
             | "desktop-about"
             | "desktop-copy-run-logs"
             | "desktop-toggle-devtools"
-            | "desktop-check-update"
             | "desktop-restart"
             | "desktop-keyboard-shortcuts"
             | "desktop-new-window"
@@ -1823,7 +1814,7 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
                 let label = window.label().to_owned();
                 tauri::async_runtime::spawn(async move {
                     if let Err(error) = app
-                        .state::<crate::service::auth::AuthService>()
+                        .state::<std::sync::Arc<crate::service::auth::AuthService>>()
                         .cancel(&label)
                         .await
                     {

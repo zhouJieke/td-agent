@@ -1,9 +1,10 @@
 use crate::service::auth::{AuthService, AuthSession, ClaimResult, EmployeeInfo, LoginQr};
+use std::sync::Arc;
 use tauri::Emitter;
 
 #[tauri::command]
 pub async fn desktop_auth_employee(
-    auth: tauri::State<'_, AuthService>,
+    auth: tauri::State<'_, Arc<AuthService>>,
 ) -> Result<EmployeeInfo, String> {
     auth.employee().await
 }
@@ -11,7 +12,7 @@ pub async fn desktop_auth_employee(
 #[tauri::command]
 pub async fn desktop_auth_logout(
     app: tauri::AppHandle,
-    auth: tauri::State<'_, AuthService>,
+    auth: tauri::State<'_, Arc<AuthService>>,
 ) -> Result<u64, String> {
     let id = auth.logout().await?;
     app.emit("desktop-auth-logged-out", id)
@@ -22,7 +23,7 @@ pub async fn desktop_auth_logout(
 #[tauri::command]
 pub async fn desktop_auth_begin(
     window: tauri::WebviewWindow,
-    auth: tauri::State<'_, AuthService>,
+    auth: tauri::State<'_, Arc<AuthService>>,
     platform: String,
 ) -> Result<Option<LoginQr>, String> {
     auth.begin(window.label(), &platform).await
@@ -31,7 +32,7 @@ pub async fn desktop_auth_begin(
 #[tauri::command]
 pub async fn desktop_auth_claim(
     window: tauri::WebviewWindow,
-    auth: tauri::State<'_, AuthService>,
+    auth: tauri::State<'_, Arc<AuthService>>,
     login_id: u64,
 ) -> Result<ClaimResult, String> {
     auth.claim(window.label(), login_id).await
@@ -40,35 +41,35 @@ pub async fn desktop_auth_claim(
 #[tauri::command]
 pub async fn desktop_auth_cancel(
     window: tauri::WebviewWindow,
-    auth: tauri::State<'_, AuthService>,
+    auth: tauri::State<'_, Arc<AuthService>>,
 ) -> Result<(), String> {
     auth.cancel(window.label()).await
 }
 
 #[tauri::command]
 pub async fn desktop_auth_session(
-    auth: tauri::State<'_, AuthService>,
+    auth: tauri::State<'_, Arc<AuthService>>,
 ) -> Result<Option<AuthSession>, String> {
     auth.session().await
 }
 
 #[tauri::command]
 pub async fn desktop_auth_access_token(
-    auth: tauri::State<'_, AuthService>,
+    auth: tauri::State<'_, Arc<AuthService>>,
 ) -> Result<String, String> {
     auth.access_token().await
 }
 
 #[tauri::command]
 pub fn desktop_auth_api_base(
-    auth: tauri::State<'_, AuthService>,
+    auth: tauri::State<'_, Arc<AuthService>>,
 ) -> Result<String, String> {
     auth.api_base()
 }
 
 #[tauri::command]
 pub async fn desktop_auth_request(
-    auth: tauri::State<'_, AuthService>,
+    auth: tauri::State<'_, Arc<AuthService>>,
     method: String,
     path: String,
     body: serde_json::Value,
@@ -78,7 +79,7 @@ pub async fn desktop_auth_request(
 
 #[tauri::command]
 pub async fn desktop_auth_upload(
-    auth: tauri::State<'_, AuthService>,
+    auth: tauri::State<'_, Arc<AuthService>>,
     path: String,
     file_name: String,
     content_type: String,
@@ -107,7 +108,7 @@ mod tests {
             desktop_auth_employee
         ];
         let app = mock_builder()
-            .manage(AuthService::for_test())
+            .manage(Arc::new(AuthService::for_test()))
             .invoke_handler(move |invoke| {
                 dispatched.store(true, Ordering::Relaxed);
                 handler(invoke)

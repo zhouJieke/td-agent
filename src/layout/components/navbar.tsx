@@ -10,9 +10,9 @@ import {
   Square,
   Xmark,
 } from '@gravity-ui/icons'
-import { Button, Chip, Description, Dropdown, Label, Separator } from '@heroui/react'
+import { Button, Chip, Dropdown, Label, Separator } from '@heroui/react'
 import { useOverlay } from '@overlastic/react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { getIdentifier } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -20,7 +20,6 @@ import { Fragment, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { If } from 'react-if-lite'
 import { cn } from 'tailwind-variants'
-import { useStore } from 'valtio-define'
 import { queryKeys } from '@/config/query-keys'
 import { DSH_VIEW_COMMANDS, shortcutHint, useDshShortcuts } from '@/hooks/use-dsh-shortcuts'
 import { useDshStyle } from '@/hooks/use-dsh-style'
@@ -29,7 +28,6 @@ import { store } from '@/store'
 import { DesktopAboutDialog } from '@/ui/dialog/about'
 import { ConfigDialog } from '@/ui/dialog/config'
 import { TaskManagerDialog } from '@/ui/dialog/task-manager'
-import { DesktopUpdateDialog } from '@/ui/dialog/update'
 import { writeClipboardText } from '@/utils/clipboard'
 import { toast } from '@/utils/toast'
 import { IS_MACOS, onDragRegionPointerDown, useMacOSFullscreen, useMaximized } from './window-chrome'
@@ -52,7 +50,7 @@ const HELP_LINKS = {
 type FileAction = 'new-window' | 'new-chat' | 'open-folder' | 'close' | 'quit'
 
 /** 「帮助」菜单的动作 id。 */
-type HelpAction = 'toggle-devtools' | 'task-manager' | 'keyboard-shortcuts' | 'copy-run-logs' | 'check-update' | 'about' | keyof typeof HELP_LINKS
+type HelpAction = 'toggle-devtools' | 'task-manager' | 'keyboard-shortcuts' | 'copy-run-logs' | 'about' | keyof typeof HELP_LINKS
 
 /** 「运行」菜单项：直接打开配置对话框并定位到对应面板。 */
 const CONFIG_TABS = [
@@ -165,7 +163,6 @@ export interface NavbarProps {
 
 export function Navbar({ sidebarCollapsed = false, onToggleSidebar, onNewChat, onOpenFolder, onOpenShortcuts, onViewCommand }: NavbarProps) {
   const { t } = useTranslation()
-  const queryClient = useQueryClient()
   const isFullscreen = useMacOSFullscreen()
   const { data: appIdentifier } = useQuery(APP_IDENTIFIER_QUERY)
   // 只读取「dsh-tauri 插件是否已安装」；查询键与「插件」面板共用（同一份缓存），
@@ -174,7 +171,6 @@ export function Navbar({ sidebarCollapsed = false, onToggleSidebar, onNewChat, o
     queryKey: queryKeys.plugins,
     queryFn: () => invoke<DshPlugin[]>('get_dsh_plugins'),
   })
-  const { updateInfo } = useStore(store.desktopUpdater)
   const [dshStyle] = useDshStyle()
   const [{ rows: shortcutRows }] = useDshShortcuts()
   // 「运行」菜单受控开合：快捷重启按钮不是菜单项，走不到 React Aria 的
@@ -184,21 +180,17 @@ export function Navbar({ sidebarCollapsed = false, onToggleSidebar, onNewChat, o
   const openConfigDialog = useOverlay(ConfigDialog)
   const openTaskManager = useOverlay(TaskManagerDialog)
   const openAboutDialog = useOverlay(DesktopAboutDialog)
-  const openUpdateDialog = useOverlay(DesktopUpdateDialog)
 
   // 仅当 dsh-tauri 插件启用（已安装）时显示左侧导航控件
   const tauriEnabled = plugins.some(plugin => plugin.id === TAURI_PLUGIN_ID)
   const isMainWindow = getCurrentWindow().label === 'main'
   const isNightly = appIdentifier === 'dsh-tauri-nightly'
-  const showUpdateAvailable = appIdentifier != null && !isNightly && updateInfo != null
 
   function onHelpAction(key: HelpAction) {
     if (key === 'toggle-devtools')
       void toggleDevtools()
     else if (key === 'task-manager')
       void openTaskManager().catch(() => { })
-    else if (key === 'check-update')
-      void handleCheckUpdate()
     else if (key === 'about')
       void openAboutDialog().catch(() => { })
     else if (key === 'copy-run-logs')
@@ -294,30 +286,6 @@ export function Navbar({ sidebarCollapsed = false, onToggleSidebar, onNewChat, o
     void openAboutDialog().catch(() => { })
   }
 
-  function handleOpenUpdateDialog() {
-    void openUpdateDialog().catch(() => { })
-  }
-
-  /** 「检查更新」：先检查，有更新才弹框；检查失败提示错误而非「已是最新」 */
-  async function handleCheckUpdate() {
-    try {
-      const identifier = await queryClient.ensureQueryData(APP_IDENTIFIER_QUERY)
-      if (identifier === 'dsh-tauri-nightly') {
-        await invoke('open_external_url', { url: 'https://github.com/dsh-tauri/deepseek-harness-desktop/releases/tag/nightly' })
-        return
-      }
-      const info = await store.desktopUpdater.check()
-      if (info)
-        handleOpenUpdateDialog()
-      else
-        toast(t('update.up_to_date'), {})
-    }
-    catch (err) {
-      console.warn('[Navbar] check update failed:', err)
-      toast(t('update.check_failed'), { variant: 'danger' })
-    }
-  }
-
   async function copyRunLogs() {
     try {
       const logs = await invoke<string>('read_run_logs')
@@ -370,9 +338,6 @@ export function Navbar({ sidebarCollapsed = false, onToggleSidebar, onNewChat, o
         break
       case 'desktop-copy-run-logs':
         void copyRunLogs()
-        break
-      case 'desktop-check-update':
-        void handleCheckUpdate()
         break
       case 'desktop-restart':
         void store.harness.restart()
@@ -661,19 +626,6 @@ export function Navbar({ sidebarCollapsed = false, onToggleSidebar, onNewChat, o
                   <Label>{t('menu.run_logs')}</Label>
                 </Dropdown.Item>
                 <Separator />
-                <Dropdown.Item
-                  id="check-update"
-                  data-testid="dsh-navbar-item-check-update"
-                  textValue={t('menu.check_update')}
-                  onAction={() => onHelpAction('check-update')}
-                >
-                  <span className="flex w-full items-center justify-between gap-3">
-                    <Label>{t('menu.check_update')}</Label>
-                    <If cond={showUpdateAvailable}>
-                      <Description>{t('menu.new_version')}</Description>
-                    </If>
-                  </span>
-                </Dropdown.Item>
                 <Dropdown.Item
                   id="about"
                   data-testid="dsh-navbar-item-about"

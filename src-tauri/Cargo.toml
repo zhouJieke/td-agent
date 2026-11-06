@@ -27,6 +27,8 @@ serde_json = "1"
 json-patch = "3"
 
 [dependencies]
+axum = { version = "0.8", default-features = false, features = [ "http1", "json", "tokio" ] }
+getrandom = "0.3"
 tauri = { version = "2", features = [
   "tray-icon",
   "image-png",

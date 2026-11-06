@@ -18,10 +18,6 @@ pub struct Setting {
     #[serde(default)]
     pub harness_max_heap_mb: Option<u32>,
     pub auto_start: bool,
-    /// 是否自动更新桌面应用：开启时启动后轮询检查、发现新版本即静默下载，并在
-    /// 退出时自动打开安装器。关闭后只剩「帮助 → 检查更新」这类用户显式发起的
-    /// 更新链路，不再静默下载或强制安装（第三方打包与自行管理版本的用户需要，
-    /// issue #1132）。
     #[serde(default = "default_auto_update")]
     pub auto_update: bool,
     pub language: String,
@@ -103,7 +99,7 @@ pub const CLOSE_ACTION_TRAY: &str = "tray";
 pub const CLOSE_ACTION_QUIT: &str = "quit";
 
 fn default_model_backend_url() -> String {
-    "http://192.168.0.225:8099".to_string()
+    "http://bcw-test.jinmit.com".to_string()
 }
 
 pub fn normalize_harness_max_heap_mb(value: Option<u32>) -> Option<u32> {
@@ -177,12 +173,14 @@ pub fn normalize_backup_retention(retention_count: u32) -> u32 {
 
 fn normalize_setting(setting: &mut Setting) {
     setting.proxy_url = super::proxy::normalize_proxy_url(&setting.proxy_url).unwrap_or_default();
-    setting.model_backend_url = if setting.model_backend_url.trim().is_empty() {
-        default_model_backend_url()
-    } else {
-        super::model_backend::normalize_model_backend_url(&setting.model_backend_url)
-            .unwrap_or_default()
-    };
+    setting.model_backend_url =
+        match super::model_backend::normalize_model_backend_url(&setting.model_backend_url) {
+            Ok(url) if url.is_empty() || url == "http://192.168.0.225:8099" => {
+                default_model_backend_url()
+            }
+            Ok(url) => url,
+            Err(_) => String::new(),
+        };
     setting.appearance.normalize();
     setting.zoom_factor = normalize_zoom_factor(setting.zoom_factor);
     setting.harness_max_heap_mb = normalize_harness_max_heap_mb(setting.harness_max_heap_mb);
@@ -466,7 +464,7 @@ mod tests {
     fn model_backend_defaults_to_the_configured_server() {
         assert_eq!(
             Setting::default().model_backend_url,
-            "http://192.168.0.225:8099"
+            "http://bcw-test.jinmit.com"
         );
     }
 
@@ -479,7 +477,7 @@ mod tests {
             "language": "en-US"
         });
         let setting = setting_from_value(Some(&value));
-        assert_eq!(setting.model_backend_url, "http://192.168.0.225:8099");
+        assert_eq!(setting.model_backend_url, "http://bcw-test.jinmit.com");
         assert_eq!(setting.port, 4099);
         assert_eq!(setting.language, "en-US");
     }
@@ -496,8 +494,27 @@ mod tests {
             });
             for saved in [value.clone(), serde_json::Value::String(value.to_string())] {
                 let setting = setting_from_value(Some(&saved));
-                assert_eq!(setting.model_backend_url, "http://192.168.0.225:8099");
+                assert_eq!(setting.model_backend_url, "http://bcw-test.jinmit.com");
                 assert_eq!(setting.port, 4099);
+            }
+        }
+    }
+
+    #[test]
+    fn model_backend_migrates_the_previous_default_server() {
+        for backend in ["http://192.168.0.225:8099", " http://192.168.0.225:8099/ "] {
+            let value = serde_json::json!({
+                "installed": true,
+                "port": 4099,
+                "auto_start": false,
+                "language": "en-US",
+                "model_backend_url": backend
+            });
+            for saved in [value.clone(), serde_json::Value::String(value.to_string())] {
+                let setting = setting_from_value(Some(&saved));
+                assert_eq!(setting.model_backend_url, "http://bcw-test.jinmit.com");
+                assert_eq!(setting.port, 4099);
+                assert_eq!(setting.language, "en-US");
             }
         }
     }
@@ -519,7 +536,7 @@ mod tests {
         assert_eq!(env.len(), 1);
         assert_eq!(
             env.get("DSH_MODEL_BACKEND_URL").map(String::as_str),
-            Some("http://192.168.0.225:8099")
+            Some("http://bcw-test.jinmit.com")
         );
     }
 

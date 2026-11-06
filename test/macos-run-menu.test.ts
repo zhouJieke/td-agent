@@ -12,6 +12,12 @@ function submenuItems(id: string) {
 }
 
 describe('macOS native menu', () => {
+  it('does not install or dispatch the manual update command', () => {
+    expect(builderSource).not.toContain('"desktop-check-update"')
+    expect(builderSource).not.toContain('&check_update')
+    expect(navbarSource).not.toContain('desktop-check-update')
+  })
+
   it('routes every Help link to a single shell window instead of broadcasting it', () => {
     const handler = builderSource.slice(builderSource.indexOf('.on_menu_event(|app, event|'))
     const helpActions = handler.slice(handler.indexOf('"desktop-documentation"'), handler.indexOf('#[cfg(target_os = "macos")]'))
@@ -162,7 +168,6 @@ describe('macOS native menu', () => {
       'desktop-harness',
       'desktop-about',
       'desktop-copy-run-logs',
-      'desktop-check-update',
       'desktop-restart',
       'desktop-keyboard-shortcuts',
       'desktop-new-window',

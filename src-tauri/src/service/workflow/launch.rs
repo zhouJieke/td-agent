@@ -987,11 +987,23 @@ pub(super) async fn launch_prepared(
     // 最佳努力：空值返回空 map，不覆盖用户已有的同名环境变量。
     envs.extend(config::proxy::proxy_child_env(&setting.proxy_url));
 
-    // 模型后台域名：核心内的 dsh-tauri-model 宿主据此拉取被授权的模型并下放进
-    // 配置。空值返回空 map，开发态可直接用同名环境变量接管。
-    envs.extend(config::model_backend::model_backend_child_env(
-        &setting.model_backend_url,
-    ));
+    if !setting.model_backend_url.is_empty() {
+        let app = tokio::time::timeout(std::time::Duration::from_secs(15), async {
+            loop {
+                if let Some(app) = notifications.get() {
+                    break app.clone();
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .map_err(|_| "MODEL_BACKEND_APP_NOT_READY")?;
+        let backend = app
+            .state::<Arc<crate::service::auth::AuthService>>()
+            .model_backend_url(&setting.model_backend_url)
+            .await?;
+        envs.extend(config::model_backend::model_backend_child_env(&backend));
+    }
 
     // 内嵌 WebView 是 `tauri.localhost` 下的跨源沙箱 iframe，`SameSite=Strict` 的
     // browser-session Cookie 不会被携带。载体标记交给 dsh-tauri 插件（载体鉴权适配）：
