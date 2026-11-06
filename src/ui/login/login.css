@@ -86,11 +86,6 @@
 .login-qr-area { display: flex; min-height: 240px; margin-top: 22px; flex-direction: column; align-items: center; justify-content: center; color: var(--login-muted); font-size: 12px; line-height: 1.7; }
 .login-qr { display: block; width: 240px; height: 240px; max-width: 100%; background: #fff; }
 .login-scan-description { margin-top: 6px; font-size: 11px; color: var(--login-muted); }
-.login-local-divider { display: flex; align-items: center; gap: 13px; margin: 22px 0 16px; font-size: 10px; color: var(--login-muted); }
-.login-local-divider > span { height: 1px; flex: 1; background: var(--color-line); }
-.login-local-button { width: 100%; gap: 12px; height: 40px; font-size: 12px; }
-.login-browser-notice { margin-top: 7px; font-size: 10px; color: var(--login-muted); }
-.login-account-note { display: flex; align-items: center; justify-content: center; gap: 5px; margin-top: 20px; font-size: 10px; color: var(--login-muted); }
 .login-footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; width: 100%; min-height: 64px; padding: 18px 48px; font-size: 10px; color: var(--login-muted); }
 .login-footer > span:last-child { display: flex; align-items: center; gap: 6px; }
 
@@ -112,8 +107,6 @@
   .login-workspace-preview { margin-top: 28px; }
   .login-auth-heading h2 { font-size: 24px; }
   .login-providers { margin-top: 22px; }
-  .login-local-divider { margin: 16px 0 12px; }
-  .login-account-note { margin-top: 14px; }
   .login-footer { min-height: 48px; padding-top: 12px; padding-bottom: 12px; }
 }
 

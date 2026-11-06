@@ -1,4 +1,4 @@
-import { ArrowRight, CircleQuestion, Lock, Minus, ShieldCheck, Square, Xmark } from '@gravity-ui/icons'
+import { CircleQuestion, Minus, ShieldCheck, Square, Xmark } from '@gravity-ui/icons'
 import { Button } from '@heroui/react'
 import { useIntervalFn, useUnmount, useWatch } from '@reause/core'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -34,19 +34,19 @@ export function DesktopEntry() {
   const { t } = useTranslation()
   const native = isTauri()
   const { session } = useStore(auth)
-  const [workspaceMode, setWorkspaceMode] = useState<'login' | 'local' | 'authenticated'>('login')
+  const [workspaceReady, setWorkspaceReady] = useState(false)
   const { mutate: refreshSession, isPending: refreshing } = useMutation({ mutationFn: async () => auth.initialize(), retry: false })
   const renewal = useIntervalFn(() => {
     if (session && Date.now() >= session.expiresAt - 30_000 && !refreshing)
       refreshSession()
   }, 15_000, { immediate: false })
-  const showWorkspace = workspaceMode === 'local' || (workspaceMode === 'authenticated' && session !== null)
+  const showWorkspace = workspaceReady && session !== null
 
   useListen<number>('desktop-auth-logged-out', ({ payload }) => {
     if (!Number.isSafeInteger(payload) || payload <= 0)
       return
     auth.completeLogout(payload)
-    setWorkspaceMode('login')
+    setWorkspaceReady(false)
   })
 
   useWatch([native, session !== null], () => {
@@ -57,10 +57,7 @@ export function DesktopEntry() {
   }, { immediate: true })
 
   function continueToWorkspace() {
-    if (auth.session)
-      setWorkspaceMode('authenticated')
-    else
-      setWorkspaceMode('local')
+    setWorkspaceReady(auth.session !== null)
   }
 
   return (
@@ -353,20 +350,6 @@ export function Login({ onContinue }: { onContinue: () => void }) {
             </If>
           </div>
 
-          <div className="login-local-divider">
-            <span />
-            {t('login.or')}
-            <span />
-          </div>
-          <Button className="login-local-button" variant="outline" onPress={onContinue} isDisabled={!native}>
-            {t('login.continue_local')}
-            <ArrowRight width="15" height="15" />
-          </Button>
-          <If cond={!native}><p className="login-browser-notice">{t('login.browser_notice')}</p></If>
-          <div className="login-account-note">
-            <Lock width="12" height="12" />
-            <span>{t('login.account_note')}</span>
-          </div>
         </section>
       </div>
 
