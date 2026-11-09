@@ -1,7 +1,10 @@
+import type { GetApiTauriSkillHubSkillsResponse } from '../apis/index.type'
 import type { SKILL_TABS } from '../constants'
 
 /** 面板页签标识。 */
 export type SkillTab = typeof SKILL_TABS[number]
+
+export type SkillRowView = Extract<GetApiTauriSkillHubSkillsResponse, { skills: unknown }>['skills'][number]
 
 /** 技能概要（接口文档 0.5 节 SkillSummary）。 */
 export interface SkillSummary {

@@ -110,7 +110,9 @@ brew install dsh-tauri/desktop/deepseek-harness
 
 Si el centro de habilidades está habilitado, iniciá sesión con tu cuenta empresarial y descargá habilidades desde **Habilidades empresariales** o **Mis habilidades**. Cuando el núcleo confirme la carga, escribí `/nombre-de-habilidad` en una conversación, por ejemplo `/tdks-frontend-design`.
 
-Las descargas no sobrescriben habilidades locales con el mismo nombre. La carga puede demorar; si no se completa, revisá la función de habilidades de Extensiones y actualizá la lista o reiniciá. Una habilidad del workspace o del agente puede tener prioridad sobre otra con el mismo nombre.
+Después de iniciar sesión, **Habilidades locales** muestra las habilidades descubiertas por el núcleo, incluidas las instaladas desde el centro. Podés buscar, filtrar, actualizar, abrir la carpeta de una habilidad y, según los permisos, ver, editar, eliminar, activar o desactivar habilidades.
+
+Las habilidades con el mismo nombre en el directorio de usuario aparecen como descargadas en ambas listas y no se pueden volver a descargar. Al eliminar una habilidad local se comprueba de nuevo su estado. Las descargas no sobrescriben habilidades locales con el mismo nombre. La carga puede demorar; si no se completa, actualizá la lista local o reiniciá. La lista puede no incluir habilidades específicas del workspace; la conversación activa determina cuál se invoca si hay nombres repetidos.
 
 ### Proxy del escritorio
 

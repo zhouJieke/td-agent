@@ -32,7 +32,9 @@
   "types": "./dist/index.d.ts",
   "files": [
     "cordis.patch.yml",
-    "dist"
+    "dist",
+    "NOTICE",
+    "skills"
   ],
   "engines": {
     "dsh": ">=0.1.7-rc.1"
@@ -62,10 +64,21 @@
     "start": "tsx src/index.ts",
     "typecheck": "tsc"
   },
-  "devDependencies": {
+  "dependencies": {
+    "dsh-h3": "catalog:",
     "dsh-tauri": "workspace:*",
+    "h3": "catalog:",
+    "lodash-es": "catalog:utils",
+    "ofetch": "catalog:utils",
+    "unstorage": "catalog:utils",
+    "yaml": "catalog:testing"
+  },
+  "devDependencies": {
+    "@types/lodash-es": "catalog:types",
+    "dompurify": "catalog:ui",
     "dsh-tauri-tsdown": "workspace:*",
     "dsh-tauri-ui": "workspace:*",
+    "marked": "catalog:ui",
     "react": "catalog:runtime",
     "tsdown": "catalog:cli"
   }

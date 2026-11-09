@@ -75,6 +75,7 @@ describe('展示名与页签取值', () => {
   it('未知页签退回企业目录', () => {
     expect(toTab('mine')).toBe('mine')
     expect(toTab('manage')).toBe('manage')
+    expect(toTab('local')).toBe('local')
     expect(toTab('unknown')).toBe('enterprise')
   })
 
