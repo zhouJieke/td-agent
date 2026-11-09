@@ -21,6 +21,8 @@ export const skill = defineStore({
     loading: false,
     downloading: [],
     installedNames: [],
+    installedVersions: {},
+    updatableNames: [],
     installedChecked: false,
     installedLoading: false,
     installedRequestId: 0,
@@ -97,10 +99,12 @@ export const skill = defineStore({
       this.installedError = ''
       return this.installedRequestId
     },
-    finishInstalledLoad(requestId: number, names: readonly string[]) {
+    finishInstalledLoad(requestId: number, names: readonly string[], versions: Readonly<Record<string, string>> = {}, updatableNames: readonly string[] = []) {
       if (requestId !== this.installedRequestId)
         return
       this.installedNames = names
+      this.installedVersions = versions
+      this.updatableNames = updatableNames
       this.installedChecked = true
       this.installedLoading = false
     },
@@ -111,11 +115,15 @@ export const skill = defineStore({
       this.installedLoading = false
       this.installedError = error
     },
-    markInstalled(name: string) {
+    markInstalled(name: string, version?: string) {
       this.installedRequestId += 1
       this.installedLoading = false
       if (!this.installedNames.includes(name))
         this.installedNames = [...this.installedNames, name]
+      if (!this.updatableNames.includes(name))
+        this.updatableNames = [...this.updatableNames, name]
+      if (version !== undefined)
+        this.installedVersions = { ...this.installedVersions, [name]: version }
     },
     setError(error: string) {
       this.error = error
@@ -144,6 +152,16 @@ export const skill = defineStore({
       this.feedback = {
         seq: this.feedbackSeq,
         kind: 'downloaded',
+        skillName,
+        status,
+        ...(detail === undefined ? {} : { detail }),
+      }
+    },
+    notifyUpdated(skillName: string, status: SkillInstallStatus, detail?: string) {
+      this.feedbackSeq += 1
+      this.feedback = {
+        seq: this.feedbackSeq,
+        kind: 'updated',
         skillName,
         status,
         ...(detail === undefined ? {} : { detail }),

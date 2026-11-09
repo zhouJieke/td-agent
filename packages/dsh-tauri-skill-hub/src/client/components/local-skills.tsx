@@ -1,43 +1,61 @@
-import type { ReactElement } from 'react'
+import type { ChangeEvent, ReactElement } from 'react'
 import type { Translate } from '../locales/index.types'
-import { Action, ArrowRotateRight, Button, Card, Checkbox, Field, GraduationCap, Icon, Input, LogoGithub, Modal, Pill, SegmentedControl, Switch, Tag, Text, Textarea } from 'dsh-tauri-ui/client'
-import { orderBy, uniq, useMount, useStore } from 'dsh-tauri/client'
+import { Action, ArrowRotateRight, Button, Card, Checkbox, Field, GraduationCap, Icon, Input, LogoGithub, Modal, SegmentedControl, Switch, Tag, Text, Textarea } from 'dsh-tauri-ui/client'
+import { orderBy, useMount, useStore } from 'dsh-tauri/client'
+import { useRef, useState } from 'react'
 import { SOURCE_LOCALE_KEYS } from '../constants'
 import { createLocalSkill, deleteLocalSkill, fetchLocalSkills, importLocalRepository, openLocalSkill, openLocalSkillDirectory, refreshLocalSkills, saveLocalSkill, toggleLocalSkill } from '../service/local-skills'
+import { uploadMySkill } from '../service/skill'
 import { store } from '../store'
 import { MarkdownPreview } from './markdown'
 import { policyTag } from './skills-tab.utils'
 
-export function LocalSkills({ t, createSkill, showHeaderActions }: { t: Translate, createSkill: () => Promise<void>, showHeaderActions: boolean }): ReactElement {
+export function LocalSkills({ t, createSkill, showDirectoryAndImport }: { t: Translate, createSkill: () => Promise<void>, showDirectoryAndImport: boolean }): ReactElement {
   const state = useStore(store.localSkills)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [pending, setPending] = useState(false)
   useMount(() => {
     void fetchLocalSkills({ refresh: true })
   })
 
   const needle = state.query.trim().toLowerCase()
   const filtered = orderBy((state.skills ?? []).filter(skill =>
-    (state.sourceFilter === 'all' || skill.source === state.sourceFilter)
-    && (needle === '' || skill.name.toLowerCase().includes(needle) || skill.description.toLowerCase().includes(needle)),
+    needle === '' || skill.name.toLowerCase().includes(needle) || skill.description.toLowerCase().includes(needle),
   ), [skill => skill.repository === undefined])
-  const sources = state.skills === null ? [] : uniq(state.skills.map(skill => skill.source))
   const editor = state.editor
   const readOnly = editor?.mode === 'view'
+
+  async function pick(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (file === undefined)
+      return
+    setPending(true)
+    try {
+      await uploadMySkill(file)
+    }
+    finally {
+      setPending(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-[14px] text-primary">
       <div className="flex items-center gap-[10px] flex-wrap [&_h3]:m-0 [&_h3]:text-[16px] [&_h3]:leading-[24px] [&_h3]:font-medium">
         <span className="inline-flex items-center justify-center flex-none w-[22px] h-[22px]"><Icon as={GraduationCap} size={16} /></span>
         <h3>{t('skillsTitle')}</h3>
-        {showHeaderActions && (
+        <span className="flex-1" />
+        {showDirectoryAndImport && (
           <>
-            <span className="flex-1" />
             <Button variant="ghost" size="sm" onClick={() => void openLocalSkillDirectory({ target: 'user-skills' })}>{t('openUserSkills')}</Button>
             <Button variant="ghost" size="sm" disabled={state.busy} onClick={() => store.localSkills.setImportOpen(true)}>{t('importRepository')}</Button>
-            <Button variant="primary" size="sm" disabled={state.busy} onClick={() => void createLocalSkill(createSkill)}>{t('newSkill')}</Button>
           </>
         )}
+        <Button type="button" variant="primary" size="sm" disabled={pending} onClick={() => fileRef.current?.click()}>
+          {pending ? t('mine.uploading') : t('mine.upload')}
+        </Button>
+        <Button variant="primary" size="sm" disabled={state.busy} onClick={() => void createLocalSkill(createSkill)}>{t('newSkill')}</Button>
       </div>
-      <Text tone="tertiary">{t('skillsIntro')}</Text>
       {state.error !== '' && <Text tone="error" size="sm" role="alert">{`${t('feedback.failed')}: ${state.error}`}</Text>}
       <div className="flex items-center gap-[7px] px-[2px] mt-[2px] [&_h3]:m-0 [&_h3]:text-[13px] [&_h3]:leading-[20px] [&_h3]:font-semibold">
         <h3>{t('skillsTab')}</h3>
@@ -52,13 +70,6 @@ export function LocalSkills({ t, createSkill, showHeaderActions }: { t: Translat
         <Input className="w-[200px] max-[680px]:w-[140px]" type="search" placeholder={t('searchSkills')} aria-label={t('searchSkills')} value={state.query} onChange={event => store.localSkills.setQuery(event.target.value)} />
         <Action variant="toolbar" icon={<Icon as={ArrowRotateRight} />} aria-label={t('refresh')} title={t('refresh')} disabled={state.busy} onClick={() => void refreshLocalSkills()} />
       </div>
-      {sources.length > 1 && (
-        <div className="flex items-center gap-[6px] flex-wrap" role="group" aria-label={t('source')}>
-          {[{ id: 'all', label: t('filterAll') }, ...sources.map(source => ({ id: source, label: t(SOURCE_LOCALE_KEYS[source] ?? 'sourceCustom') }))].map(chip => (
-            <Pill key={chip.id} active={state.sourceFilter === chip.id} onClick={() => store.localSkills.setSourceFilter(chip.id)}>{chip.label}</Pill>
-          ))}
-        </div>
-      )}
       {state.skills === null && state.loading && <Text size="sm" tone="tertiary">{t('loading')}</Text>}
       {state.skills !== null && filtered.length === 0 && <Text size="sm" tone="tertiary">{state.skills.length === 0 ? t('emptySkills') : t('noMatch')}</Text>}
       {filtered.length > 0 && (
@@ -161,7 +172,7 @@ export function LocalSkills({ t, createSkill, showHeaderActions }: { t: Translat
         <p>{t('deleteWarn')}</p>
         {state.formError !== '' && <Text tone="error" role="alert">{state.formError}</Text>}
       </Modal>
-      <Modal open={showHeaderActions && state.importOpen} onClose={() => store.localSkills.setImportOpen(false)} closeLabel={t('close')} title={t('importRepositoryTitle')} className="w-[min(680px,100%)]!">
+      <Modal open={showDirectoryAndImport && state.importOpen} onClose={() => store.localSkills.setImportOpen(false)} closeLabel={t('close')} title={t('importRepositoryTitle')} className="w-[min(680px,100%)]!">
         <div className="flex flex-col gap-[10px]">
           <Text tone="tertiary">{t('importRepositoryHint')}</Text>
           <Field label={t('repository')}>
@@ -184,6 +195,13 @@ export function LocalSkills({ t, createSkill, showHeaderActions }: { t: Translat
           </div>
         </div>
       </Modal>
+      <input
+        ref={fileRef}
+        type="file"
+        hidden
+        accept=".zip,application/zip,application/x-zip-compressed"
+        onChange={(event) => { void pick(event) }}
+      />
     </div>
   )
 }

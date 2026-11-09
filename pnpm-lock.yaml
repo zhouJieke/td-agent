@@ -1267,6 +1267,9 @@ importers:
       ofetch:
         specifier: catalog:utils
         version: 1.5.1
+      semver:
+        specifier: catalog:runtime
+        version: 7.8.5
       unstorage:
         specifier: catalog:utils
         version: 1.17.5(idb-keyval@6.3.0)
@@ -1277,6 +1280,9 @@ importers:
       '@types/lodash-es':
         specifier: catalog:types
         version: 4.17.12
+      '@types/semver':
+        specifier: catalog:types
+        version: 7.8.0
       dompurify:
         specifier: catalog:ui
         version: 3.4.14

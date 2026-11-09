@@ -39,7 +39,7 @@ export function SkillCatalog({ t, hint, skills, emptyText }: SkillCatalogProps):
         t={t}
         skills={matched}
         emptyText={isEmpty(keyword) ? emptyText : t('list.emptyMatch')}
-        actions={skill => <SkillDownload t={t} name={skill.name} />}
+        actions={skill => <SkillDownload t={t} name={skill.name} latestVersion={skill.labels.latest} />}
       />
     </div>
   )

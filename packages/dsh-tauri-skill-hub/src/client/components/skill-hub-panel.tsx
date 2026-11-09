@@ -12,7 +12,7 @@ import { MineView } from './mine-view'
 import { SkillCatalog } from './skill-catalog'
 
 const TABS_ID = `${PLUGIN_ID}.tabs`
-const SHOW_LOCAL_SKILL_HEADER_ACTIONS = false
+const SHOW_LOCAL_SKILL_DIRECTORY_AND_IMPORT = false
 
 function feedbackText(feedback: SkillFeedback, t: Translate): string {
   switch (feedback.kind) {
@@ -20,20 +20,22 @@ function feedbackText(feedback: SkillFeedback, t: Translate): string {
       return t('feedback.saved', { name: feedback.name, count: feedback.count })
     case 'uploaded':
       return t('feedback.uploaded', { name: feedback.skillName, version: feedback.version })
-    case 'downloaded': {
+    case 'downloaded':
+    case 'updated': {
+      const updated = feedback.kind === 'updated'
       switch (feedback.status) {
         case 'ready':
-          return t('feedback.downloaded', { name: feedback.skillName })
+          return t(updated ? 'feedback.updated' : 'feedback.downloaded', { name: feedback.skillName })
         case 'pending':
-          return t('feedback.downloadPending', { name: feedback.skillName })
+          return t(updated ? 'feedback.updatePending' : 'feedback.downloadPending', { name: feedback.skillName })
         case 'shadowed':
-          return t('feedback.downloadShadowed', { name: feedback.skillName })
+          return t(updated ? 'feedback.updateShadowed' : 'feedback.downloadShadowed', { name: feedback.skillName })
         case 'not-invocable':
-          return t('feedback.downloadNotInvocable', { name: feedback.skillName })
+          return t(updated ? 'feedback.updateNotInvocable' : 'feedback.downloadNotInvocable', { name: feedback.skillName })
         case 'unavailable':
           return feedback.detail === undefined
-            ? t('feedback.downloadUnavailable', { name: feedback.skillName })
-            : `${t('feedback.downloadUnavailable', { name: feedback.skillName })} (${feedback.detail})`
+            ? t(updated ? 'feedback.updateUnavailable' : 'feedback.downloadUnavailable', { name: feedback.skillName })
+            : `${t(updated ? 'feedback.updateUnavailable' : 'feedback.downloadUnavailable', { name: feedback.skillName })} (${feedback.detail})`
       }
       throw new Error(`Unknown skill installation status: ${String(feedback.status)}`)
     }
@@ -45,6 +47,24 @@ function feedbackText(feedback: SkillFeedback, t: Translate): string {
         return t('feedback.invalidSkillName')
       if (code === 'SKILL_NOT_USER_INVOCABLE')
         return t('feedback.notInvocable')
+      if (code === 'SKILL_VERSION_MISMATCH') {
+        const versions = /^SKILL_VERSION_MISMATCH: expected=(\S+), received=(\S+)$/.exec(feedback.error)
+        if (versions !== null)
+          return t('feedback.versionMismatchDetail', { expected: versions[1], actual: versions[2] })
+        return t('feedback.versionMismatch')
+      }
+      if (code === 'SKILL_REMOTE_VERSION_CHANGED')
+        return t('feedback.remoteVersionChanged')
+      if (code === 'SKILL_VERSION_UNAVAILABLE')
+        return t('feedback.versionUnavailable')
+      if (code === 'SKILL_VERSION_CHANGED')
+        return t('feedback.versionChanged')
+      if (code === 'SKILL_UPDATE_RESULT_INVALID')
+        return t('feedback.updateResultUnknown')
+      if (code === 'SKILL_UPDATE_UNAVAILABLE')
+        return t('feedback.updateUnsafe')
+      if (code === 'SKILL_OPERATION_BUSY')
+        return t('feedback.skillBusy')
       if (code === 'DESKTOP_AUTH_SESSION_MISSING')
         return t('feedback.sessionExpired')
       return `${t('feedback.failed')}: ${feedback.error}`
@@ -57,7 +77,7 @@ export function SkillHubPanel({ t, createSkill }: { t: Translate, createSkill: (
   const displayName = state.profile?.employeeName ?? state.employee?.employeeName ?? ''
   const activeTab = state.tab === 'mine' || state.tab === 'local' ? state.tab : 'enterprise'
   const warning = state.feedback?.kind === 'failed'
-    || (state.feedback?.kind === 'downloaded' && state.feedback.status !== 'ready')
+    || ((state.feedback?.kind === 'downloaded' || state.feedback?.kind === 'updated') && state.feedback.status !== 'ready')
   useWatchImmediate([state.tab], () => {
     void loadSkillHub()
   })
@@ -114,7 +134,7 @@ export function SkillHubPanel({ t, createSkill }: { t: Translate, createSkill: (
 
                   <div id={`${TABS_ID}-${activeTab}-panel`} role="tabpanel" className="min-w-0">
                     {activeTab === 'local'
-                      ? <LocalSkills t={t} createSkill={createSkill} showHeaderActions={SHOW_LOCAL_SKILL_HEADER_ACTIONS} />
+                      ? <LocalSkills t={t} createSkill={createSkill} showDirectoryAndImport={SHOW_LOCAL_SKILL_DIRECTORY_AND_IMPORT} />
                       : state.loading && state.common.length === 0
                         ? <Text tone="tertiary" size="sm">{t('loading')}</Text>
                         : activeTab === 'mine'

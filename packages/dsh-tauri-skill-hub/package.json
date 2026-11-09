@@ -70,11 +70,13 @@
     "h3": "catalog:",
     "lodash-es": "catalog:utils",
     "ofetch": "catalog:utils",
+    "semver": "catalog:runtime",
     "unstorage": "catalog:utils",
     "yaml": "catalog:testing"
   },
   "devDependencies": {
     "@types/lodash-es": "catalog:types",
+    "@types/semver": "catalog:types",
     "dompurify": "catalog:ui",
     "dsh-tauri-tsdown": "workspace:*",
     "dsh-tauri-ui": "workspace:*",

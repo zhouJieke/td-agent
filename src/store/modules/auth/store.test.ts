@@ -200,6 +200,19 @@ describe('桌面登录状态', () => {
     expect(auth.session).toBeNull()
   })
 
+  it('技能更新失败导致会话失效时清除登录态', async () => {
+    auth.session = session
+    ipc.invoke.mockRejectedValueOnce('DESKTOP_AUTH_SESSION_MISSING')
+
+    await expect(auth.updateEmployeeSkill('demo', '1.1.0', '1.0.0')).rejects.toBe('DESKTOP_AUTH_SESSION_MISSING')
+    expect(ipc.invoke).toHaveBeenCalledWith('desktop_update_employee_skill', {
+      skillName: 'demo',
+      expectedVersion: '1.1.0',
+      installedVersion: '1.0.0',
+    })
+    expect(auth.session).toBeNull()
+  })
+
   it('退出登录后技能安装的迟到结果不会恢复旧会话', async () => {
     let resolve!: (value: unknown) => void
     ipc.invoke.mockImplementationOnce(() => new Promise((done) => {
@@ -209,6 +222,21 @@ describe('桌面登录状态', () => {
     const result = expect(installing).rejects.toThrow('DESKTOP_AUTH_SESSION_MISSING')
     auth.completeLogout(6)
     resolve(undefined)
+    await result
+    expect(auth.session).toBeNull()
+  })
+
+  it('退出登录后技能更新的迟到结果不会恢复旧会话', async () => {
+    let resolve!: (value: unknown) => void
+    ipc.invoke.mockImplementationOnce(() => new Promise((done) => {
+      resolve = done
+    }))
+    const updating = auth.updateEmployeeSkill('demo', '1.1.0', '1.0.0')
+    const result = expect(updating).rejects.toThrow('DESKTOP_AUTH_SESSION_MISSING')
+
+    auth.completeLogout(6)
+    resolve('1.1.0')
+
     await result
     expect(auth.session).toBeNull()
   })

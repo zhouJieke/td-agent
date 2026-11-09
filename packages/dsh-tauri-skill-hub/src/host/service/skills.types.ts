@@ -27,6 +27,12 @@ export interface SkillInput {
   content: string
 }
 
+export interface InstalledSkills {
+  names: string[]
+  versions: Record<string, string>
+  updatableNames: string[]
+}
+
 export interface SkillRepositoryMetadata {
   id: string
   label: string

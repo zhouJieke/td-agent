@@ -14,7 +14,6 @@ export const localSkills = defineStore({
     preview: false,
     confirmName: null,
     query: '',
-    sourceFilter: 'all',
     importOpen: false,
     repositoryUrl: '',
   }),
@@ -59,9 +58,6 @@ export const localSkills = defineStore({
     setQuery(query: string) {
       this.query = query
     },
-    setSourceFilter(source: string) {
-      this.sourceFilter = source
-    },
     setImportOpen(open: boolean) {
       this.importOpen = open
       this.formError = ''
@@ -80,7 +76,6 @@ export const localSkills = defineStore({
       this.preview = false
       this.confirmName = null
       this.query = ''
-      this.sourceFilter = 'all'
       this.importOpen = false
       this.repositoryUrl = ''
     },

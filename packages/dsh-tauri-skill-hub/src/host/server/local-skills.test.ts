@@ -2,7 +2,7 @@ import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { Buffer } from 'node:buffer'
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -169,6 +169,55 @@ afterAll(() => {
 })
 
 describe('技能中心独立本地技能后台', () => {
+  it('区分已安装版本、旧技能和不能安全覆盖的同名文件', async () => {
+    const root = join(fixture.home, 'skills')
+    writeSkill(root, 'versioned')
+    writeFileSync(join(root, 'versioned', '.dsh-tauri-skill-version.json'), JSON.stringify({ source: 'nacos', version: '1.2.0' }))
+    writeSkill(root, 'constructor')
+    writeFileSync(join(root, 'constructor', '.dsh-tauri-skill-version.json'), JSON.stringify({ source: 'nacos', version: '1.0.0' }))
+    writeSkill(root, 'legacy')
+    writeSkill(root, 'ambiguous')
+    writeFileSync(join(root, 'ambiguous.md'), '---\nname: ambiguous\n---\n')
+    writeFileSync(join(root, 'flat.md'), '---\nname: flat\n---\n')
+    const { base } = await start(false)
+
+    expect(await json(base, '/installed-skills')).toEqual({
+      status: 200,
+      body: {
+        names: ['ambiguous', 'constructor', 'flat', 'legacy', 'versioned'],
+        versions: { constructor: '1.0.0', versioned: '1.2.0' },
+        updatableNames: ['constructor', 'legacy', 'versioned'],
+      },
+    })
+  })
+
+  it('已安装版本记录损坏时明确返回错误', async () => {
+    const root = join(fixture.home, 'skills')
+    writeSkill(root, 'demo')
+    writeFileSync(join(root, 'demo', '.dsh-tauri-skill-version.json'), '{invalid')
+    const { base } = await start(false)
+
+    const result = await json(base, '/installed-skills')
+
+    expect(result.status).toBe(500)
+    expect(result.body.error).toContain('SKILL_VERSION_METADATA_INVALID')
+  })
+
+  it('链接的技能目录不可覆盖且不会读取链接目标的版本记录', async () => {
+    const root = join(fixture.home, 'skills')
+    const external = join(fixture.home, 'repository')
+    writeSkill(external, 'linked')
+    writeFileSync(join(external, 'linked', '.dsh-tauri-skill-version.json'), '{invalid')
+    mkdirSync(root, { recursive: true })
+    symlinkSync(join(external, 'linked'), join(root, 'linked'), process.platform === 'win32' ? 'junction' : 'dir')
+    const { base } = await start(false)
+
+    expect(await json(base, '/installed-skills')).toEqual({
+      status: 200,
+      body: { names: ['linked'], versions: {}, updatableNames: [] },
+    })
+  })
+
   it('内核服务不可用时仍从本地技能文件批量识别已安装名称', async () => {
     const root = join(fixture.home, 'skills')
     writeSkill(root, 'downloaded-skill')
@@ -182,13 +231,13 @@ describe('技能中心独立本地技能后台', () => {
 
     const result = await json(base, '/installed-skills')
 
-    expect(result).toEqual({ status: 200, body: { names: ['downloaded-skill', 'single-skill'] } })
+    expect(result).toEqual({ status: 200, body: { names: ['downloaded-skill', 'single-skill'], versions: {}, updatableNames: [] } })
   })
 
   it('技能目录尚不存在时返回空的已安装列表', async () => {
     const { base } = await start(false)
 
-    expect(await json(base, '/installed-skills')).toEqual({ status: 200, body: { names: [] } })
+    expect(await json(base, '/installed-skills')).toEqual({ status: 200, body: { names: [], versions: {}, updatableNames: [] } })
   })
 
   it('技能文件新增和删除后重新查询返回最新状态', async () => {
@@ -196,9 +245,9 @@ describe('技能中心独立本地技能后台', () => {
     const { base } = await start(false)
     writeSkill(root, 'demo')
 
-    expect(await json(base, '/installed-skills')).toEqual({ status: 200, body: { names: ['demo'] } })
+    expect(await json(base, '/installed-skills')).toEqual({ status: 200, body: { names: ['demo'], versions: {}, updatableNames: ['demo'] } })
     rmSync(join(root, 'demo'), { recursive: true })
-    expect(await json(base, '/installed-skills')).toEqual({ status: 200, body: { names: [] } })
+    expect(await json(base, '/installed-skills')).toEqual({ status: 200, body: { names: [], versions: {}, updatableNames: [] } })
   })
 
   it('按当前文件系统的大小写规则识别本地技能', async () => {
@@ -213,7 +262,7 @@ describe('技能中心独立本地技能后台', () => {
 
     const result = await json(base, '/installed-skills')
 
-    expect(result).toEqual({ status: 200, body: { names: expected } })
+    expect(result).toEqual({ status: 200, body: { names: expected, versions: {}, updatableNames: expected.filter(name => name === 'mixed-skill') } })
   })
 
   it('技能目录无法读取时返回错误而不是伪装成未安装', async () => {
@@ -413,6 +462,27 @@ describe('技能中心独立本地技能后台', () => {
       expect.objectContaining({ name: 'newly-installed', source: 'user-dsh' }),
     ]))
     expect(isUserInvocable(await registry!.get('newly-installed'))).toBe(true)
+  })
+
+  it('覆盖已安装技能后刷新提供者，内核读取新技能正文', async () => {
+    const root = join(fixture.home, 'skills')
+    const file = writeSkill(root, 'updated-skill')
+    const { base, registry } = await start()
+    expect(await registry!.get('updated-skill')).toMatchObject({
+      description: 'updated-skill description',
+      content: 'updated-skill instructions',
+    })
+
+    rmSync(join(root, 'updated-skill'), { recursive: true })
+    writeSkill(root, 'updated-skill', 'Updated description')
+    writeFileSync(file, '---\nname: updated-skill\ndescription: Updated description\n---\nNew instructions\n')
+    const refreshed = await json(base, '/skills/refresh', 'POST')
+
+    expect(refreshed.status).toBe(200)
+    expect(await registry!.get('updated-skill')).toMatchObject({
+      description: 'Updated description',
+      content: 'New instructions',
+    })
   })
 
   it('导入仓库后自动注册其技能，刷新时发现同一状态文件的新来源', async () => {

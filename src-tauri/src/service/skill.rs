@@ -1,8 +1,9 @@
 use std::{
     collections::HashSet,
     fs::{self, File, OpenOptions},
-    io::{self, Cursor, Read},
+    io::{self, Cursor, Read, Write},
     path::{Path, PathBuf},
+    time::{Duration, Instant},
 };
 
 use serde_yaml::Value;
@@ -11,6 +12,10 @@ use zip::ZipArchive;
 const MAX_ENTRIES: usize = 1_000;
 const MAX_ENTRY_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_EXTRACTED_BYTES: u64 = 32 * 1024 * 1024;
+const VERSION_FILE_NAME: &str = ".dsh-tauri-skill-version.json";
+const LOCK_FILE_NAME: &str = ".dsh-tauri-skill-install.lock";
+const MAX_VERSION_FILE_BYTES: u64 = 4096;
+const LOCK_TIMEOUT: Duration = Duration::from_secs(2);
 
 struct Entry {
     index: usize,
@@ -35,6 +40,14 @@ pub(crate) fn validate_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+pub(crate) fn validate_version(version: &str) -> Result<semver::Version, String> {
+    if version.len() > 256 {
+        return Err("SKILL_VERSION_INVALID: version is too long".into());
+    }
+    semver::Version::parse(version)
+        .map_err(|_| "SKILL_VERSION_INVALID: invalid semantic version".into())
+}
+
 pub(crate) fn ensure_available(home: &Path, name: &str) -> Result<(), String> {
     validate_name(name)?;
     let root = home.join("skills");
@@ -48,8 +61,161 @@ pub(crate) fn ensure_available(home: &Path, name: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) fn install(home: &Path, name: &str, bytes: &[u8]) -> Result<(), String> {
+pub(crate) fn install(
+    home: &Path,
+    name: &str,
+    bytes: &[u8],
+    version: Option<&str>,
+) -> Result<(), String> {
     ensure_available(home, name)?;
+    if let Some(version) = version {
+        validate_version(version)?;
+    }
+    let (staging, entries) = prepare(home, name, bytes)?;
+    let result = (|| {
+        let _lock = lock_skills(home)?;
+        ensure_available(home, name)?;
+        commit(
+            home,
+            name,
+            &staging.path().join("payload"),
+            &entries,
+            version,
+        )
+    })();
+    cleanup(staging);
+    result
+}
+
+pub(crate) fn ensure_updatable(
+    home: &Path,
+    name: &str,
+    expected_version: Option<&str>,
+) -> Result<(), String> {
+    validate_name(name)?;
+    let root = home.join("skills");
+    let root_metadata = fs::symlink_metadata(&root).map_err(update_target_error)?;
+    if !root_metadata.is_dir() || is_link(&root_metadata) {
+        return Err("SKILL_UPDATE_UNAVAILABLE: unsafe skill root".into());
+    }
+    match fs::symlink_metadata(root.join(format!("{name}.md"))) {
+        Ok(_) => return Err("SKILL_UPDATE_UNAVAILABLE: conflicting flat skill".into()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(install_error(error)),
+    }
+    let target = root.join(name);
+    let target_metadata = fs::symlink_metadata(&target).map_err(update_target_error)?;
+    if !target_metadata.is_dir() || is_link(&target_metadata) {
+        return Err("SKILL_UPDATE_UNAVAILABLE: unsafe skill directory".into());
+    }
+    let skill_metadata =
+        fs::symlink_metadata(target.join("SKILL.md")).map_err(update_target_error)?;
+    if !skill_metadata.is_file() || is_link(&skill_metadata) {
+        return Err("SKILL_UPDATE_UNAVAILABLE: unsafe skill file".into());
+    }
+    if installed_version(&target)?.as_deref() != expected_version {
+        return Err("SKILL_VERSION_CHANGED: installed version changed".into());
+    }
+    Ok(())
+}
+
+pub(crate) fn update(
+    home: &Path,
+    name: &str,
+    bytes: &[u8],
+    version: &str,
+    expected_installed: Option<&str>,
+) -> Result<(), String> {
+    let mut latest = validate_version(version)?;
+    if let Some(current) = expected_installed {
+        let mut current = validate_version(current)?;
+        latest.build = Default::default();
+        current.build = Default::default();
+        if latest <= current {
+            return Err("SKILL_VERSION_INVALID: update is not newer".into());
+        }
+    }
+    ensure_updatable(home, name, expected_installed)?;
+    let (staging, entries) = prepare(home, name, bytes)?;
+    let result = (|| {
+        let _lock = lock_skills(home)?;
+        ensure_updatable(home, name, expected_installed)?;
+        replace(home, name, staging.path(), || {
+            ensure_available(home, name)?;
+            commit(
+                home,
+                name,
+                &staging.path().join("payload"),
+                &entries,
+                Some(version),
+            )
+        })
+    })();
+    let backup = staging.path().join("backup");
+    match fs::symlink_metadata(&backup) {
+        Ok(_) => {
+            let preserved = staging.keep().join("backup");
+            return Err(format!(
+                "{}; original files preserved at {}",
+                result
+                    .err()
+                    .unwrap_or_else(|| "SKILL_UPDATE_CLEANUP_FAILED".into()),
+                preserved.display()
+            ));
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => {
+            let preserved = staging.keep();
+            return Err(format!(
+                "SKILL_UPDATE_CLEANUP_FAILED: {error}; staging preserved at {}",
+                preserved.display()
+            ));
+        }
+    }
+    cleanup(staging);
+    result
+}
+
+pub(crate) async fn download_update(
+    auth: &crate::service::auth::AuthService,
+    home: PathBuf,
+    name: String,
+    expected_version: String,
+    installed_version: Option<String>,
+) -> Result<String, String> {
+    auth.access_token().await?;
+    validate_version(&expected_version)?;
+    ensure_updatable(&home, &name, installed_version.as_deref())?;
+    let download = auth.download_skill(&name, Some(&expected_version)).await?;
+    let version = download
+        .version
+        .ok_or("SKILL_VERSION_UNAVAILABLE: download did not include a version")?;
+    if version != expected_version {
+        return Err(format!(
+            "SKILL_VERSION_MISMATCH: expected={expected_version}, received={version}"
+        ));
+    }
+    auth.access_token().await?;
+    let actual_version = version.clone();
+    tokio::task::spawn_blocking(move || {
+        update(
+            &home,
+            &name,
+            &download.bytes,
+            &version,
+            installed_version.as_deref(),
+        )
+    })
+    .await
+    .map_err(|error| format!("SKILL_INSTALL_FAILED: {error}"))??;
+    Ok(actual_version)
+}
+
+fn prepare(
+    home: &Path,
+    name: &str,
+    bytes: &[u8],
+) -> Result<(tempfile::TempDir, Vec<Entry>), String> {
     let mut archive = ZipArchive::new(Cursor::new(bytes))
         .map_err(|error| invalid_package(&format!("invalid ZIP: {error}")))?;
     let entries = entries(&mut archive)?;
@@ -58,19 +224,18 @@ pub(crate) fn install(home: &Path, name: &str, bytes: &[u8]) -> Result<(), Strin
         .prefix(".skill-install-")
         .tempdir_in(home)
         .map_err(install_error)?;
+    let payload = staging.path().join("payload");
+    fs::create_dir(&payload).map_err(install_error)?;
+    extract(&mut archive, &entries, &payload)?;
+    let metadata = fs::read(payload.join("SKILL.md")).map_err(install_error)?;
+    validate_metadata(name, &metadata)?;
+    Ok((staging, entries))
+}
 
-    let result = (|| {
-        extract(&mut archive, &entries, staging.path())?;
-        let metadata = fs::read(staging.path().join("SKILL.md")).map_err(install_error)?;
-        validate_metadata(name, &metadata)?;
-        ensure_available(home, name)?;
-        commit(home, name, staging.path(), &entries)
-    })();
-
+fn cleanup(staging: tempfile::TempDir) {
     if let Err(error) = staging.close() {
         log::warn!("Failed to clean up skill staging directory: {error}");
     }
-    result
 }
 
 fn entries(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<Vec<Entry>, String> {
@@ -154,6 +319,9 @@ fn entries(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<Vec<Entry>, String
                 return Err(invalid_package("invalid skill folder"));
             }
             continue;
+        }
+        if relative.len() == 1 && relative[0].eq_ignore_ascii_case(VERSION_FILE_NAME) {
+            return Err(invalid_package("reserved skill version file"));
         }
         entries.push(Entry {
             index,
@@ -270,7 +438,13 @@ fn policy_boolean(value: &Value) -> Option<bool> {
     }
 }
 
-fn commit(home: &Path, name: &str, staging: &Path, entries: &[Entry]) -> Result<(), String> {
+fn commit(
+    home: &Path,
+    name: &str,
+    staging: &Path,
+    entries: &[Entry],
+    version: Option<&str>,
+) -> Result<(), String> {
     let root = home.join("skills");
     fs::create_dir_all(&root).map_err(install_error)?;
     let target = root.join(name);
@@ -285,6 +459,19 @@ fn commit(home: &Path, name: &str, staging: &Path, entries: &[Entry]) -> Result<
     let mut directories = vec![target.clone()];
     let mut files = Vec::new();
     let result = (|| {
+        if let Some(version) = version {
+            let path = target.join(VERSION_FILE_NAME);
+            let bytes =
+                serde_json::to_vec(&serde_json::json!({ "source": "nacos", "version": version }))
+                    .map_err(|error| format!("SKILL_INSTALL_FAILED: {error}"))?;
+            let mut output = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+                .map_err(install_error)?;
+            files.push(path);
+            output.write_all(&bytes).map_err(install_error)?;
+        }
         let mut ordered: Vec<&Entry> = entries.iter().collect();
         ordered.sort_by_key(|entry| entry.path == Path::new("SKILL.md"));
         for entry in ordered {
@@ -348,6 +535,115 @@ fn commit(home: &Path, name: &str, staging: &Path, entries: &[Entry]) -> Result<
     Ok(())
 }
 
+fn lock_skills(home: &Path) -> Result<File, String> {
+    let root = home.join("skills");
+    fs::create_dir_all(&root).map_err(install_error)?;
+    let path = root.join(LOCK_FILE_NAME);
+    match fs::symlink_metadata(&path) {
+        Ok(metadata) if !metadata.is_file() || is_link(&metadata) => {
+            return Err("SKILL_INSTALL_FAILED: unsafe skill lock".into())
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(install_error(error)),
+    }
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)
+        .map_err(install_error)?;
+    let deadline = Instant::now() + LOCK_TIMEOUT;
+    loop {
+        match file.try_lock() {
+            Ok(()) => return Ok(file),
+            Err(fs::TryLockError::WouldBlock) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Err(fs::TryLockError::WouldBlock) => {
+                return Err("SKILL_OPERATION_BUSY: another skill operation is in progress".into())
+            }
+            Err(fs::TryLockError::Error(error)) => return Err(install_error(error)),
+        }
+    }
+}
+
+fn installed_version(target: &Path) -> Result<Option<String>, String> {
+    let path = target.join(VERSION_FILE_NAME);
+    let metadata = match fs::symlink_metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(install_error(error)),
+    };
+    if !metadata.is_file() || is_link(&metadata) || metadata.len() > MAX_VERSION_FILE_BYTES {
+        return Err("SKILL_VERSION_METADATA_INVALID: invalid version record".into());
+    }
+    let bytes = fs::read(path).map_err(install_error)?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|_| "SKILL_VERSION_METADATA_INVALID: invalid version record")?;
+    let version = value
+        .get("version")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("SKILL_VERSION_METADATA_INVALID: invalid version record")?;
+    if value.get("source").and_then(serde_json::Value::as_str) != Some("nacos")
+        || validate_version(version).is_err()
+    {
+        return Err("SKILL_VERSION_METADATA_INVALID: invalid version record".into());
+    }
+    Ok(Some(version.to_string()))
+}
+
+fn is_link(metadata: &fs::Metadata) -> bool {
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        return metadata.file_attributes() & 0x400 != 0;
+    }
+    #[cfg(not(windows))]
+    false
+}
+
+fn replace(
+    home: &Path,
+    name: &str,
+    staging: &Path,
+    install: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    let target = home.join("skills").join(name);
+    let backup = staging.join("backup");
+    fs::rename(&target, &backup).map_err(install_error)?;
+    if let Err(error) = install() {
+        match fs::symlink_metadata(&target) {
+            Ok(_) => {
+                return Err(format!(
+                    "SKILL_UPDATE_ROLLBACK_FAILED: {error}; target is occupied"
+                ))
+            }
+            Err(check) if check.kind() == io::ErrorKind::NotFound => {}
+            Err(check) => return Err(format!("SKILL_UPDATE_ROLLBACK_FAILED: {error}; {check}")),
+        }
+        if let Err(restore) = fs::rename(&backup, &target) {
+            return Err(format!("SKILL_UPDATE_ROLLBACK_FAILED: {error}; {restore}"));
+        }
+        return Err(error);
+    }
+    fs::remove_dir_all(backup)
+        .map_err(|error| format!("SKILL_UPDATE_CLEANUP_FAILED: update completed; {error}"))?;
+    Ok(())
+}
+
+fn update_target_error(error: io::Error) -> String {
+    if error.kind() == io::ErrorKind::NotFound {
+        "SKILL_UPDATE_UNAVAILABLE: skill does not exist".into()
+    } else {
+        install_error(error)
+    }
+}
+
 fn invalid_package(message: &str) -> String {
     format!("SKILL_PACKAGE_INVALID: {message}")
 }
@@ -389,7 +685,7 @@ mod tests {
             ("scripts/run.sh", b"echo ready"),
             ("references/guide.md", b"guide"),
         ]);
-        install(home.path(), "demo", &bytes).unwrap();
+        install(home.path(), "demo", &bytes, None).unwrap();
         let target = home.path().join("skills").join("demo");
         assert_eq!(fs::read(target.join("SKILL.md")).unwrap(), skill);
         assert_eq!(
@@ -412,7 +708,7 @@ mod tests {
             ("package/SKILL.md", &skill),
             ("package/data/example.txt", b"example"),
         ]);
-        install(home.path(), "demo", &bytes).unwrap();
+        install(home.path(), "demo", &bytes, None).unwrap();
         let target = home.path().join("skills").join("demo");
         assert_eq!(fs::read(target.join("SKILL.md")).unwrap(), skill);
         assert_eq!(
@@ -438,11 +734,242 @@ mod tests {
             fs::write(&original, b"user content").unwrap();
             let bytes = archive(&[("SKILL.md", &metadata("demo"))]);
             assert_eq!(
-                install(home.path(), "demo", &bytes).unwrap_err(),
+                install(home.path(), "demo", &bytes, None).unwrap_err(),
                 "SKILL_ALREADY_EXISTS: demo"
             );
             assert_eq!(fs::read(original).unwrap(), b"user content");
         }
+    }
+
+    #[test]
+    fn records_the_version_returned_with_a_downloaded_package() {
+        let home = tempfile::tempdir().unwrap();
+        let bytes = archive(&[("SKILL.md", &metadata("demo"))]);
+
+        install(home.path(), "demo", &bytes, Some("1.2.3")).unwrap();
+
+        let target = home.path().join("skills").join("demo");
+        assert_eq!(
+            installed_version(&target).unwrap().as_deref(),
+            Some("1.2.3")
+        );
+    }
+
+    #[test]
+    fn updates_the_skill_and_removes_obsolete_files() {
+        let home = tempfile::tempdir().unwrap();
+        let old = archive(&[("SKILL.md", &metadata("demo")), ("old.txt", b"old")]);
+        let new = archive(&[("SKILL.md", &metadata("demo")), ("new.txt", b"new")]);
+        install(home.path(), "demo", &old, Some("1.0.0")).unwrap();
+
+        update(home.path(), "demo", &new, "1.1.0", Some("1.0.0")).unwrap();
+
+        let target = home.path().join("skills").join("demo");
+        assert!(!target.join("old.txt").exists());
+        assert_eq!(fs::read(target.join("new.txt")).unwrap(), b"new");
+        assert_eq!(
+            installed_version(&target).unwrap().as_deref(),
+            Some("1.1.0")
+        );
+    }
+
+    #[test]
+    fn confirmed_legacy_update_records_the_downloaded_version() {
+        let home = tempfile::tempdir().unwrap();
+        let old = archive(&[("SKILL.md", &metadata("demo")), ("old.txt", b"old")]);
+        let new = archive(&[("SKILL.md", &metadata("demo")), ("new.txt", b"new")]);
+        install(home.path(), "demo", &old, None).unwrap();
+
+        update(home.path(), "demo", &new, "2.0.0", None).unwrap();
+
+        let target = home.path().join("skills").join("demo");
+        assert!(!target.join("old.txt").exists());
+        assert_eq!(fs::read(target.join("new.txt")).unwrap(), b"new");
+        assert_eq!(
+            installed_version(&target).unwrap().as_deref(),
+            Some("2.0.0")
+        );
+    }
+
+    #[test]
+    fn invalid_update_package_and_stale_version_preserve_local_files() {
+        let home = tempfile::tempdir().unwrap();
+        let old = archive(&[("SKILL.md", &metadata("demo")), ("old.txt", b"old")]);
+        install(home.path(), "demo", &old, Some("1.0.0")).unwrap();
+        let invalid = archive(&[("SKILL.md", &metadata("another"))]);
+
+        assert!(
+            update(home.path(), "demo", &invalid, "1.1.0", Some("1.0.0"))
+                .unwrap_err()
+                .starts_with("SKILL_PACKAGE_INVALID:")
+        );
+        assert!(update(home.path(), "demo", &old, "1.1.0", Some("0.9.0"))
+            .unwrap_err()
+            .starts_with("SKILL_VERSION_CHANGED:"));
+        assert!(update(home.path(), "demo", &old, "1.0.0", Some("1.0.0"))
+            .unwrap_err()
+            .starts_with("SKILL_VERSION_INVALID:"));
+        let target = home.path().join("skills").join("demo");
+        assert_eq!(fs::read(target.join("old.txt")).unwrap(), b"old");
+        assert_eq!(
+            installed_version(&target).unwrap().as_deref(),
+            Some("1.0.0")
+        );
+    }
+
+    #[test]
+    fn update_uses_semantic_version_precedence_including_prereleases() {
+        let home = tempfile::tempdir().unwrap();
+        let old = archive(&[("SKILL.md", &metadata("demo")), ("old.txt", b"old")]);
+        let new = archive(&[("SKILL.md", &metadata("demo")), ("new.txt", b"new")]);
+        install(home.path(), "demo", &old, Some("1.10.0")).unwrap();
+
+        assert!(update(home.path(), "demo", &new, "1.2.0", Some("1.10.0"))
+            .unwrap_err()
+            .starts_with("SKILL_VERSION_INVALID:"));
+        let target = home.path().join("skills").join("demo");
+        assert_eq!(fs::read(target.join("old.txt")).unwrap(), b"old");
+
+        let prerelease_home = tempfile::tempdir().unwrap();
+        install(prerelease_home.path(), "demo", &old, Some("2.0.0-rc.1")).unwrap();
+        update(
+            prerelease_home.path(),
+            "demo",
+            &new,
+            "2.0.0",
+            Some("2.0.0-rc.1"),
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read(
+                prerelease_home
+                    .path()
+                    .join("skills")
+                    .join("demo")
+                    .join("new.txt")
+            )
+            .unwrap(),
+            b"new"
+        );
+    }
+
+    #[test]
+    fn rejects_flat_conflicts_and_reserved_version_files() {
+        let home = tempfile::tempdir().unwrap();
+        let old = archive(&[("SKILL.md", &metadata("demo")), ("old.txt", b"old")]);
+        install(home.path(), "demo", &old, Some("1.0.0")).unwrap();
+        let root = home.path().join("skills");
+        fs::write(root.join("demo.md"), b"separate local skill").unwrap();
+
+        assert!(update(home.path(), "demo", &old, "1.1.0", Some("1.0.0"))
+            .unwrap_err()
+            .starts_with("SKILL_UPDATE_UNAVAILABLE:"));
+        assert_eq!(
+            fs::read(root.join("demo.md")).unwrap(),
+            b"separate local skill"
+        );
+        assert_eq!(fs::read(root.join("demo").join("old.txt")).unwrap(), b"old");
+
+        let reserved = archive(&[
+            ("SKILL.md", &metadata("another")),
+            (VERSION_FILE_NAME, b"forged"),
+        ]);
+        assert_eq!(
+            install(home.path(), "another", &reserved, Some("1.0.0")).unwrap_err(),
+            "SKILL_PACKAGE_INVALID: reserved skill version file"
+        );
+    }
+
+    #[test]
+    fn failed_replacement_restores_the_original_directory() {
+        let home = tempfile::tempdir().unwrap();
+        let bytes = archive(&[("SKILL.md", &metadata("demo")), ("old.txt", b"old")]);
+        install(home.path(), "demo", &bytes, Some("1.0.0")).unwrap();
+        let staging = tempfile::tempdir_in(home.path()).unwrap();
+
+        assert_eq!(
+            replace(home.path(), "demo", staging.path(), || Err(
+                "write failed".into()
+            ))
+            .unwrap_err(),
+            "write failed"
+        );
+        assert_eq!(
+            fs::read(home.path().join("skills").join("demo").join("old.txt")).unwrap(),
+            b"old"
+        );
+        assert!(!staging.path().join("backup").exists());
+    }
+
+    #[test]
+    fn failed_replacement_preserves_both_the_original_and_a_newly_created_target() {
+        let home = tempfile::tempdir().unwrap();
+        let bytes = archive(&[("SKILL.md", &metadata("demo")), ("old.txt", b"old")]);
+        install(home.path(), "demo", &bytes, Some("1.0.0")).unwrap();
+        let staging = tempfile::tempdir_in(home.path()).unwrap();
+        let target = home.path().join("skills").join("demo");
+
+        let result = replace(home.path(), "demo", staging.path(), || {
+            fs::create_dir(&target).unwrap();
+            fs::write(target.join("new-user-file"), b"new").unwrap();
+            Err("write failed".into())
+        });
+
+        assert!(result
+            .unwrap_err()
+            .starts_with("SKILL_UPDATE_ROLLBACK_FAILED:"));
+        assert_eq!(fs::read(target.join("new-user-file")).unwrap(), b"new");
+        assert_eq!(
+            fs::read(staging.path().join("backup").join("old.txt")).unwrap(),
+            b"old"
+        );
+    }
+
+    #[test]
+    fn concurrent_updates_do_not_overwrite_a_newer_installed_version() {
+        let home = tempfile::tempdir().unwrap();
+        let old = archive(&[("SKILL.md", &metadata("demo")), ("old.txt", b"old")]);
+        let new = archive(&[("SKILL.md", &metadata("demo")), ("new.txt", b"new")]);
+        install(home.path(), "demo", &old, Some("1.0.0")).unwrap();
+
+        let results = std::thread::scope(|scope| {
+            let first = scope.spawn(|| update(home.path(), "demo", &new, "1.1.0", Some("1.0.0")));
+            let second = scope.spawn(|| update(home.path(), "demo", &new, "1.1.0", Some("1.0.0")));
+            [first.join().unwrap(), second.join().unwrap()]
+        });
+
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert!(results.iter().any(|result| result
+            .as_ref()
+            .is_err_and(|error| error.starts_with("SKILL_VERSION_CHANGED:")
+                || error.starts_with("SKILL_UPDATE_UNAVAILABLE:"))));
+        let target = home.path().join("skills").join("demo");
+        assert_eq!(fs::read(target.join("new.txt")).unwrap(), b"new");
+        assert_eq!(
+            installed_version(&target).unwrap().as_deref(),
+            Some("1.1.0")
+        );
+    }
+
+    #[test]
+    fn an_occupied_skill_lock_returns_an_error_without_replacing_files() {
+        let home = tempfile::tempdir().unwrap();
+        let old = archive(&[("SKILL.md", &metadata("demo")), ("old.txt", b"old")]);
+        let new = archive(&[("SKILL.md", &metadata("demo")), ("new.txt", b"new")]);
+        install(home.path(), "demo", &old, Some("1.0.0")).unwrap();
+        let guard = lock_skills(home.path()).unwrap();
+
+        assert_eq!(
+            update(home.path(), "demo", &new, "1.1.0", Some("1.0.0")).unwrap_err(),
+            "SKILL_OPERATION_BUSY: another skill operation is in progress"
+        );
+        drop(guard);
+        let target = home.path().join("skills").join("demo");
+        assert_eq!(fs::read(target.join("old.txt")).unwrap(), b"old");
+        assert_eq!(
+            installed_version(&target).unwrap().as_deref(),
+            Some("1.0.0")
+        );
     }
 
     #[test]
@@ -476,7 +1003,10 @@ mod tests {
         for (content, expected) in invalid {
             let home = tempfile::tempdir().unwrap();
             let bytes = archive(&[("SKILL.md", content.as_bytes()), ("data.txt", b"data")]);
-            assert_eq!(install(home.path(), "demo", &bytes).unwrap_err(), expected);
+            assert_eq!(
+                install(home.path(), "demo", &bytes, None).unwrap_err(),
+                expected
+            );
             assert!(!home.path().join("skills").join("demo").exists());
         }
     }
@@ -508,7 +1038,7 @@ mod tests {
             ],
         ] {
             let home = tempfile::tempdir().unwrap();
-            assert!(install(home.path(), "demo", &archive(&files))
+            assert!(install(home.path(), "demo", &archive(&files), None)
                 .unwrap_err()
                 .starts_with("SKILL_PACKAGE_INVALID:"));
             assert!(!home.path().join("skills").join("demo").exists());
@@ -521,7 +1051,7 @@ mod tests {
         let skill = metadata("demo");
         let large = vec![0; MAX_ENTRY_BYTES as usize + 1];
         let bytes = archive(&[("SKILL.md", &skill), ("large", &large)]);
-        assert!(install(home.path(), "demo", &bytes)
+        assert!(install(home.path(), "demo", &bytes, None)
             .unwrap_err()
             .starts_with("SKILL_PACKAGE_INVALID:"));
         for name in [
@@ -620,8 +1150,8 @@ mod tests {
         let home = tempfile::tempdir().unwrap();
         let bytes = archive(&[("SKILL.md", &metadata("demo")), ("data.txt", b"data")]);
         let results = std::thread::scope(|scope| {
-            let first = scope.spawn(|| install(home.path(), "demo", &bytes));
-            let second = scope.spawn(|| install(home.path(), "demo", &bytes));
+            let first = scope.spawn(|| install(home.path(), "demo", &bytes, None));
+            let second = scope.spawn(|| install(home.path(), "demo", &bytes, None));
             [first.join().unwrap(), second.join().unwrap()]
         });
         assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);

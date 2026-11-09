@@ -129,6 +129,16 @@ export const auth = defineStore({
       if (current !== revision)
         throw new Error('DESKTOP_AUTH_SESSION_MISSING')
     },
+    async updateEmployeeSkill(skillName: string, expectedVersion: string, installedVersion: string | null): Promise<string> {
+      if (!isTauri())
+        throw new Error('DESKTOP_AUTH_NATIVE_REQUIRED')
+      const current = revision
+      const version = await invoke<string>('desktop_update_employee_skill', { skillName, expectedVersion, installedVersion })
+        .catch(error => handleSessionError(error, current))
+      if (current !== revision)
+        throw new Error('DESKTOP_AUTH_SESSION_MISSING')
+      return version
+    },
   },
 })
 

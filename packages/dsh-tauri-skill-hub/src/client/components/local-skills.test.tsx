@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { SkillRowView, SkillSummary } from '../types'
+import type { SkillRowView, SkillSummary, UploadedSkill } from '../types'
 import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
 import { invoke } from 'dsh-tauri/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -68,6 +68,51 @@ function localSkill(name: string, source: 'bundled' | 'user-dsh'): SkillRowView 
   }
 }
 
+function installed(names: string[], versions: Record<string, string> = {}, updatableNames = names) {
+  return { names, versions, updatableNames }
+}
+
+function uploadInput(container: HTMLElement): HTMLInputElement {
+  const input = container.querySelector<HTMLInputElement>('input[type="file"]')
+  if (input === null)
+    throw new Error('Skill upload input is missing')
+  return input
+}
+
+function uploadFile(): File {
+  const bytes = Uint8Array.from([0x50, 0x4B, 0x03, 0x04])
+  const file = new File([bytes], 'demo.zip', { type: 'application/zip' })
+  Object.defineProperty(file, 'arrayBuffer', { value: async () => bytes.buffer })
+  return file
+}
+
+function mockUploadBridge(upload: () => Promise<UploadedSkill>): void {
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
+  vi.mocked(invoke).mockImplementation(async (command, args) => {
+    if (command === 'desktop_auth_api_base')
+      return 'http://127.0.0.1'
+    if (command === 'desktop_auth_upload')
+      return { code: 0, msg: null, data: await upload() }
+    if (command === 'desktop_auth_request' && typeof args === 'object' && args !== null && 'path' in args) {
+      if (args.path === '/api/employee-skills/user/E1') {
+        return {
+          code: 0,
+          msg: null,
+          data: { userId: 'E1', skillNames: ['demo'], skills: [{ summary: summary('demo'), versions: [] }], failed: [] },
+        }
+      }
+      if (typeof args.path === 'string' && args.path.startsWith('/api/employee-skills?')) {
+        return {
+          code: 0,
+          msg: null,
+          data: { totalCount: 1, pageNumber: 1, pagesAvailable: 1, items: [summary('demo')] },
+        }
+      }
+    }
+    throw new Error(`Unexpected bridge command: ${command}`)
+  })
+}
+
 const createSkill = vi.fn(async () => {})
 
 beforeEach(() => {
@@ -76,7 +121,10 @@ beforeEach(() => {
   store.skill.setTab('enterprise')
   store.skill.setEmployee({ employeeNumber: 'E1', employeeName: 'Employee' })
   store.skill.setCommon([])
+  store.skill.setCatalog([])
   store.skill.setMine(null)
+  store.skill.setManageUser('')
+  store.skill.setManageMine(null)
   store.skill.setLoading(false)
   store.skill.setError('')
   store.skill.setKeyword('')
@@ -96,10 +144,11 @@ beforeEach(() => {
   vi.mocked(invoke).mockReset()
   vi.mocked(getLocalSkill).mockReset()
   vi.mocked(getInstalledSkills).mockReset()
-  vi.mocked(getInstalledSkills).mockResolvedValue({ names: [] })
+  vi.mocked(getInstalledSkills).mockResolvedValue(installed([]))
   vi.mocked(loadSkillHub).mockReset()
   vi.mocked(loadSkillHub).mockImplementation(async () => store.skill.setEmployee(store.skill.employee))
-  createSkill.mockClear()
+  createSkill.mockReset()
+  createSkill.mockResolvedValue(undefined)
 })
 
 afterEach(() => {
@@ -118,7 +167,7 @@ describe('技能中心独立本地技能页', () => {
     expect(header.textContent).not.toContain('E1')
   })
 
-  it('本地技能页隐藏三个顶部操作入口', async () => {
+  it('本地技能页显示新建入口并隐藏目录和导入入口', async () => {
     vi.mocked(getSkills).mockResolvedValue({ skills: [localSkill('downloaded-skill', 'user-dsh')] })
     const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
     fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))
@@ -126,7 +175,7 @@ describe('技能中心独立本地技能页', () => {
 
     expect(view.queryByRole('button', { name: 'Open skills folder' })).toBeNull()
     expect(view.queryByRole('button', { name: 'Import repository' })).toBeNull()
-    expect(view.queryByRole('button', { name: 'New skill' })).toBeNull()
+    expect(view.getByRole('button', { name: 'New skill' }).textContent).toBe('New skill')
   })
 
   it('隐藏顶部操作时不显示之前打开的仓库导入窗口', async () => {
@@ -139,6 +188,34 @@ describe('技能中心独立本地技能页', () => {
     expect(view.queryByRole('dialog', { name: 'Import GitHub skill repository' })).toBeNull()
   })
 
+  it('上传入口仅显示在本地页的新建技能旁', async () => {
+    vi.mocked(getSkills).mockResolvedValue({ skills: [] })
+    const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
+
+    fireEvent.click(view.getByRole('tab', { name: 'My skills' }))
+    await view.findByText('Skills configured for Employee, with all their versions.')
+    expect(view.queryByRole('button', { name: 'Upload skill' })).toBeNull()
+    fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))
+    await view.findByText('No skills discovered yet')
+
+    const upload = view.getByRole('button', { name: 'Upload skill' })
+    const create = view.getByRole('button', { name: 'New skill' })
+    expect(upload.parentElement).toBe(create.parentElement)
+    expect(upload.nextElementSibling).toBe(create)
+  })
+
+  it('本地页的上传和新建按钮样式一致', async () => {
+    vi.mocked(getSkills).mockResolvedValue({ skills: [] })
+    const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
+    fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))
+    await view.findByText('No skills discovered yet')
+    const upload = view.getByRole('button', { name: 'Upload skill' })
+    const create = view.getByRole('button', { name: 'New skill' })
+
+    expect(create.className).not.toBe('')
+    expect(upload.className).toBe(create.className)
+  })
+
   it('未登录时隐藏本地页并且不请求本地技能', () => {
     store.skill.setTab('local')
     store.skill.setEmployee(null)
@@ -147,6 +224,8 @@ describe('技能中心独立本地技能页', () => {
     expect(view.getByText('Sign in required').textContent).toBe('Sign in required')
     expect(view.queryByText('Not signed in')).toBeNull()
     expect(view.queryByRole('tab', { name: 'Local skills' })).toBeNull()
+    expect(view.queryByRole('button', { name: 'New skill' })).toBeNull()
+    expect(view.queryByRole('button', { name: 'Upload skill' })).toBeNull()
     expect(getSkills).not.toHaveBeenCalled()
     expect(postSkillsRefresh).not.toHaveBeenCalled()
   })
@@ -199,7 +278,7 @@ describe('技能中心独立本地技能页', () => {
     vi.mocked(getSkills).mockImplementation(async () => ({ skills: [...rows] }))
     vi.mocked(invoke).mockResolvedValue(undefined)
     vi.mocked(getLocalSkill).mockResolvedValue({ status: 'ready' })
-    vi.mocked(getInstalledSkills).mockResolvedValue({ names: ['downloaded-skill'] })
+    vi.mocked(getInstalledSkills).mockResolvedValue(installed(['downloaded-skill']))
     store.skill.setCommon([summary('downloaded-skill')])
     const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
 
@@ -235,8 +314,8 @@ describe('技能中心独立本地技能页', () => {
     vi.mocked(invoke).mockResolvedValue(undefined)
     vi.mocked(getLocalSkill).mockResolvedValue({ status: 'ready' })
     vi.mocked(getInstalledSkills)
-      .mockResolvedValueOnce({ names: ['demo'] })
-      .mockResolvedValueOnce({ names: [] })
+      .mockResolvedValueOnce(installed(['demo']))
+      .mockResolvedValueOnce(installed([]))
     store.skill.setCommon([summary('demo')])
     store.skill.setMine({
       userId: 'E1',
@@ -280,7 +359,16 @@ describe('技能中心独立本地技能页', () => {
     }))
   })
 
-  it('按来源筛选时只展示对应的内核技能', async () => {
+  it('本地页不再显示技能管理说明文字', async () => {
+    vi.mocked(getSkills).mockResolvedValue({ skills: [] })
+    const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
+    fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))
+    await view.findByText('No skills discovered yet')
+
+    expect(view.queryByText('View and manage discovered skills, including user and repository skills. Each card switch controls loading.')).toBeNull()
+  })
+
+  it('本地页不再显示来源分类，仍展示全部技能和卡片来源', async () => {
     vi.mocked(getSkills).mockResolvedValue({
       skills: [localSkill('builtin-skill', 'bundled'), localSkill('downloaded-skill', 'user-dsh')],
     })
@@ -288,10 +376,12 @@ describe('技能中心独立本地技能页', () => {
     fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))
     await view.findByText('downloaded-skill')
 
-    fireEvent.click(within(view.getByRole('group', { name: 'Source' })).getByText('user'))
-
-    await waitFor(() => expect(view.queryByText('builtin-skill')).toBeNull())
+    expect(view.queryByRole('group', { name: 'Source' })).toBeNull()
+    expect(view.getByText('builtin-skill').textContent).toBe('builtin-skill')
     expect(view.getByText('downloaded-skill').textContent).toBe('downloaded-skill')
+    const cards = within(view.getByRole('list'))
+    expect(cards.getByText('bundled').textContent).toBe('bundled')
+    expect(cards.getByText('user').textContent).toBe('user')
   })
 
   it('编辑本地技能时保存描述、调用权限与正文', async () => {
@@ -390,7 +480,7 @@ describe('技能中心独立本地技能页', () => {
   it('恢复顶部入口后可以打开用户技能目录', async () => {
     vi.mocked(getSkills).mockResolvedValue({ skills: [] })
     vi.mocked(postOpenDir).mockResolvedValue({ ok: true })
-    const view = render(<LocalSkills t={locale.text} createSkill={createSkill} showHeaderActions />)
+    const view = render(<LocalSkills t={locale.text} createSkill={createSkill} showDirectoryAndImport />)
     await view.findByText('No skills discovered yet')
 
     fireEvent.click(view.getByRole('button', { name: 'Open skills folder' }))
@@ -441,7 +531,7 @@ describe('技能中心独立本地技能页', () => {
       ok: true,
       root: { id: 'git-1', kind: 'git', label: 'owner/repo', roots: [], addedAt: 1, live: true },
     })
-    const view = render(<LocalSkills t={locale.text} createSkill={createSkill} showHeaderActions />)
+    const view = render(<LocalSkills t={locale.text} createSkill={createSkill} showDirectoryAndImport />)
     await view.findByText('No skills discovered yet')
     fireEvent.click(view.getByRole('button', { name: 'Import repository' }))
     fireEvent.change(await view.findByPlaceholderText('owner/repo'), { target: { value: 'owner/repo' } })
@@ -457,7 +547,7 @@ describe('技能中心独立本地技能页', () => {
 
   it('输入非法仓库地址时显示错误且不请求导入接口', async () => {
     vi.mocked(getSkills).mockResolvedValue({ skills: [] })
-    const view = render(<LocalSkills t={locale.text} createSkill={createSkill} showHeaderActions />)
+    const view = render(<LocalSkills t={locale.text} createSkill={createSkill} showDirectoryAndImport />)
     await view.findByText('No skills discovered yet')
     fireEvent.click(view.getByRole('button', { name: 'Import repository' }))
     fireEvent.change(await view.findByPlaceholderText('owner/repo'), { target: { value: 'https://other.example/repo' } })
@@ -469,20 +559,125 @@ describe('技能中心独立本地技能页', () => {
     expect(postRoots).not.toHaveBeenCalled()
   })
 
-  it('恢复顶部入口后新建技能调用自己的创建动作', async () => {
+  it('本地页新建技能调用创建动作且不发起上传', async () => {
     vi.mocked(getSkills).mockResolvedValue({ skills: [] })
-    const view = render(<LocalSkills t={locale.text} createSkill={createSkill} showHeaderActions />)
+    const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
+    fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))
     await view.findByText('No skills discovered yet')
 
     fireEvent.click(view.getByRole('button', { name: 'New skill' }))
 
     await waitFor(() => expect(createSkill).toHaveBeenCalledTimes(1))
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it('本地页选择 ZIP 后沿用鉴权上传并刷新我的技能', async () => {
+    vi.mocked(getSkills).mockResolvedValue({ skills: [] })
+    store.skill.setManageUser('E1')
+    mockUploadBridge(async () => ({ skillName: 'demo', version: '1.0.0' }))
+    const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
+    fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))
+    await view.findByText('No skills discovered yet')
+    const input = uploadInput(view.container)
+    const picker = vi.spyOn(input, 'click').mockImplementation(() => {})
+    const file = uploadFile()
+
+    fireEvent.click(view.getByRole('button', { name: 'Upload skill' }))
+    expect(picker).toHaveBeenCalledOnce()
+    expect(input.accept).toBe('.zip,application/zip,application/x-zip-compressed')
+    fireEvent.change(input, { target: { files: [file] } })
+
+    expect((await view.findByRole('alert')).textContent).toBe('Uploaded skill demo (version 1.0.0)')
+    expect(invoke).toHaveBeenCalledWith('desktop_auth_upload', {
+      path: '/api/employee-skills/upload',
+      fileName: 'demo.zip',
+      contentType: 'application/zip',
+      body: [0x50, 0x4B, 0x03, 0x04],
+    })
+    expect(invoke).toHaveBeenCalledWith('desktop_auth_request', {
+      method: 'GET',
+      path: '/api/employee-skills/user/E1',
+      body: null,
+    })
+    expect(store.skill.mine?.skillNames).toEqual(['demo'])
+    expect(store.skill.manageMine?.skillNames).toEqual(['demo'])
+    expect(store.skill.catalog.map(item => item.name)).toEqual(['demo'])
+    expect(input.value).toBe('')
+  })
+
+  it('取消选择文件不会发起上传', async () => {
+    vi.mocked(getSkills).mockResolvedValue({ skills: [] })
+    const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
+    fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))
+    await view.findByText('No skills discovered yet')
+
+    fireEvent.change(uploadInput(view.container), { target: { files: [] } })
+
+    expect(invoke).not.toHaveBeenCalled()
+    expect(view.getByRole('button', { name: 'Upload skill' }).hasAttribute('disabled')).toBe(false)
+  })
+
+  it('上传期间禁用入口，完成后恢复', async () => {
+    vi.mocked(getSkills).mockResolvedValue({ skills: [] })
+    let finishUpload: () => void = () => {
+      throw new Error('Upload was not started')
+    }
+    mockUploadBridge(() => new Promise((resolve) => {
+      finishUpload = () => resolve({ skillName: 'demo', version: '1.0.0' })
+    }))
+    const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
+    fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))
+    await view.findByText('No skills discovered yet')
+
+    fireEvent.change(uploadInput(view.container), { target: { files: [uploadFile()] } })
+
+    expect((await view.findByRole('button', { name: 'Uploading…' })).hasAttribute('disabled')).toBe(true)
+    await act(async () => finishUpload())
+    expect((await view.findByRole('button', { name: 'Upload skill' })).hasAttribute('disabled')).toBe(false)
+  })
+
+  it('上传失败时显示错误并恢复上传入口', async () => {
+    vi.mocked(getSkills).mockResolvedValue({ skills: [] })
+    mockUploadBridge(async () => {
+      throw new Error('upload denied')
+    })
+    const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
+    fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))
+    await view.findByText('No skills discovered yet')
+
+    fireEvent.change(uploadInput(view.container), { target: { files: [uploadFile()] } })
+
+    expect((await view.findByRole('alert')).textContent).toBe('Operation failed: upload denied')
+    expect((await view.findByRole('button', { name: 'Upload skill' })).hasAttribute('disabled')).toBe(false)
+  })
+
+  it('创建会话期间禁用新建入口以防重复创建', async () => {
+    vi.mocked(getSkills).mockResolvedValue({ skills: [] })
+    let finishCreation: () => void = () => {
+      throw new Error('Creation was not started')
+    }
+    createSkill.mockImplementationOnce(() => new Promise((resolve) => {
+      finishCreation = () => resolve()
+    }))
+    const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
+    fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))
+    await view.findByText('No skills discovered yet')
+    const button = view.getByRole('button', { name: 'New skill' })
+
+    fireEvent.click(button)
+
+    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(true))
+    fireEvent.click(button)
+    expect(createSkill).toHaveBeenCalledTimes(1)
+    await act(async () => finishCreation())
+    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false))
   })
 
   it('创建技能失败时显示具体错误', async () => {
     vi.mocked(getSkills).mockResolvedValue({ skills: [] })
     createSkill.mockRejectedValueOnce(new Error('workspace unavailable'))
-    const view = render(<LocalSkills t={locale.text} createSkill={createSkill} showHeaderActions />)
+    const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
+    fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))
     await view.findByText('No skills discovered yet')
 
     fireEvent.click(view.getByRole('button', { name: 'New skill' }))

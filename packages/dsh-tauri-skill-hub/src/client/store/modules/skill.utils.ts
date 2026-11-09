@@ -1,8 +1,21 @@
 import type { EmployeeDeptVO, SkillSummary, SkillTab } from '../../types'
 import { filter, find, includes, isEmpty, lowerCase, orderBy } from 'dsh-tauri/client'
+import { gt, parse } from 'semver'
 import { SKILL_TABS } from '../../constants'
 
 const DAY_MS = 86_400_000
+
+export function isSkillVersion(value: unknown): value is string {
+  return typeof value === 'string' && /^\d/.test(value) && parse(value) !== null
+}
+
+export function isNewerSkillVersion(latest: string, installed: string): boolean {
+  return isSkillVersion(latest) && isSkillVersion(installed) && gt(latest, installed)
+}
+
+export function installedSkillVersion(versions: Readonly<Record<string, string>>, name: string): string | undefined {
+  return Object.hasOwn(versions, name) ? versions[name] : undefined
+}
 
 /** `bizTags` 是 JSON 数组字符串原值；解析失败或非字符串数组时返回空数组。 */
 export function parseBizTags(raw: string | null): string[] {

@@ -1,9 +1,9 @@
 import type { SkillInstallStatus } from '../store/modules/skill.types'
 import type { ActionResult } from '../types'
 import { invoke } from 'dsh-tauri/client'
-import { getInstalledSkills, getLocalSkill } from '../apis'
+import { getInstalledSkills, getLocalSkill, postSkillsRefresh } from '../apis'
 import { store } from '../store'
-import { employeeLabel, findEmployee } from '../store/modules/skill.utils'
+import { employeeLabel, findEmployee, installedSkillVersion, isNewerSkillVersion, isSkillVersion } from '../store/modules/skill.utils'
 import { fetchAuth } from './auth'
 import { fetchCatalogSkills, fetchCommonSkills, fetchEmployees, fetchUserProfile, fetchUserSkills, saveUserSkills, uploadSkillZip } from './remote'
 
@@ -38,9 +38,14 @@ export async function fetchInstalledSkills(): Promise<void> {
     const result = await getInstalledSkills({ timeout: 6_500 })
     if ('error' in result)
       throw new Error(result.error)
-    if (!Array.isArray(result.names) || result.names.some(name => typeof name !== 'string'))
+    if (!Array.isArray(result.names) || result.names.some(name => typeof name !== 'string')
+      || typeof result.versions !== 'object' || result.versions === null || Array.isArray(result.versions)
+      || Object.entries(result.versions).some(([name, version]) => !result.names.includes(name) || !isSkillVersion(version))
+      || !Array.isArray(result.updatableNames) || result.updatableNames.some(name => typeof name !== 'string' || !result.names.includes(name))
+      || Object.keys(result.versions).some(name => !result.updatableNames.includes(name))) {
       throw new Error('SKILL_INSTALLED_STATUS_INVALID')
-    store.skill.finishInstalledLoad(requestId, result.names)
+    }
+    store.skill.finishInstalledLoad(requestId, result.names, result.versions, result.updatableNames)
   }
   catch (error) {
     store.skill.failInstalledLoad(requestId, messageOf(error))
@@ -53,6 +58,7 @@ export async function fetchInstalledSkills(): Promise<void> {
  * 传输层错误落 `store.skill.error` 由面板内联渲染。
  */
 export async function fetchSkillHub(userId: string): Promise<void> {
+  const authRequestId = store.skill.authRequestId
   store.skill.setLoading(true)
   try {
     const [common, catalog, mine, profile, employees] = await Promise.all([
@@ -62,6 +68,8 @@ export async function fetchSkillHub(userId: string): Promise<void> {
       fetchUserProfile(userId).catch(() => null),
       fetchEmployees().catch(() => []),
     ])
+    if (store.skill.authRequestId !== authRequestId || store.skill.employee?.employeeNumber !== userId)
+      return
     store.skill.setCommon(common.items)
     store.skill.setCatalog(catalog.items)
     store.skill.setMine(mine)
@@ -72,6 +80,8 @@ export async function fetchSkillHub(userId: string): Promise<void> {
     store.skill.setError('')
   }
   catch (error) {
+    if (store.skill.authRequestId !== authRequestId || store.skill.employee?.employeeNumber !== userId)
+      return
     store.skill.setError(messageOf(error))
   }
 }
@@ -159,6 +169,65 @@ export async function downloadSkill(name: string): Promise<ActionResult> {
     return { ok: true }
   }
   catch (error) {
+    const result = fail(error)
+    await fetchInstalledSkills()
+    return result
+  }
+  finally {
+    store.skill.finishDownload(name)
+  }
+}
+
+export async function updateSkill({ name, latestVersion, installedVersion }: {
+  name: string
+  latestVersion: string
+  installedVersion: string | null
+}): Promise<ActionResult> {
+  if (store.skill.downloading.includes(name))
+    return fail(new Error('SKILL_DOWNLOAD_IN_PROGRESS'))
+  if (!store.skill.installedChecked || store.skill.installedLoading || store.skill.installedError !== ''
+    || !store.skill.installedNames.includes(name) || !store.skill.updatableNames.includes(name)) {
+    return fail(new Error('SKILL_UPDATE_UNAVAILABLE'))
+  }
+  if ((installedSkillVersion(store.skill.installedVersions, name) ?? null) !== installedVersion)
+    return fail(new Error('SKILL_VERSION_CHANGED'))
+  if (!isSkillVersion(latestVersion) || (installedVersion !== null && !isNewerSkillVersion(latestVersion, installedVersion)))
+    return fail(new Error('SKILL_VERSION_INVALID'))
+  store.skill.startDownload(name)
+  try {
+    const version = await invoke<string>('desktop_update_employee_skill', {
+      skillName: name,
+      expectedVersion: latestVersion,
+      installedVersion,
+    }, { timeoutMs: 90_000 })
+    if (version !== latestVersion)
+      throw new Error('SKILL_UPDATE_RESULT_INVALID')
+    store.skill.markInstalled(name, version)
+    const installedRefresh = fetchInstalledSkills()
+    try {
+      const refreshed = await postSkillsRefresh()
+      if ('error' in refreshed)
+        throw new Error(refreshed.error)
+      const result = await getLocalSkill({ name }, { timeout: 6_500 })
+      if ('error' in result)
+        throw new Error(result.error)
+      if (!INSTALL_STATUSES.includes(result.status))
+        throw new Error('SKILL_STATUS_INVALID')
+      store.skill.notifyUpdated(name, result.status)
+    }
+    catch (error) {
+      console.error('[skill-hub] Failed to verify updated skill:', error)
+      store.skill.notifyUpdated(name, 'unavailable', messageOf(error))
+    }
+    await installedRefresh
+    return { ok: true }
+  }
+  catch (error) {
+    if (messageOf(error).split(':', 1)[0] === 'SKILL_REMOTE_VERSION_CHANGED') {
+      const userId = store.skill.employee?.employeeNumber
+      if (typeof userId === 'string' && userId.trim() !== '')
+        await fetchSkillHub(userId)
+    }
     const result = fail(error)
     await fetchInstalledSkills()
     return result
