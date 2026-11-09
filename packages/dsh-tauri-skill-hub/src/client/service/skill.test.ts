@@ -1,11 +1,12 @@
 import type { EmployeeDeptVO, EmployeeProfile, SkillPage, UserSkillDetails } from '../types'
 import { invoke } from 'dsh-tauri/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getLocalSkill } from '../apis'
+import { deleteSkill, getInstalledSkills, getLocalSkill, getSkills } from '../apis'
 import { store } from '../store'
 import { fetchAuth } from './auth'
+import { deleteLocalSkill } from './local-skills'
 import { fetchCatalogSkills, fetchCommonSkills, fetchEmployees, fetchUserProfile, fetchUserSkills, saveUserSkills, uploadSkillZip } from './remote'
-import { downloadSkill, fetchSkillHub, loadSkillHub, saveUserSkillNames, selectManageUser, uploadMySkill } from './skill'
+import { downloadSkill, fetchInstalledSkills, fetchSkillHub, loadSkillHub, saveUserSkillNames, selectManageUser, uploadMySkill } from './skill'
 
 vi.mock('dsh-tauri/client', async importOriginal => ({
   ...await importOriginal<typeof import('dsh-tauri/client')>(),
@@ -26,8 +27,12 @@ vi.mock('./auth', () => ({
   fetchAuth: vi.fn(),
 }))
 
-vi.mock('../apis', () => ({
+vi.mock('../apis', async importOriginal => ({
+  ...await importOriginal<typeof import('../apis')>(),
+  deleteSkill: vi.fn(),
+  getInstalledSkills: vi.fn(),
   getLocalSkill: vi.fn(),
+  getSkills: vi.fn(),
 }))
 
 function page(names: string[]): SkillPage {
@@ -65,6 +70,7 @@ const EMPLOYEES: EmployeeDeptVO[] = [
 ]
 
 beforeEach(() => {
+  store.skill.setTab('enterprise')
   store.skill.setEmployee({ employeeNumber: 'E10001', employeeName: '张三' })
   store.skill.setCommon([])
   store.skill.setCatalog([])
@@ -75,6 +81,8 @@ beforeEach(() => {
   store.skill.setManageMine(null)
   store.skill.setManageLoading(false)
   store.skill.setError('')
+  store.skill.finishInstalledLoad(store.skill.startInstalledLoad(), [])
+  store.localSkills.reset()
   for (const name of store.skill.downloading)
     store.skill.finishDownload(name)
   store.skill.dismissFeedback()
@@ -89,33 +97,63 @@ beforeEach(() => {
   vi.mocked(invoke).mockReset()
   vi.mocked(getLocalSkill).mockReset()
   vi.mocked(getLocalSkill).mockResolvedValue({ status: 'ready' })
+  vi.mocked(getInstalledSkills).mockReset()
+  vi.mocked(getInstalledSkills).mockResolvedValue({ names: [] })
+  vi.mocked(getSkills).mockReset()
+  vi.mocked(deleteSkill).mockReset()
 })
 
 describe('登录态编排', () => {
   it('未登录时止步，不拉取技能数据', async () => {
-    vi.mocked(fetchAuth).mockImplementation(async () => store.skill.setEmployee(null))
+    vi.mocked(fetchAuth).mockImplementation(async () => {
+      store.skill.setEmployee(null)
+      return true
+    })
 
     await loadSkillHub()
 
     expect(vi.mocked(fetchAuth)).toHaveBeenCalledTimes(1)
     expect(vi.mocked(fetchCommonSkills)).not.toHaveBeenCalled()
+    expect(getInstalledSkills).not.toHaveBeenCalled()
     expect(store.skill.employee).toBeNull()
     expect(store.skill.authChecked).toBe(true)
   })
 
   it('已登录时继续拉取技能数据', async () => {
-    vi.mocked(fetchAuth).mockImplementation(async () => store.skill.setEmployee({ employeeNumber: 'E10001', employeeName: '张三' }))
+    vi.mocked(fetchAuth).mockImplementation(async () => {
+      store.skill.setEmployee({ employeeNumber: 'E10001', employeeName: '张三' })
+      return true
+    })
     vi.mocked(fetchCommonSkills).mockResolvedValue(page(['a']))
     vi.mocked(fetchCatalogSkills).mockResolvedValue(page(['a', 'b']))
     vi.mocked(fetchUserSkills).mockResolvedValue(mine('E10001', ['a']))
     vi.mocked(fetchUserProfile).mockResolvedValue(PROFILE)
     vi.mocked(fetchEmployees).mockResolvedValue(EMPLOYEES)
+    vi.mocked(getInstalledSkills).mockResolvedValue({ names: ['a'] })
 
     await loadSkillHub()
 
     expect(vi.mocked(fetchCommonSkills)).toHaveBeenCalledTimes(1)
     expect(store.skill.common).toHaveLength(1)
     expect(store.skill.catalog).toHaveLength(2)
+    expect(getInstalledSkills).toHaveBeenCalledExactlyOnceWith({ timeout: 6_500 })
+    expect(store.skill.installedNames).toEqual(['a'])
+  })
+
+  it('已登录的本地技能页只检查登录态，不请求企业技能接口', async () => {
+    store.skill.setTab('local')
+    vi.mocked(fetchAuth).mockImplementation(async () => {
+      store.skill.setEmployee({ employeeNumber: 'E10001', employeeName: '张三' })
+      return true
+    })
+
+    await loadSkillHub()
+
+    expect(fetchAuth).toHaveBeenCalledOnce()
+    expect(fetchCommonSkills).not.toHaveBeenCalled()
+    expect(fetchCatalogSkills).not.toHaveBeenCalled()
+    expect(fetchUserSkills).not.toHaveBeenCalled()
+    expect(getInstalledSkills).not.toHaveBeenCalled()
   })
 })
 
@@ -270,6 +308,7 @@ describe('我的技能上传', () => {
 describe('技能下载与安装', () => {
   it('安装成功后提示可使用的技能命令', async () => {
     vi.mocked(invoke).mockResolvedValue(undefined)
+    vi.mocked(getInstalledSkills).mockResolvedValue({ names: ['demo-skill'] })
 
     await expect(downloadSkill('demo-skill')).resolves.toEqual({ ok: true })
 
@@ -279,6 +318,7 @@ describe('技能下载与安装', () => {
       { timeoutMs: 90_000 },
     )
     expect(store.skill.downloading).toEqual([])
+    expect(store.skill.installedNames).toEqual(['demo-skill'])
     expect(getLocalSkill).toHaveBeenCalledExactlyOnceWith({ name: 'demo-skill' }, { timeout: 6_500 })
     expect(store.skill.feedback).toMatchObject({ kind: 'downloaded', skillName: 'demo-skill', status: 'ready' })
   })
@@ -288,6 +328,7 @@ describe('技能下载与安装', () => {
     vi.mocked(invoke).mockReturnValue(new Promise<void>((resolve) => {
       finish = resolve
     }))
+    vi.mocked(getInstalledSkills).mockResolvedValue({ names: ['demo'] })
 
     const first = downloadSkill('demo')
     expect(store.skill.downloading).toEqual(['demo'])
@@ -315,6 +356,7 @@ describe('技能下载与安装', () => {
   it('已安装但被同名技能遮蔽时不提示可立即调用', async () => {
     vi.mocked(invoke).mockResolvedValue(undefined)
     vi.mocked(getLocalSkill).mockResolvedValue({ status: 'shadowed' })
+    vi.mocked(getInstalledSkills).mockResolvedValue({ names: ['demo'] })
 
     await expect(downloadSkill('demo')).resolves.toEqual({ ok: true })
 
@@ -324,6 +366,7 @@ describe('技能下载与安装', () => {
   it('安装完成后无法确认内核状态时保留文件并显示错误详情', async () => {
     vi.mocked(invoke).mockResolvedValue(undefined)
     vi.mocked(getLocalSkill).mockRejectedValue(new Error('kernel unavailable'))
+    vi.mocked(getInstalledSkills).mockResolvedValue({ names: ['demo'] })
     const log = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await expect(downloadSkill('demo')).resolves.toEqual({ ok: true })
@@ -335,6 +378,149 @@ describe('技能下载与安装', () => {
       detail: 'kernel unavailable',
     })
     expect(log).toHaveBeenCalledOnce()
+    expect(store.skill.installedNames).toEqual(['demo'])
     log.mockRestore()
+  })
+
+  it('安装完成后立即更新状态，不等待内核验证', async () => {
+    let finish!: (result: { status: 'pending' }) => void
+    vi.mocked(invoke).mockResolvedValue(undefined)
+    vi.mocked(getInstalledSkills).mockResolvedValue({ names: ['demo'] })
+    vi.mocked(getLocalSkill).mockReturnValue(new Promise((resolve) => {
+      finish = resolve
+    }))
+
+    const pending = downloadSkill('demo')
+
+    await vi.waitFor(() => expect(store.skill.installedNames).toEqual(['demo']))
+    expect(store.skill.downloading).toEqual(['demo'])
+    finish({ status: 'pending' })
+    await expect(pending).resolves.toEqual({ ok: true })
+  })
+
+  it('安装成功但本地状态复核失败时保留已安装结果并显示错误', async () => {
+    vi.mocked(invoke).mockResolvedValue(undefined)
+    vi.mocked(getInstalledSkills).mockRejectedValue(new Error('disk unavailable'))
+
+    await expect(downloadSkill('demo')).resolves.toEqual({ ok: true })
+
+    expect(store.skill.installedNames).toEqual(['demo'])
+    expect(store.skill.installedChecked).toBe(false)
+    expect(store.skill.installedError).toBe('disk unavailable')
+  })
+
+  it('较早的状态查询不能覆盖下载完成后的结果', async () => {
+    let finishOld!: (result: { names: string[] }) => void
+    vi.mocked(getInstalledSkills)
+      .mockReturnValueOnce(new Promise((resolve) => { finishOld = resolve }))
+      .mockResolvedValueOnce({ names: ['demo'] })
+    vi.mocked(invoke).mockResolvedValue(undefined)
+
+    const oldRequest = fetchInstalledSkills()
+    await downloadSkill('demo')
+    finishOld({ names: [] })
+    await oldRequest
+
+    expect(store.skill.installedNames).toEqual(['demo'])
+    expect(store.skill.installedLoading).toBe(false)
+  })
+
+  it('原生安装发现同名技能时重新读取本地状态', async () => {
+    vi.mocked(invoke).mockRejectedValue(new Error('SKILL_ALREADY_EXISTS: demo'))
+    vi.mocked(getInstalledSkills).mockResolvedValue({ names: ['demo'] })
+
+    await expect(downloadSkill('demo')).resolves.toEqual({ ok: false, error: 'SKILL_ALREADY_EXISTS: demo' })
+
+    expect(store.skill.installedNames).toEqual(['demo'])
+    expect(store.skill.feedback).toMatchObject({ kind: 'failed', error: 'SKILL_ALREADY_EXISTS: demo' })
+  })
+
+  it('已知安装的技能不会再次发起原生下载', async () => {
+    store.skill.finishInstalledLoad(store.skill.startInstalledLoad(), ['demo'])
+
+    await expect(downloadSkill('demo')).resolves.toEqual({ ok: false, error: 'SKILL_ALREADY_EXISTS: demo' })
+
+    expect(invoke).not.toHaveBeenCalled()
+  })
+})
+
+describe('本地安装状态同步', () => {
+  it('读取失败时保留具体错误且不把状态伪装成未安装', async () => {
+    vi.mocked(getInstalledSkills).mockRejectedValue(new Error('permission denied'))
+
+    await fetchInstalledSkills()
+
+    expect(store.skill.installedChecked).toBe(false)
+    expect(store.skill.installedLoading).toBe(false)
+    expect(store.skill.installedError).toBe('permission denied')
+  })
+
+  it('接口响应格式错误时显示明确错误', async () => {
+    vi.mocked(getInstalledSkills).mockResolvedValue(JSON.parse('{"names":"invalid"}'))
+
+    await fetchInstalledSkills()
+
+    expect(store.skill.installedChecked).toBe(false)
+    expect(store.skill.installedError).toBe('SKILL_INSTALLED_STATUS_INVALID')
+  })
+
+  it('较早的查询失败不能覆盖较新的成功结果', async () => {
+    let failOld!: (error: Error) => void
+    vi.mocked(getInstalledSkills)
+      .mockReturnValueOnce(new Promise((_, reject) => { failOld = reject }))
+      .mockResolvedValueOnce({ names: ['demo'] })
+
+    const oldRequest = fetchInstalledSkills()
+    await fetchInstalledSkills()
+    failOld(new Error('old failure'))
+    await oldRequest
+
+    expect(store.skill.installedNames).toEqual(['demo'])
+    expect(store.skill.installedChecked).toBe(true)
+    expect(store.skill.installedError).toBe('')
+  })
+
+  it('删除成功后重新读取磁盘，旧查询不能恢复已删除状态', async () => {
+    let finishOld!: (result: { names: string[] }) => void
+    store.skill.finishInstalledLoad(store.skill.startInstalledLoad(), ['demo'])
+    store.localSkills.setConfirmName('demo')
+    vi.mocked(deleteSkill).mockResolvedValue({ ok: true })
+    vi.mocked(getSkills).mockResolvedValue({ skills: [] })
+    vi.mocked(getInstalledSkills)
+      .mockReturnValueOnce(new Promise((resolve) => { finishOld = resolve }))
+      .mockResolvedValueOnce({ names: [] })
+
+    const oldRequest = fetchInstalledSkills()
+    await deleteLocalSkill()
+    finishOld({ names: ['demo'] })
+    await oldRequest
+
+    expect(store.skill.installedNames).toEqual([])
+    expect(store.skill.installedChecked).toBe(true)
+  })
+
+  it('删除了其他同名来源但目标目录仍存在时保留已安装状态', async () => {
+    store.skill.finishInstalledLoad(store.skill.startInstalledLoad(), ['demo'])
+    store.localSkills.setConfirmName('demo')
+    vi.mocked(deleteSkill).mockResolvedValue({ ok: true })
+    vi.mocked(getSkills).mockResolvedValue({ skills: [] })
+    vi.mocked(getInstalledSkills).mockResolvedValue({ names: ['demo'] })
+
+    await deleteLocalSkill()
+
+    expect(store.skill.installedNames).toEqual(['demo'])
+    expect(getInstalledSkills).toHaveBeenCalledExactlyOnceWith({ timeout: 6_500 })
+  })
+
+  it('删除接口在移除文件后报错时仍重新检查本地状态', async () => {
+    store.skill.finishInstalledLoad(store.skill.startInstalledLoad(), ['demo'])
+    store.localSkills.setConfirmName('demo')
+    vi.mocked(deleteSkill).mockRejectedValue(new Error('provider refresh failed'))
+    vi.mocked(getInstalledSkills).mockResolvedValue({ names: [] })
+
+    await deleteLocalSkill()
+
+    expect(store.localSkills.formError).toBe('provider refresh failed')
+    expect(store.skill.installedNames).toEqual([])
   })
 })

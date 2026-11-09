@@ -7,6 +7,7 @@ export const skill = defineStore({
   state: (): SkillHubState => ({
     employee: null,
     authChecked: false,
+    authRequestId: 0,
     common: [],
     catalog: [],
     mine: null,
@@ -19,14 +20,32 @@ export const skill = defineStore({
     keyword: '',
     loading: false,
     downloading: [],
+    installedNames: [],
+    installedChecked: false,
+    installedLoading: false,
+    installedRequestId: 0,
+    installedError: '',
     error: '',
     feedback: null,
     feedbackSeq: 0,
   }),
   actions: {
     setEmployee(employee: EmployeeInfo | null) {
+      this.authRequestId += 1
       this.employee = employee
       this.authChecked = true
+    },
+    startAuth(): number {
+      this.authRequestId += 1
+      this.authChecked = false
+      return this.authRequestId
+    },
+    finishAuth(requestId: number, employee: EmployeeInfo | null): boolean {
+      if (requestId !== this.authRequestId)
+        return false
+      this.employee = employee
+      this.authChecked = true
+      return true
     },
     setCommon(common: readonly SkillSummary[]) {
       this.common = common
@@ -53,6 +72,10 @@ export const skill = defineStore({
       this.manageLoading = loading
     },
     setTab(tab: SkillTab) {
+      if (this.tab !== tab) {
+        this.authRequestId += 1
+        this.authChecked = false
+      }
       this.tab = tab
       this.keyword = ''
     },
@@ -67,6 +90,32 @@ export const skill = defineStore({
     },
     finishDownload(name: string) {
       this.downloading = this.downloading.filter(item => item !== name)
+    },
+    startInstalledLoad(): number {
+      this.installedRequestId += 1
+      this.installedLoading = true
+      this.installedError = ''
+      return this.installedRequestId
+    },
+    finishInstalledLoad(requestId: number, names: readonly string[]) {
+      if (requestId !== this.installedRequestId)
+        return
+      this.installedNames = names
+      this.installedChecked = true
+      this.installedLoading = false
+    },
+    failInstalledLoad(requestId: number, error: string) {
+      if (requestId !== this.installedRequestId)
+        return
+      this.installedChecked = false
+      this.installedLoading = false
+      this.installedError = error
+    },
+    markInstalled(name: string) {
+      this.installedRequestId += 1
+      this.installedLoading = false
+      if (!this.installedNames.includes(name))
+        this.installedNames = [...this.installedNames, name]
     },
     setError(error: string) {
       this.error = error

@@ -1,7 +1,7 @@
 import type { SkillInstallStatus } from '../store/modules/skill.types'
 import type { ActionResult } from '../types'
 import { invoke } from 'dsh-tauri/client'
-import { getLocalSkill } from '../apis'
+import { getInstalledSkills, getLocalSkill } from '../apis'
 import { store } from '../store'
 import { employeeLabel, findEmployee } from '../store/modules/skill.utils'
 import { fetchAuth } from './auth'
@@ -24,11 +24,27 @@ function fail(error: unknown): ActionResult {
  * 已登录再并发拉取技能数据、当前用户档案与全量员工列表。
  */
 export async function loadSkillHub(): Promise<void> {
-  await fetchAuth()
-  const employee = store.skill.employee
-  if (employee === null)
+  if (!await fetchAuth())
     return
-  await fetchSkillHub(employee.employeeNumber)
+  const employee = store.skill.employee
+  if (employee === null || store.skill.tab === 'local')
+    return
+  await Promise.all([fetchSkillHub(employee.employeeNumber), fetchInstalledSkills()])
+}
+
+export async function fetchInstalledSkills(): Promise<void> {
+  const requestId = store.skill.startInstalledLoad()
+  try {
+    const result = await getInstalledSkills({ timeout: 6_500 })
+    if ('error' in result)
+      throw new Error(result.error)
+    if (!Array.isArray(result.names) || result.names.some(name => typeof name !== 'string'))
+      throw new Error('SKILL_INSTALLED_STATUS_INVALID')
+    store.skill.finishInstalledLoad(requestId, result.names)
+  }
+  catch (error) {
+    store.skill.failInstalledLoad(requestId, messageOf(error))
+  }
 }
 
 /**
@@ -120,9 +136,13 @@ export async function uploadMySkill(file: File): Promise<ActionResult> {
 export async function downloadSkill(name: string): Promise<ActionResult> {
   if (store.skill.downloading.includes(name))
     return fail(new Error('SKILL_DOWNLOAD_IN_PROGRESS'))
+  if (store.skill.installedNames.includes(name))
+    return fail(new Error(`SKILL_ALREADY_EXISTS: ${name}`))
   store.skill.startDownload(name)
   try {
     await invoke<void>('desktop_install_employee_skill', { skillName: name }, { timeoutMs: 90_000 })
+    store.skill.markInstalled(name)
+    const installedRefresh = fetchInstalledSkills()
     try {
       const result = await getLocalSkill({ name }, { timeout: 6_500 })
       if ('error' in result)
@@ -135,10 +155,13 @@ export async function downloadSkill(name: string): Promise<ActionResult> {
       console.error('[skill-hub] Failed to verify installed skill:', error)
       store.skill.notifyDownloaded(name, 'unavailable', messageOf(error))
     }
+    await installedRefresh
     return { ok: true }
   }
   catch (error) {
-    return fail(error)
+    const result = fail(error)
+    await fetchInstalledSkills()
+    return result
   }
   finally {
     store.skill.finishDownload(name)

@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>同达快送 · 履约深度分析（2026-10-30 ~ 11-05）</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f2f4f8;color:#0f172a;
+ font:15px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+ -webkit-font-smoothing:antialiased}
+.wrap{max-width:960px;margin:0 auto;padding:0 20px 64px}
+.hero{background:linear-gradient(135deg,#0b1c3f 0%,#123a86 55%,#1d6fd6 100%);color:#fff;
+ padding:46px 40px 42px;border-radius:0 0 22px 22px;margin-bottom:26px;position:relative;overflow:hidden}
+.hero:after{content:"";position:absolute;right:-70px;top:-70px;width:280px;height:280px;
+ border-radius:50%;background:rgba(255,255,255,.07)}
+.hero:before{content:"";position:absolute;right:60px;bottom:-110px;width:220px;height:220px;
+ border-radius:50%;background:rgba(255,255,255,.05)}
+.hero h1{margin:0 0 10px;font-size:29px;letter-spacing:.5px;font-weight:700;position:relative}
+.hero .sub{opacity:.85;font-size:13.5px;position:relative;line-height:1.9}
+.hero .tag{display:inline-block;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.28);
+ padding:3px 11px;border-radius:999px;font-size:12px;margin-right:7px}
+.flip{background:#fff;border-radius:16px;padding:26px 28px;margin-bottom:24px;
+ box-shadow:0 1px 3px rgba(15,23,42,.09),0 8px 26px rgba(15,23,42,.05);border-left:5px solid #dc2626}
+.flip h2{margin:0 0 12px;font-size:19px;color:#b91c1c}
+.flip p{margin:0 0 10px}
+.flip .hl{background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:13px 16px;
+ font-size:14.5px;color:#7f1d1d;font-weight:600}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:26px}
+.kpi{background:#fff;border-radius:14px;padding:18px 20px;box-shadow:0 1px 3px rgba(15,23,42,.08);
+ border-top:3px solid #cbd5e1}
+.kpi.good{border-top-color:#059669} .kpi.bad{border-top-color:#dc2626}
+.kpi .v{font-size:27px;font-weight:750;letter-spacing:-.5px;line-height:1.2}
+.kpi.good .v{color:#047857} .kpi.bad .v{color:#b91c1c}
+.kpi .l{font-size:13.5px;font-weight:600;color:#334155;margin-top:5px}
+.kpi .n{font-size:11.5px;color:#94a3b8;margin-top:2px}
+section{background:#fff;border-radius:16px;padding:24px 28px;margin-bottom:22px;
+ box-shadow:0 1px 3px rgba(15,23,42,.08),0 6px 20px rgba(15,23,42,.04)}
+h2.t{margin:0 0 6px;font-size:19px;display:flex;align-items:center;gap:9px}
+h2.t .ic{width:26px;height:26px;border-radius:8px;background:#eff6ff;color:#2563eb;
+ display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
+.lead{color:#64748b;font-size:13.5px;margin:0 0 18px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;padding:9px 10px;background:#f8fafc;color:#475569;font-weight:650;
+ border-bottom:2px solid #e2e8f0;font-size:12.5px;white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid #f1f5f9}
+tr:last-child td{border-bottom:0}
+tbody tr:hover{background:#f8fbff}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.green{color:#047857;font-weight:650} .amber{color:#b45309;font-weight:650} .red{color:#b91c1c;font-weight:650}
+.mini{display:inline-block;width:74px;height:6px;background:#e2e8f0;border-radius:4px;
+ margin-right:7px;vertical-align:middle;overflow:hidden}
+.minifill{height:100%;border-radius:4px}
+.m-bad{background:linear-gradient(90deg,#ef4444,#dc2626)}
+.m-warn{background:linear-gradient(90deg,#f59e0b,#d97706)}
+.m-ok{background:linear-gradient(90deg,#10b981,#059669)}
+.bars{margin:4px 0}
+.brow{display:grid;grid-template-columns:112px 1fr 84px 118px;gap:11px;align-items:center;
+ padding:6px 0;border-bottom:1px dashed #eef2f7;font-size:13.5px}
+.brow:last-child{border-bottom:0}
+.bname{color:#334155;font-weight:600}
+.btrack{background:#f1f5f9;border-radius:6px;height:20px;overflow:hidden}
+.bfill{height:100%;border-radius:6px;background:linear-gradient(90deg,#3b82f6,#1d4ed8)}
+.c-red .bfill{background:linear-gradient(90deg,#f87171,#dc2626)}
+.c-teal .bfill{background:linear-gradient(90deg,#2dd4bf,#0d9488)}
+.bval{text-align:right;font-variant-numeric:tabular-nums;font-weight:650;color:#0f172a}
+.bext{color:#94a3b8;font-size:12px;text-align:right}
+svg{width:100%;height:auto;display:block;margin:6px 0}
+.grid{stroke:#eef2f7;stroke-width:1}
+.line{fill:none;stroke:#2563eb;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.dot{fill:#fff;stroke:#2563eb;stroke-width:2.6}
+.ylab{fill:#94a3b8;font-size:10.5px;text-anchor:end}
+.xlab{fill:#475569;font-size:11.5px;text-anchor:middle;font-weight:600}
+.xsub{fill:#a3aec0;font-size:10px;text-anchor:middle}
+.xlab,.val{font-size:11.5px;text-anchor:middle;font-weight:600}
+.val{fill:#1d4ed8;font-size:11px}
+.axis{fill:#b6c0cf;font-size:10.5px;text-anchor:end}
+.leg{fill:#94a3b8;font-size:10.5px} .leg2{fill:#0d9488;font-size:10.5px}
+.grid{stroke:#eef2f7;stroke-width:1}
+.grid{stroke:#eef2f7;stroke-width:1}
+.note{background:#f8fafc;border-left:3px solid #cbd5e1;padding:11px 15px;border-radius:0 8px 8px 0;
+ color:#475569;font-size:13px;margin-top:16px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.p0{background:#fee2e2;color:#b91c1c} .p1{background:#ffedd5;color:#c2410c}
+.p2{background:#dbeafe;color:#1d4ed8} .p3{background:#e2e8f0;color:#475569}
+.pri{display:inline-block;width:42px;text-align:center;padding:3px 0;border-radius:6px;
+ font-weight:750;font-size:12px}
+.act td:first-child{width:56px}
+.act td:last-child{color:#0f172a;font-size:12.8px;width:270px}
+.foot{color:#94a3b8;font-size:12px;text-align:center;padding:6px 0 0;line-height:1.9}
+h3.s{font-size:14.5px;margin:22px 0 10px;color:#334155;font-weight:680}
+h3.s:first-of-type{margin-top:0}
+@media(max-width:760px){.kpis{grid-template-columns:1fr 1fr}.grid2{grid-template-columns:1fr}
+ .brow{grid-template-columns:92px 1fr 74px}.bext{display:none}.hero{padding:32px 22px}
+ section{padding:20px 18px}}
+@media print{body{background:#fff}section,.flip{box-shadow:none;border:1px solid #e2e8f0}}
+</style></head><body>
+<div class="hero">
+ <h1>同达快送 · 履约深度分析</h1>
+ <div class="sub">
+  <span class="tag">窗口 2026-10-30 ~ 2026-11-05</span>
+  <span class="tag">674,744 单（7 天全量）</span>
+  <span class="tag">叠加 11-05 单日明细 87,482 单</span><br>
+  口径：<b>order export 全量导出</b>，无城市/来源过滤 · 准时率 = 完成时间 ≤ 预计送达时间 · 已剔除脏时间戳（偏离 &gt;24h）<br>
+  分析人：毛伟 · 生成时间 2026-11-06
+ </div>
+</div>
+<div class="wrap">
+
+<div class="flip">
+ <h2>核心结论：运力大盘是健康的，问题出在一个地方</h2>
+ <div class="hl">大盘完单率 92.80% 是失真值，真实水位 <b>98.17%</b>。<br>
+ 而中途一度被判定为"最致命问题"的众包完单率 72.4%，<b>是统计假象</b>——剔除后正常众包 95.1%，与专送 98.8% 仅差 3.7pp。</div>
+ <p style="margin-top:14px">根因是同一个：<b>43,723 单（占 6.5%）来自 4 个聚合渠道且业务标识缺失，完单率仅 15.4%，其中 96.7% 被打成"众包"身份</b>。
+ 它同时造成了三个假症状：拖垮众包指标、拖垮大盘完单率、拖垮北京（其异常口径占比 11.4%，为大盘近 2 倍；剔除后北京 97.1%）。</p>
+ <p>一个根因，三个假症状。<b>治理聚合渠道，是本期唯一 P0。</b></p>
+</div>
+
+<div class="kpis">
+ <div class="kpi"><div class="v">92.80%</div><div class="l">大盘完单率（7天）</div><div class="n">表面值</div></div>
+ <div class="kpi good"><div class="v">98.17%</div><div class="l">真实完单率</div><div class="n">剔除异常口径</div></div>
+ <div class="kpi bad"><div class="v">76.2%</div><div class="l">缺口集中度</div><div class="n">单一根因贡献</div></div>
+ <div class="kpi bad"><div class="v">1.02min</div><div class="l">聚合渠道取消中位时长</div><div class="n">42.6% 在 30 秒内</div></div>
+ <div class="kpi good"><div class="v">95.47%</div><div class="l">准时率（7日均值）</div><div class="n">稳定 93.9–97.1%</div></div>
+ <div class="kpi good"><div class="v">18.4min</div><div class="l">全链路中位时长</div><div class="n">P90 28.5min</div></div>
+</div>
+
+<section>
+ <h2 class="t"><span class="ic">1</span>缺口归因瀑布</h2>
+ <p class="lead">7 天未完单共 <b>48,574 单（折大盘 7.20pp）</b>。逐层剔除后可见：真实运力侧失败远小于表面。</p>
+ <table><thead><tr><th>归因项</th><th class="num">单量</th><th class="num">占缺口</th><th class="num">折大盘</th></tr></thead>
+ <tbody><tr><td>① 聚合渠道 / 异常口径</td><td class="num">37,004</td><td class="num"><div class="mini"><div class="minifill m-bad" style="width:95.2%"></div></div>76.2%</td><td class="num">+5.48pp</td></tr><tr><td>⑤ 已接单后取消（真·骑手履约失败）</td><td class="num">6,084</td><td class="num"><div class="mini"><div class="minifill m-warn" style="width:15.6%"></div></div>12.5%</td><td class="num">+0.90pp</td></tr><tr><td>② 未被接单即取消（剔除①后净剩）</td><td class="num">4,545</td><td class="num"><div class="mini"><div class="minifill m-warn" style="width:11.8%"></div></div>9.4%</td><td class="num">+0.67pp</td></tr><tr><td>③ 众包未完单（剔除①后净剩）</td><td class="num">941</td><td class="num"><div class="mini"><div class="minifill m-ok" style="width:2.4%"></div></div>1.9%</td><td class="num">+0.14pp</td></tr></tbody></table>
+ <div class="note">单一维度看"取消发生在哪个节点"时，<b>84.4% 的取消从未被任何骑手接起</b>（7 天 40,976 单）。
+ 但其中 <b>86.1%</b> 来自 5 个聚合渠道 —— 因此真正需要运力侧负责的"未被接起"仅 <b>4,545 单</b>。</div>
+</section>
+
+<section>
+ <h2 class="t"><span class="ic">2</span>真凶画像：聚合渠道异常簇</h2>
+ <p class="lead">43,723 单 / 7 天 = <b>6,246 单/天</b>。状态分布：付费取消 64.1% · 系统取消 20.5% · 完单仅 <b>15.4%</b>。</p>
+ <div class="grid2">
+  <div><h3 class="s">渠道集中度（前 4 个占 86.0%）</h3>
+   <div class="bars"><div class="brow"><div class="bname">猎豹聚合</div><div class="btrack"><div class="bfill c-blue" style="width:100.0%"></div></div><div class="bval">11,023 单</div><div class="bext">25.2%</div></div><div class="brow"><div class="bname">京东海博</div><div class="btrack"><div class="bfill c-blue" style="width:96.6%"></div></div><div class="bval">10,645 单</div><div class="bext">24.3%</div></div><div class="brow"><div class="bname">青云聚信</div><div class="btrack"><div class="bfill c-blue" style="width:89.0%"></div></div><div class="bval">9,810 单</div><div class="bext">22.4%</div></div><div class="brow"><div class="bname">麦芽田聚合</div><div class="btrack"><div class="bfill c-blue" style="width:55.9%"></div></div><div class="bval">6,166 单</div><div class="bext">14.1%</div></div><div class="brow"><div class="bname">麦芽田-直连</div><div class="btrack"><div class="bfill c-blue" style="width:32.1%"></div></div><div class="bval">3,543 单</div><div class="bext">8.1%</div></div></div></div>
+  <div><h3 class="s">城市集中度（前 5 城占 66.4%）</h3>
+   <div class="bars"><div class="brow"><div class="bname">重庆市</div><div class="btrack"><div class="bfill c-red" style="width:100.0%"></div></div><div class="bval">10,147 单</div><div class="bext">23.2%</div></div><div class="brow"><div class="bname">北京市</div><div class="btrack"><div class="bfill c-red" style="width:88.9%"></div></div><div class="bval">9,022 单</div><div class="bext">20.6%</div></div><div class="brow"><div class="bname">昭通市</div><div class="btrack"><div class="bfill c-red" style="width:43.4%"></div></div><div class="bval">4,408 单</div><div class="bext">10.1%</div></div><div class="brow"><div class="bname">株洲市</div><div class="btrack"><div class="bfill c-red" style="width:27.5%"></div></div><div class="bval">2,786 单</div><div class="bext">6.4%</div></div><div class="brow"><div class="bname">常德市</div><div class="btrack"><div class="bfill c-red" style="width:26.3%"></div></div><div class="bval">2,671 单</div><div class="bext">6.1%</div></div><div class="brow"><div class="bname">武汉市</div><div class="btrack"><div class="bfill c-red" style="width:25.4%"></div></div><div class="bval">2,574 单</div><div class="bext">5.9%</div></div><div class="brow"><div class="bname">上海市</div><div class="btrack"><div class="bfill c-red" style="width:18.3%"></div></div><div class="bval">1,854 单</div><div class="bext">4.2%</div></div><div class="brow"><div class="bname">德州市</div><div class="btrack"><div class="bfill c-red" style="width:12.1%"></div></div><div class="bval">1,223 单</div><div class="bext">2.8%</div></div></div></div>
+ </div>
+ <h3 class="s">发单 → 取消 的累计时长分布（关键证据）</h3>
+ <div class="bars"><div class="brow"><div class="bname">≤30秒</div><div class="btrack"><div class="bfill c-teal" style="width:42.6%"></div></div><div class="bval">43%</div><div class="bext">累计占比</div></div><div class="brow"><div class="bname">≤60秒</div><div class="btrack"><div class="bfill c-teal" style="width:49.7%"></div></div><div class="bval">50%</div><div class="bext">累计占比</div></div><div class="brow"><div class="bname">≤2分钟</div><div class="btrack"><div class="bfill c-teal" style="width:61.9%"></div></div><div class="bval">62%</div><div class="bext">累计占比</div></div><div class="brow"><div class="bname">≤3分钟</div><div class="btrack"><div class="bfill c-teal" style="width:72.2%"></div></div><div class="bval">72%</div><div class="bext">累计占比</div></div><div class="brow"><div class="bname">≤5分钟</div><div class="btrack"><div class="bfill c-teal" style="width:81.6%"></div></div><div class="bval">82%</div><div class="bext">累计占比</div></div></div>
+ <div class="note"><b>判读：</b>中位仅 <b>1.02 分钟</b>，<b>42.6% 在 30 秒内</b>取消，且 <b>98.5%</b> 发生在骑手接单前
+ （36,999 单取消中仅 568 单已被接单）。30 秒连一轮派单扫描都跑不完 ——
+ 这不是"派不到人"，而是渠道侧<b>发单即撤</b>的典型比价/占位行为；
+ 且取消集中在 <b>17–22 点晚高峰</b>，同时挤占了本就紧张的派单资源与骑手注意力。</div>
+</section>
+
+<section>
+ <h2 class="t"><span class="ic">3</span>身份口径：假象如何产生</h2>
+ <p class="lead">同一指标在两种口径下的差异 —— 这是全篇最重要的一张表。</p>
+ <table><thead><tr><th>口径</th><th>身份</th><th class="num">单量</th><th class="num">完单率</th><th>结论</th></tr></thead>
+ <tbody>
+  <tr><td>正常</td><td>专送</td><td class="num">519,730</td><td class="num green">98.8%</td><td>健康</td></tr>
+  <tr><td>正常</td><td>众包</td><td class="num">111,291</td><td class="num green">95.1%</td><td>与专送仅差 3.7pp</td></tr>
+  <tr><td><b>异常口径</b></td><td>众包</td><td class="num">42,298</td><td class="num red">12.6%</td><td><b>拖垮大盘的元凶</b></td></tr>
+  <tr><td>异常口径</td><td>专送</td><td class="num">1,425</td><td class="num green">96.7%</td><td>异常单几乎全落在众包</td></tr>
+ </tbody></table>
+ <div class="note">异常簇 <b>96.7% 被打成"众包"身份</b>。只要不把它单独建口径，众包指标会永久失真，
+ 并持续误导运力侧的排班、补贴与考核决策。</div>
+</section>
+
+<section>
+ <h2 class="t"><span class="ic">4</span>时效水位：健康，但两处结构性短板</h2>
+ <p class="lead">全链路中位 <b>18.4min</b>、P90 28.5min，<b>76.9% 的订单在 25 分钟内完成</b>；
+ 准时率 7 天稳定在 93.9%–97.1%（均值 95.47%）。超时单平均超时 10.8min，超时 &gt;20min 仅占 0.5%。</p>
+ <h3 class="s">配送距离是准时率的第一因子（11-05 已完单）</h3>
+ <svg viewBox="0 0 880 300" role="img" aria-label="配送距离与准时率关系曲线"><defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#2563eb" stop-opacity=".22"/><stop offset="100%" stop-color="#2563eb" stop-opacity="0"/></linearGradient></defs><line x1="62" y1="248.0" x2="854" y2="248.0" class="grid"/><line x1="62" y1="192.5" x2="854" y2="192.5" class="grid"/><line x1="62" y1="137.0" x2="854" y2="137.0" class="grid"/><line x1="62" y1="81.5" x2="854" y2="81.5" class="grid"/><line x1="62" y1="26.0" x2="854" y2="26.0" class="grid"/><polygon points="62.0,248.0 62.0,43.8 260.0,60.4 458.0,87.1 656.0,113.7 854.0,199.2 854.0,248.0" fill="url(#ag)"/><polyline points="62.0,43.8 260.0,60.4 458.0,87.1 656.0,113.7 854.0,199.2" class="line"/><circle cx="62.0" cy="43.8" r="5.5" class="dot"/><text x="62.0" y="29.8" class="val">98.4%</text><circle cx="260.0" cy="60.4" r="5.5" class="dot"/><text x="260.0" y="46.4" class="val">96.9%</text><circle cx="458.0" cy="87.1" r="5.5" class="dot"/><text x="458.0" y="73.1" class="val">94.5%</text><circle cx="656.0" cy="113.7" r="5.5" class="dot"/><text x="656.0" y="99.7" class="val">92.1%</text><circle cx="854.0" cy="199.2" r="5.5" class="dot"/><text x="854.0" y="185.2" class="val">84.4%</text><text x="52" y="252.0" class="ylab">80%</text><text x="52" y="196.5" class="ylab">85%</text><text x="52" y="141.0" class="ylab">90%</text><text x="52" y="85.5" class="ylab">95%</text><text x="52" y="30.0" class="ylab">100%</text><text x="62.0" y="270" class="xlab">0–1km</text><text x="62.0" y="288" class="xsub">24,778 单</text><text x="260.0" y="270" class="xlab">1–2km</text><text x="260.0" y="288" class="xsub">30,873 单</text><text x="458.0" y="270" class="xlab">2–3km</text><text x="458.0" y="288" class="xsub">15,955 单</text><text x="656.0" y="270" class="xlab">3–5km</text><text x="656.0" y="288" class="xsub">9,431 单</text><text x="854.0" y="270" class="xlab">5–10km</text><text x="854.0" y="288" class="xsub">1,283 单</text><text x="854" y="294" class="axis">配送距离 →</text></svg>
+ <div class="note">3km 后准时率跌破 92%，<b>5km 后断崖至 84.4%</b> —— 而当前时效承诺未按距离分档。</div>
+ <h3 class="s">环节耗时（分钟，11-05）</h3>
+ <table><thead><tr><th>环节</th><th class="num">中位</th><th class="num">P90</th><th>判读</th></tr></thead>
+ <tbody><tr><td>下单→发单</td><td class="num">0.00</td><td class="num">0.00</td><td>系统即时发单</td></tr><tr><td>发单→接单</td><td class="num">0.32</td><td class="num">9.60</td><td>中位极快，长尾厚</td></tr><tr><td>接单→到店</td><td class="num">0.45</td><td class="num">8.53</td><td>多为顺路接派</td></tr><tr><td>到店→取货</td><td class="num">3.82</td><td class="num">12.28</td><td>⚠ 商家出餐是最大瓶颈</td></tr><tr><td>取货→送达</td><td class="num">7.18</td><td class="num">16.98</td><td>正常</td></tr><tr><td>下单→送达</td><td class="num">18.42</td><td class="num">28.53</td><td>全链路</td></tr></tbody></table>
+ <div class="note"><b>瓶颈不在派单。</b>下单→发单为 0（系统即时），发单→接单中位仅 0.32min；
+ 真正最耗时的人工环节是<b>到店→取货 3.82min（P90 12.28min）</b>，即商家出餐。</div>
+</section>
+
+<section>
+ <h2 class="t"><span class="ic">5</span>时段结构：凌晨才是真运力问题</h2>
+ <p class="lead">高峰 41–44% 的单量压在 11/12/17/18/19 五个小时内，准时率相应回落 2–4pp。</p>
+ <svg viewBox="0 0 880 260" role="img" aria-label="分时段单量与完单率、准时率"><line x1="46" y1="186.0" x2="868" y2="186.0" class="grid"/><text x="38" y="190.0" class="ylab">80%</text><line x1="46" y1="101.0" x2="868" y2="101.0" class="grid"/><text x="38" y="105.0" class="ylab">90%</text><line x1="46" y1="16.0" x2="868" y2="16.0" class="grid"/><text x="38" y="20.0" class="ylab">100%</text><rect x="50.8" y="196.6" width="24.7" height="23.4" rx="2" fill="#dc2626" opacity=".28"/><circle cx="63.1" cy="180.0" r="3.2" fill="#dc2626"/><text x="63.1" y="240" class="xlab">00</text><rect x="85.0" y="202.5" width="24.7" height="17.5" rx="2" fill="#dc2626" opacity=".28"/><circle cx="97.4" cy="169.8" r="3.2" fill="#dc2626"/><rect x="119.3" y="206.5" width="24.7" height="13.5" rx="2" fill="#dc2626" opacity=".28"/><circle cx="131.6" cy="158.8" r="3.2" fill="#dc2626"/><rect x="153.5" y="210.1" width="24.7" height="9.9" rx="2" fill="#dc2626" opacity=".28"/><circle cx="165.9" cy="165.6" r="3.2" fill="#dc2626"/><text x="165.9" y="240" class="xlab">03</text><rect x="187.8" y="212.8" width="24.7" height="7.2" rx="2" fill="#dc2626" opacity=".28"/><circle cx="200.1" cy="182.6" r="3.2" fill="#dc2626"/><rect x="222.0" y="203.1" width="24.7" height="16.9" rx="2" fill="#d97706" opacity=".28"/><circle cx="234.4" cy="91.7" r="3.2" fill="#d97706"/><rect x="256.3" y="178.9" width="24.7" height="41.1" rx="2" fill="#2563eb" opacity=".28"/><circle cx="268.6" cy="58.5" r="3.2" fill="#2563eb"/><text x="268.6" y="240" class="xlab">06</text><rect x="290.5" y="145.2" width="24.7" height="74.8" rx="2" fill="#2563eb" opacity=".28"/><circle cx="302.9" cy="54.2" r="3.2" fill="#2563eb"/><rect x="324.8" y="113.3" width="24.7" height="106.7" rx="2" fill="#2563eb" opacity=".28"/><circle cx="337.1" cy="56.0" r="3.2" fill="#2563eb"/><rect x="359.0" y="128.3" width="24.7" height="91.7" rx="2" fill="#2563eb" opacity=".28"/><circle cx="371.4" cy="57.7" r="3.2" fill="#2563eb"/><text x="371.4" y="240" class="xlab">09</text><rect x="393.3" y="127.2" width="24.7" height="92.8" rx="2" fill="#2563eb" opacity=".28"/><circle cx="405.6" cy="61.9" r="3.2" fill="#2563eb"/><rect x="427.5" y="16.0" width="24.7" height="204.0" rx="2" fill="#2563eb" opacity=".28"/><circle cx="439.9" cy="50.8" r="3.2" fill="#2563eb"/><rect x="461.8" y="63.4" width="24.7" height="156.6" rx="2" fill="#2563eb" opacity=".28"/><circle cx="474.1" cy="51.7" r="3.2" fill="#2563eb"/><text x="474.1" y="240" class="xlab">12</text><rect x="496.0" y="123.8" width="24.7" height="96.2" rx="2" fill="#2563eb" opacity=".28"/><circle cx="508.4" cy="67.0" r="3.2" fill="#2563eb"/><rect x="530.3" y="147.4" width="24.7" height="72.6" rx="2" fill="#d97706" opacity=".28"/><circle cx="542.6" cy="75.5" r="3.2" fill="#d97706"/><rect x="564.5" y="157.5" width="24.7" height="62.5" rx="2" fill="#d97706" opacity=".28"/><circle cx="576.9" cy="77.2" r="3.2" fill="#d97706"/><text x="576.9" y="240" class="xlab">15</text><rect x="598.8" y="136.5" width="24.7" height="83.5" rx="2" fill="#d97706" opacity=".28"/><circle cx="611.1" cy="73.0" r="3.2" fill="#d97706"/><rect x="633.0" y="74.7" width="24.7" height="145.3" rx="2" fill="#d97706" opacity=".28"/><circle cx="645.4" cy="67.8" r="3.2" fill="#d97706"/><rect x="667.3" y="69.9" width="24.7" height="150.1" rx="2" fill="#d97706" opacity=".28"/><circle cx="679.6" cy="74.7" r="3.2" fill="#d97706"/><text x="679.6" y="240" class="xlab">18</text><rect x="701.5" y="116.8" width="24.7" height="103.2" rx="2" fill="#d97706" opacity=".28"/><circle cx="713.9" cy="80.6" r="3.2" fill="#d97706"/><rect x="735.8" y="148.3" width="24.7" height="71.7" rx="2" fill="#d97706" opacity=".28"/><circle cx="748.1" cy="111.2" r="3.2" fill="#d97706"/><rect x="770.0" y="156.5" width="24.7" height="63.5" rx="2" fill="#dc2626" opacity=".28"/><circle cx="782.4" cy="135.8" r="3.2" fill="#dc2626"/><text x="782.4" y="240" class="xlab">21</text><rect x="804.3" y="171.3" width="24.7" height="48.7" rx="2" fill="#dc2626" opacity=".28"/><circle cx="816.6" cy="152.0" r="3.2" fill="#dc2626"/><rect x="838.5" y="181.0" width="24.7" height="39.0" rx="2" fill="#dc2626" opacity=".28"/><circle cx="850.9" cy="163.9" r="3.2" fill="#dc2626"/><polyline points="63.1,98.5 97.4,92.5 131.6,90.0 165.9,88.2 200.1,70.4 234.4,84.8 268.6,80.6 302.9,45.8 337.1,41.5 371.4,36.4 405.6,33.0 439.9,57.7 474.1,52.5 508.4,39.0 542.6,36.4 576.9,33.0 611.1,39.8 645.4,67.0 679.6,80.6 713.9,62.7 748.1,58.5 782.4,64.5 816.6,68.7 850.9,100.2" fill="none" stroke="#0f766e" stroke-width="2" stroke-dasharray="4 3"/><text x="12" y="14" class="leg">■ 柱高=单量（蓝≥94% 橙≥86% 红&lt;86% 为完单率色阶）</text><text x="430" y="14" class="leg2">┄ 折线=准时率</text><text x="868" y="254" class="axis">下单时段（小时）→</text></svg>
+ <div class="note"><b>凌晨 00–04 完单率仅 80–83%</b>（26,907 单/7天），与异常簇无关，属真实夜间排班不足；
+ 23 点准时率 90.1% 为全天最低。</div>
+</section>
+
+<section>
+ <h2 class="t"><span class="ic">6</span>剔除假象后的真实短板</h2>
+ <p class="lead">按"正常口径"重算 8 座主要城市 —— 城市间完单率差异其实很小，问题转移到了众包可用性上。</p>
+ <table><thead><tr><th>城市</th><th class="num">正常单量</th><th class="num">完单率</th>
+ <th class="num">众包单量</th><th class="num">众包完单率</th><th>判断</th></tr></thead>
+ <tbody><tr><td>济南市</td><td class="num">23,901</td><td class="num">99.1%</td><td class="num">5,363</td><td class="num green">97.3%</td><td>优</td></tr><tr><td>武汉市</td><td class="num">82,788</td><td class="num">98.7%</td><td class="num">16,203</td><td class="num green">97.2%</td><td>优</td></tr><tr><td>上海市</td><td class="num">81,742</td><td class="num">98.6%</td><td class="num">54,736</td><td class="num green">98.2%</td><td>优</td></tr><tr><td>天津市</td><td class="num">26,049</td><td class="num">98.4%</td><td class="num">1,345</td><td class="num amber">88.8%</td><td>优</td></tr><tr><td>广州市</td><td class="num">57,836</td><td class="num">98.2%</td><td class="num">1,526</td><td class="num red">54.0%</td><td>⚠ 众包异常</td></tr><tr><td>郑州市</td><td class="num">36,896</td><td class="num">97.5%</td><td class="num">985</td><td class="num red">72.6%</td><td>⚠ 众包偏低</td></tr><tr><td>北京市</td><td class="num">69,835</td><td class="num">97.1%</td><td class="num">5,365</td><td class="num amber">87.2%</td><td>正常</td></tr><tr><td>廊坊市</td><td class="num">18,439</td><td class="num">97.9%</td><td class="num">132</td><td class="num red">0.0%</td><td>⚠ 众包失效</td></tr></tbody></table>
+ <div class="note"><b>广州 54.0%、郑州 72.6%、廊坊 0%</b>（众包量小）—— 众包运力在这些城市"开着但不好用"，
+ 是真实缺口而非统计噪声。北京即便剔掉聚合渠道，众包 87.2% 仍比上海 98.2% 低 11pp。</div>
+ <h3 class="s">三方运力：挑单严重（完单率全为 100%，准时率极低）</h3>
+ <table><thead><tr><th>平台</th><th class="num">7日单量</th><th class="num">准时率</th><th class="num">分布</th></tr></thead>
+ <tbody><tr><td>顺丰同城</td><td class="num">122</td><td class="num">34.4%</td><td class="num"><div class="mini"><div class="minifill m-bad" style="width:34.4%"></div></div></td></tr><tr><td>快服务</td><td class="num">617</td><td class="num">40.2%</td><td class="num"><div class="mini"><div class="minifill m-bad" style="width:40.2%"></div></div></td></tr><tr><td>京东特惠</td><td class="num">1,132</td><td class="num">50.5%</td><td class="num"><div class="mini"><div class="minifill m-warn" style="width:50.5%"></div></div></td></tr><tr><td>UU跑腿</td><td class="num">1,556</td><td class="num">53.0%</td><td class="num"><div class="mini"><div class="minifill m-warn" style="width:53.0%"></div></div></td></tr><tr><td>京东秒送</td><td class="num">1,476</td><td class="num">54.4%</td><td class="num"><div class="mini"><div class="minifill m-warn" style="width:54.4%"></div></div></td></tr><tr><td>京东急送</td><td class="num">804</td><td class="num">57.6%</td><td class="num"><div class="mini"><div class="minifill m-warn" style="width:57.6%"></div></div></td></tr><tr><td>蜂鸟跑腿</td><td class="num">3,251</td><td class="num">66.6%</td><td class="num"><div class="mini"><div class="minifill m-warn" style="width:66.6%"></div></div></td></tr><tr><td>腾讯出行-拼送</td><td class="num">324</td><td class="num">68.5%</td><td class="num"><div class="mini"><div class="minifill m-warn" style="width:68.5%"></div></div></td></tr><tr><td>闪送</td><td class="num">3,566</td><td class="num">71.0%</td><td class="num"><div class="mini"><div class="minifill m-warn" style="width:71.0%"></div></div></td></tr><tr><td>真省钱</td><td class="num">237</td><td class="num">74.7%</td><td class="num"><div class="mini"><div class="minifill m-warn" style="width:74.7%"></div></div></td></tr></tbody></table>
+ <div class="note">三方仅占 <b>1.95%</b> 单量，但自营同达快送准时率 96.8%（11-05 口径）对比悬殊。
+ 完单率 100% 说明它们<b>只接好送的单</b>，把难单退回自营。考核口径应从完单率改为准时率。</div>
+</section>
+
+<section>
+ <h2 class="t"><span class="ic">7</span>7 天趋势与周末效应</h2>
+ <table><thead><tr><th>日期</th><th>星期</th><th class="num">单量</th><th class="num">完单率</th>
+ <th class="num">准时率</th><th class="num">全链路</th><th class="num">接单响应</th>
+ <th class="num">付费取消</th><th class="num">系统取消</th><th class="num">众包占比</th></tr></thead>
+ <tbody><tr><td>2026-10-30</td><td>周五</td><td class="num">96,199</td><td class="num">94.1%</td><td class="num">95.4%</td><td class="num">18.7</td><td class="num">3.1</td><td class="num">4.9%</td><td class="num">1.0%</td><td class="num">21.5%</td></tr><tr><td>2026-10-31</td><td>周六</td><td class="num">122,775</td><td class="num">91.2%</td><td class="num">94.6%</td><td class="num">19.8</td><td class="num">3.4</td><td class="num">7.8%</td><td class="num">1.1%</td><td class="num">24.5%</td></tr><tr><td>2026-11-01</td><td>周日</td><td class="num">119,532</td><td class="num">91.2%</td><td class="num">93.9%</td><td class="num">20.1</td><td class="num">3.8</td><td class="num">6.9%</td><td class="num">1.8%</td><td class="num">24.8%</td></tr><tr><td>2026-11-02</td><td>周一</td><td class="num">74,567</td><td class="num">93.3%</td><td class="num">97.1%</td><td class="num">17.6</td><td class="num">2.4</td><td class="num">5.4%</td><td class="num">1.3%</td><td class="num">21.4%</td></tr><tr><td>2026-11-03</td><td>周二</td><td class="num">77,044</td><td class="num">93.0%</td><td class="num">96.8%</td><td class="num">17.9</td><td class="num">2.7</td><td class="num">5.5%</td><td class="num">1.6%</td><td class="num">21.6%</td></tr><tr><td>2026-11-04</td><td>周三</td><td class="num">97,145</td><td class="num">93.7%</td><td class="num">94.2%</td><td class="num">19.5</td><td class="num">3.8</td><td class="num">5.0%</td><td class="num">1.2%</td><td class="num">22.7%</td></tr><tr><td>2026-11-05</td><td>周四</td><td class="num">87,482</td><td class="num">94.2%</td><td class="num">96.1%</td><td class="num">18.4</td><td class="num">2.9</td><td class="num">4.4%</td><td class="num">1.3%</td><td class="num">21.2%</td></tr></tbody></table>
+ <div class="note"><b>周末运力弹性不足：</b>10-31（周六）/ 11-01（周日）单量冲至 12.3/12.0 万，
+ 付费取消率升至 <b>7.8% / 6.9%</b>（工作日 4.4–5.5%），准时率跌至 94.6% / 93.9%，接单响应恶化至 3.4 / 3.8min。
+ 11-05 付费取消率 4.45% 为 7 日最低。</div>
+</section>
+
+<section>
+ <h2 class="t"><span class="ic">8</span>行动建议（按 ROI 排序）</h2>
+ <table class="act"><thead><tr><th>优先级</th><th>动作</th><th class="num">量化收益</th></tr></thead><tbody>
+ <tr><td><span class="pri p0">P0</span></td><td>聚合渠道取消治理：对猎豹/京东海博/青云聚信/麦芽田设「发单后 60s 内取消收费」或预付占位金；并单独建履约口径，不并入众包大盘</td><td class="num">该簇缺口 5,286 单/天。完单率 15.4%→70% 可挽回 3,412 单/天，大盘完单率 +3.54pp</td></tr><tr><td><span class="pri p0">P0</span></td><td>重庆 / 昭通 / 株洲 / 常德 专项治理（北京已含在渠道治理内）</td><td class="num">覆盖异常簇 46% 单量</td></tr><tr><td><span class="pri p1">P1</span></td><td>凌晨 00–04 运力保障：夜宵与夜间商超单独排班，或降级接单策略</td><td class="num">该时段完单率 80–83% → 90%</td></tr><tr><td><span class="pri p1">P1</span></td><td>时效承诺按距离分档：&gt;3km 放宽承诺，&gt;5km 单独定价</td><td class="num">5–10km 段准时率 84.4% → 95%</td></tr><tr><td><span class="pri p2">P2</span></td><td>三方运力考核口径从完单率改为准时率；连续 &lt;80% 者降量或替换</td><td class="num">兜住 1.95% 单量的体验底线</td></tr><tr><td><span class="pri p2">P2</span></td><td>广州 / 郑州 / 廊坊 众包可用性修复</td><td class="num">三城众包 54.0% / 72.6% / 0% → 90%+</td></tr><tr><td><span class="pri p3">P3</span></td><td>主数据治理：业务标识缺失或未知、分派时间缺失 27.0%、骑手编号缺失 2.0%、时序倒挂 36 单</td><td class="num">分析可信度基建</td></tr>
+ </tbody></table>
+</section>
+
+<section>
+ <h2 class="t"><span class="ic">9</span>数据质量与口径说明</h2>
+ <table><thead><tr><th>问题项</th><th class="num">规模</th><th>影响</th></tr></thead><tbody>
+ <tr><td>业务标识为「-」或「未知」</td><td class="num red">43,723 单 / 7天</td><td>与聚合渠道高度重叠，是本期失真主因</td></tr>
+ <tr><td>分派时间字段缺失</td><td class="num amber">27.0%（11-05 已完单内）</td><td>无法精确还原派单调度链路</td></tr>
+ <tr><td>骑手编号缺失</td><td class="num amber">2.0%</td><td>骑手负载统计存在漏计</td></tr>
+ <tr><td>脏预计送达时间（偏离 &gt;24h）</td><td class="num">1 单（11-05）</td><td>已剔除；曾把平均超时拉高至 9,354min</td></tr>
+ <tr><td>时序倒挂</td><td class="num">36 单</td><td>到店早于接单 33、取货早于到店 3</td></tr>
+ </tbody></table>
+ <div class="note"><b>口径提醒：</b>准时率样本 = 已完单且预计送达/完成时间有效；环节耗时对异常值做了 -30~720min 截断。
+ 11-05 单日与 7 日均值在完单率、准时率、全链路、接单响应、众包占比五项上均一致，单日可作为代表样本。</div>
+</section>
+
+<p class="foot">
+ 数据源：tdks CLI v1.6.7（prod）order export · taskId 202611060001 / 202611060002<br>
+ 分析脚本：fulfil.py · trend7.py · verify.py · attribution.py（含城市真口径与异常簇画像复核）<br>
+ 所有数值均由脚本对全量导出明细直接计算，未使用估算或外推。
+</p>
+</div></body></html>

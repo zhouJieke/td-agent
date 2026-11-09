@@ -77,6 +77,11 @@ async function start(skills?: SkillHubHost['skills'], rejection?: 401 | 403): Pr
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'dsh-skill-hub-test-'))
   fixture.home = home
+  vi.stubEnv('HOME', home)
+  vi.stubEnv('USERPROFILE', home)
+  vi.stubEnv('DSH_HOME', home)
+  vi.stubEnv('DSH_AGENTS_HOME', join(home, 'agents'))
+  vi.stubEnv('DSH_BUNDLED_SKILL_DIR', join(home, 'bundled'))
 })
 
 afterEach(async () => {
@@ -94,6 +99,7 @@ afterEach(async () => {
     await context.fiber.dispose()
     context = undefined
   }
+  vi.unstubAllEnvs()
   if (dirname(home) !== resolve(tmpdir()) || !basename(home).startsWith('dsh-skill-hub-test-'))
     throw new Error(`Unexpected test directory: ${home}`)
   rmSync(home, { recursive: true, force: true })
@@ -257,6 +263,14 @@ describe('本地技能加载确认', () => {
   it.each([401, 403] as const)('状态接口保留连接服务返回的 %s 鉴权拒绝', async (status) => {
     const base = await start(undefined, status)
     const response = await fetch(`${base}${path}?name=demo`)
+
+    expect(response.status).toBe(status)
+    expect(await response.json()).toEqual({ error: status === 401 ? 'unauthorized' : 'forbidden' })
+  })
+
+  it.each([401, 403] as const)('已安装列表接口保留连接服务返回的 %s 鉴权拒绝', async (status) => {
+    const base = await start(undefined, status)
+    const response = await fetch(`${base}/api/tauri/skill-hub/installed-skills`)
 
     expect(response.status).toBe(status)
     expect(await response.json()).toEqual({ error: status === 401 ? 'unauthorized' : 'forbidden' })

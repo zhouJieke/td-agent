@@ -214,6 +214,39 @@ describe('plugin deployment documentation pruning', () => {
     expect(isNonRuntimeFile(join('dsh-tauri-extension', 'skills', 'find-skills', 'LICENSE'))).toBe(false)
   })
 
+  it('keeps the skill hub skill resources and their attribution', () => {
+    const source = resolve('packages', 'dsh-tauri-skill-hub')
+    const manifest = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8')) as { files: string[] }
+    expect(manifest.files).toEqual(expect.arrayContaining(['NOTICE', 'skills']))
+    expect(isNonRuntimeFile(join('dsh-tauri-skill-hub', 'NOTICE'))).toBe(false)
+    expect(isNonRuntimeFile(join('dsh-tauri-skill-hub', 'skills', 'skill-creator', 'SKILL.md'))).toBe(false)
+    expect(isNonRuntimeFile(join('dsh-tauri-skill-hub', 'skills', 'skill-creator', 'LICENSE.txt'))).toBe(false)
+    expect(isNonRuntimeFile(join('dsh-tauri-skill-hub', 'skills', 'find-skills', 'LICENSE'))).toBe(false)
+  })
+
+  it('retains skill hub assets and attribution in a pruned deployment', () => {
+    const source = resolve('packages', 'dsh-tauri-skill-hub')
+    const root = deploymentFixture()
+    const plugin = join(root, 'plugin')
+    const paths = [
+      'NOTICE',
+      join('skills', 'skill-creator', 'SKILL.md'),
+      join('skills', 'skill-creator', 'LICENSE.txt'),
+      join('skills', 'find-skills', 'SKILL.md'),
+      join('skills', 'find-skills', 'LICENSE'),
+    ]
+    for (const path of paths) {
+      const target = join(plugin, path)
+      mkdirSync(dirname(target), { recursive: true })
+      writeFileSync(target, readFileSync(join(source, path)))
+    }
+
+    pruneDeployment(root, ['plugin'])
+
+    for (const path of paths)
+      expect(readFileSync(join(plugin, path))).toEqual(readFileSync(join(source, path)))
+  })
+
   it('does not treat a lookalike segment as a skills directory', () => {
     expect(isNonRuntimeFile(join('pkg', 'skills-extra', 'GUIDE.md'))).toBe(true)
   })

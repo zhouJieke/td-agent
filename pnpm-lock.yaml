@@ -1251,16 +1251,44 @@ importers:
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(@vitest/coverage-v8@4.1.11)(jsdom@26.1.0)(vite@7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2)(tsx@4.23.12)(yaml@2.9.0))
 
   packages/dsh-tauri-skill-hub:
-    devDependencies:
+    dependencies:
+      dsh-h3:
+        specifier: 'catalog:'
+        version: 0.2.1(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-host-webserver@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5))(@genapi/shared@4.1.4)(typescript@5.8.3)
       dsh-tauri:
         specifier: workspace:*
         version: link:../dsh-tauri
+      h3:
+        specifier: 'catalog:'
+        version: 2.0.1
+      lodash-es:
+        specifier: catalog:utils
+        version: 4.18.1
+      ofetch:
+        specifier: catalog:utils
+        version: 1.5.1
+      unstorage:
+        specifier: catalog:utils
+        version: 1.17.5(idb-keyval@6.3.0)
+      yaml:
+        specifier: catalog:testing
+        version: 2.9.0
+    devDependencies:
+      '@types/lodash-es':
+        specifier: catalog:types
+        version: 4.17.12
+      dompurify:
+        specifier: catalog:ui
+        version: 3.4.14
       dsh-tauri-tsdown:
         specifier: workspace:*
         version: link:../dsh-tauri-tsdown
       dsh-tauri-ui:
         specifier: workspace:*
         version: link:../dsh-tauri-ui
+      marked:
+        specifier: catalog:ui
+        version: 18.0.11
       react:
         specifier: catalog:runtime
         version: 19.2.8

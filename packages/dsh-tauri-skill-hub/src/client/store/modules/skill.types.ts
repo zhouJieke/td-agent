@@ -41,6 +41,7 @@ export interface SkillHubState {
   employee: EmployeeInfo | null
   /** 登录态探测是否已完成；未完成时不渲染未登录提示。 */
   authChecked: boolean
+  authRequestId: number
   /** 企业公用技能（`/api/employee-skills/common`）。 */
   common: readonly SkillSummary[]
   /** 全量技能（`/api/employee-skills`），作为管理页的配置候选。 */
@@ -61,6 +62,11 @@ export interface SkillHubState {
   keyword: string
   loading: boolean
   downloading: readonly string[]
+  installedNames: readonly string[]
+  installedChecked: boolean
+  installedLoading: boolean
+  installedRequestId: number
+  installedError: string
   error: string
   feedback: SkillFeedback | null
   feedbackSeq: number
