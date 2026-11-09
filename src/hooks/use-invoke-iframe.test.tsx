@@ -97,6 +97,65 @@ describe('设置账号命令桥', () => {
     expect(bridge.invoke).not.toHaveBeenCalled()
   })
 
+  it('技能更新命令只转发名称和版本并回传实际版本', async () => {
+    bridge.invoke.mockResolvedValue('1.1.0')
+    const postMessage = mount()
+    bridge.receive!({
+      type: 'dsh://tauri:invoke',
+      cmd: 'desktop_update_employee_skill',
+      nonce: 'update',
+      args: { skillName: 'demo', expectedVersion: '1.1.0', installedVersion: '1.0.0', path: 'ignored' },
+    }, { origin: 'http://127.0.0.1:3081' })
+
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      { type: 'dsh://tauri:reply', nonce: 'update', ok: true, value: '1.1.0' },
+      'http://127.0.0.1:3081',
+    ))
+    expect(bridge.invoke).toHaveBeenCalledExactlyOnceWith('desktop_update_employee_skill', {
+      skillName: 'demo',
+      expectedVersion: '1.1.0',
+      installedVersion: '1.0.0',
+    })
+  })
+
+  it('确认覆盖旧技能时保留未知的已安装版本', async () => {
+    bridge.invoke.mockResolvedValue('1.1.0')
+    const postMessage = mount()
+    bridge.receive!({
+      type: 'dsh://tauri:invoke',
+      cmd: 'desktop_update_employee_skill',
+      nonce: 'update-legacy',
+      args: { skillName: 'demo', expectedVersion: '1.1.0', installedVersion: null },
+    }, { origin: 'http://127.0.0.1:3081' })
+
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      { type: 'dsh://tauri:reply', nonce: 'update-legacy', ok: true, value: '1.1.0' },
+      'http://127.0.0.1:3081',
+    ))
+    expect(bridge.invoke).toHaveBeenCalledExactlyOnceWith('desktop_update_employee_skill', {
+      skillName: 'demo',
+      expectedVersion: '1.1.0',
+      installedVersion: null,
+    })
+  })
+
+  it.each([
+    { skillName: 'demo', expectedVersion: 123, installedVersion: null },
+    { skillName: 'demo', expectedVersion: '1.1.0' },
+    { skillName: 'demo', expectedVersion: '1.1.0', installedVersion: false },
+  ])('技能更新命令拒绝无效参数 %j', async (args) => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const postMessage = mount()
+    bridge.receive!({ type: 'dsh://tauri:invoke', cmd: 'desktop_update_employee_skill', nonce: 'invalid-update', args }, { origin: 'http://127.0.0.1:3081' })
+
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith(
+      { type: 'dsh://tauri:reply', nonce: 'invalid-update', ok: false, error: 'SKILL_UPDATE_REQUEST_INVALID' },
+      'http://127.0.0.1:3081',
+    ))
+    expect(bridge.invoke).not.toHaveBeenCalled()
+    expect(log).toHaveBeenCalledOnce()
+  })
+
   it('访问令牌命令放行给帧内，供插件直连外部业务后端自附 Bearer', async () => {
     bridge.invoke.mockResolvedValue('access-token')
     const postMessage = mount()

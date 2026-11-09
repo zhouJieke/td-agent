@@ -96,7 +96,7 @@ describe('upstream H3 API generation', () => {
 
     expect(code).toContain('export function getInstalledSkills(options?: FetchOptions)')
     expect(code).toContain('"/api/tauri/skill-hub/installed-skills", { method: "get", ...options }')
-    expect(types).toContain('GetApiTauriSkillHubInstalledSkillsResponse = { names: string[] } | { error: string }')
+    expect(types).toContain('GetApiTauriSkillHubInstalledSkillsResponse = { names: string[]; versions: { [key: string]: string }; updatableNames: string[] } | { error: string }')
     expect(code).toContain('export function getSkills(options?: FetchOptions)')
     expect(code).toContain('"/api/tauri/skill-hub/skills", { method: "get", ...options }')
     expect(code).toContain('"/api/tauri/skill-hub/skills/refresh", { method: "post", ...options }')

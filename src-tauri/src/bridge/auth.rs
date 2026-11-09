@@ -94,10 +94,36 @@ pub async fn desktop_install_employee_skill<R: tauri::Runtime>(
     auth.access_token().await?;
     let home = crate::config::get_dsh_data_path(&app);
     crate::service::skill::ensure_available(&home, &skill_name)?;
-    let bytes = auth.download_skill(&skill_name).await?;
-    tokio::task::spawn_blocking(move || crate::service::skill::install(&home, &skill_name, &bytes))
-        .await
-        .map_err(|error| format!("SKILL_INSTALL_FAILED: {error}"))?
+    let download = auth.download_skill(&skill_name, None).await?;
+    tokio::task::spawn_blocking(move || {
+        crate::service::skill::install(
+            &home,
+            &skill_name,
+            &download.bytes,
+            download.version.as_deref(),
+        )
+    })
+    .await
+    .map_err(|error| format!("SKILL_INSTALL_FAILED: {error}"))?
+}
+
+#[tauri::command]
+pub async fn desktop_update_employee_skill<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    auth: tauri::State<'_, AuthService>,
+    skill_name: String,
+    expected_version: String,
+    installed_version: Option<String>,
+) -> Result<String, String> {
+    let home = crate::config::get_dsh_data_path(&app);
+    crate::service::skill::download_update(
+        &auth,
+        home,
+        skill_name,
+        expected_version,
+        installed_version,
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -118,6 +144,7 @@ mod tests {
             desktop_auth_request,
             desktop_auth_upload,
             desktop_install_employee_skill,
+            desktop_update_employee_skill,
             desktop_auth_employee
         ];
         let app = mock_builder()
@@ -136,6 +163,7 @@ mod tests {
             "desktop_auth_request",
             "desktop_auth_upload",
             "desktop_install_employee_skill",
+            "desktop_update_employee_skill",
             "desktop_auth_employee",
         ] {
             for (origin, allowed) in [
@@ -152,6 +180,8 @@ mod tests {
                     })
                 } else if command == "desktop_install_employee_skill" {
                     serde_json::json!({"skillName":"demo"})
+                } else if command == "desktop_update_employee_skill" {
+                    serde_json::json!({"skillName":"demo","expectedVersion":"1.1.0","installedVersion":"1.0.0"})
                 } else {
                     serde_json::json!({"method":"GET","path":"/api/private","body":null})
                 };

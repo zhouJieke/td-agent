@@ -6,6 +6,8 @@ import { resolveActiveTab } from './extension-panel.utils'
 import { McpTab } from './mcp-tab'
 import { SkillsTab } from './skills-tab'
 
+const SHOW_SKILLS_TAB = false
+
 export interface ExtensionPanelProps {
   createSkill: () => Promise<void>
   plugins?: ReactElement
@@ -22,10 +24,10 @@ export function ExtensionPanel({ createSkill, plugins }: ExtensionPanelProps): R
   const tabsId = useId()
   const rows: ExtensionTab[] = [
     ...(plugins === undefined ? [] : [{ id: 'plugins', label: t('pluginsTab'), render: () => plugins }]),
-    { id: 'skills', label: t('skillsTab'), render: () => <SkillsTab t={t} createSkill={createSkill} /> },
+    ...(SHOW_SKILLS_TAB ? [{ id: 'skills', label: t('skillsTab'), render: () => <SkillsTab t={t} createSkill={createSkill} /> }] : []),
     { id: 'mcp', label: t('mcpTab'), render: () => <McpTab t={t} /> },
   ]
-  const initialId = rows[0]?.id ?? 'skills'
+  const initialId = rows[0]?.id ?? 'mcp'
   const [requestedId, setRequestedId] = useState(initialId)
   const [visited, setVisited] = useState<ReadonlySet<string>>(() => new Set([initialId]))
   const activeId = resolveActiveTab(rows, requestedId)

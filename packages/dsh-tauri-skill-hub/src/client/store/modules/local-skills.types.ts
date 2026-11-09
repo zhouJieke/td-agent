@@ -21,7 +21,6 @@ export interface LocalSkillsState {
   preview: boolean
   confirmName: string | null
   query: string
-  sourceFilter: string
   importOpen: boolean
   repositoryUrl: string
 }

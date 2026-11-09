@@ -46,6 +46,8 @@ describe('extension panel official plugins composition', () => {
       const pluginsTab = tabs.getByRole('tab', { name: '插件', exact: true })
       await expect.poll(() => tabs.getByRole('tab').first().textContent(), { message: '官方插件必须是首个 Tab' }).toBe('插件')
       await expect.poll(() => pluginsTab.getAttribute('aria-selected'), { message: '打开入口必须选中官方插件 Tab' }).toBe('true')
+      expect(await tabs.getByRole('tab').allTextContents(), '扩展面板只显示插件与 MCP').toEqual(['插件', 'MCP'])
+      expect(await tabs.getByRole('tab', { name: '技能', exact: true }).count(), '技能 Tab 必须隐藏').toBe(0)
 
       const officialPage = app.frame.locator(OFFICIAL_PAGE)
       expect(await officialPage.count(), '只能挂载一个真实官方插件页面').toBe(1)
@@ -93,24 +95,23 @@ describe('extension panel official plugins composition', () => {
       await detailBack.click()
       await header.waitFor({ state: 'visible' })
 
-      await tabs.getByRole('tab', { name: '技能', exact: true }).click()
-      const skillsPanel = app.frame.getByRole('tabpanel', { name: '技能', exact: true, includeHidden: true })
-      await expect.poll(() => skillsPanel.isVisible(), { message: '技能 Tab 必须正常挂载' }).toBe(true)
-      expect(await skillsPanel.locator(':scope > div > div:first-child > h3').evaluate((el) => {
+      await tabs.getByRole('tab', { name: 'MCP', exact: true }).click()
+      const mcpPanel = app.frame.getByRole('tabpanel', { name: 'MCP', exact: true, includeHidden: true })
+      await expect.poll(() => mcpPanel.isVisible(), { message: 'MCP Tab 必须正常挂载' }).toBe(true)
+      expect(await mcpPanel.locator(':scope > div > div:first-child > h3').evaluate((el) => {
         const style = getComputedStyle(el)
         return { fontSize: style.fontSize, lineHeight: style.lineHeight, fontWeight: style.fontWeight }
-      }), '插件标题尺寸必须与技能页一致').toEqual(titleStyle)
-      expect(await skillsPanel.locator(':scope > div > p').first().evaluate((el) => {
+      }), '插件标题尺寸必须与 MCP 页一致').toEqual(titleStyle)
+      expect(await mcpPanel.locator(':scope > div > p').first().evaluate((el) => {
         const style = getComputedStyle(el)
         return { fontSize: style.fontSize, lineHeight: style.lineHeight, color: style.color }
-      }), '插件描述尺寸和颜色必须与技能页一致').toEqual(introStyle)
+      }), '插件描述尺寸和颜色必须与 MCP 页一致').toEqual(introStyle)
       await expect.poll(() => app.frame.locator('[data-plugin-panel]').count(), { message: '离开插件 Tab 必须卸载官方页面，不能仅 hidden' }).toBe(0)
 
-      await tabs.getByRole('tab', { name: 'MCP', exact: true }).click()
-      expect(await skillsPanel.count(), '其他已访问 Tab 仍须保留挂载').toBe(1)
-      expect(await skillsPanel.isVisible(), '非活动技能页必须隐藏').toBe(false)
       await pluginsTab.click()
       await expect.poll(() => officialPage.isVisible(), { message: '切回插件 Tab 必须恢复官方页面' }).toBe(true)
+      expect(await mcpPanel.count(), '其他已访问 Tab 仍须保留挂载').toBe(1)
+      expect(await mcpPanel.isVisible(), '非活动 MCP 页必须隐藏').toBe(false)
       expect(await originalRow.isVisible(), '原侧栏入口不得因重挂载复现').toBe(false)
       expectNoSyntheticFallbacks(app)
       expect(app.errors, '复用官方页面和切换 Tab 不得产生浏览器错误').toEqual([])

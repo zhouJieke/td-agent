@@ -2,6 +2,7 @@ import type { HostContext } from 'dsh-tauri'
 import type {
   HostSkill,
   HostSkillDefinition,
+  InstalledSkills,
   PluginState,
   SkillInput,
   SkillRepositoryMetadata,
@@ -10,11 +11,12 @@ import type {
   SkillsService,
 } from './skills.types'
 import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { readdir, stat } from 'node:fs/promises'
+import { lstat, readdir, readFile, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { getServerContext } from 'dsh-h3/utils'
 import { defineService } from 'dsh-tauri'
 import { orderBy } from 'lodash-es'
+import { parse as parseVersion } from 'semver'
 import { SKILL_FILE_NAME, SKILL_NAME_RE, SKILLS_DATA_DIR } from '../config/constants'
 import { server } from '../server'
 import { storage } from '../storage'
@@ -23,6 +25,8 @@ import { rmtree } from './rmtree'
 import { isOwnedMaterialDir, isSkillSourceEntry, rewriteSkillContent, rewriteSkillPolicy, serializeSkill } from './skills.utils'
 
 const STATE_FILE_NAME = 'state.json'
+const SKILL_VERSION_FILE_NAME = '.dsh-tauri-skill-version.json'
+const MAX_VERSION_FILE_BYTES = 4096
 
 export const skills = defineService({
   async get(name: string): Promise<HostSkillDefinition | null> {
@@ -69,34 +73,47 @@ export const skills = defineService({
     return orderBy(rows, [row => row.repository === undefined], ['asc'])
   },
 
-  async listInstalled(): Promise<string[]> {
+  async listInstalled(): Promise<InstalledSkills> {
     let entries
     try {
       entries = await readdir(SKILLS_DATA_DIR, { withFileTypes: true })
     }
     catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'ENOENT')
-        return []
+        return { names: [], versions: {}, updatableNames: [] }
       throw error
     }
-    const names = await Promise.all(entries.map(async (entry) => {
+    const root = await lstat(SKILLS_DATA_DIR)
+    const rootSafe = root.isDirectory() && !root.isSymbolicLink()
+    const candidates = await Promise.all(entries.map(async (entry) => {
       const filename = entry.name.toLowerCase()
       if (filename.endsWith('.md')) {
         const name = filename.slice(0, -3)
         if (name.length <= 64 && SKILL_NAME_RE.test(name)
           && (entry.isFile() || entry.isSymbolicLink())
           && await isFile(join(SKILLS_DATA_DIR, `${name}.md`))) {
-          return name
+          return { name, flat: true, updatable: false }
         }
       }
       if (filename.length <= 64 && SKILL_NAME_RE.test(filename)
         && (entry.isDirectory() || entry.isSymbolicLink())
         && await isFile(join(SKILLS_DATA_DIR, filename, SKILL_FILE_NAME))) {
-        return filename
+        const updatable = rootSafe && entry.isDirectory() && await isRegularFile(join(SKILLS_DATA_DIR, filename, SKILL_FILE_NAME))
+        return { name: filename, flat: false, updatable }
       }
       return undefined
     }))
-    return [...new Set(names.filter((name): name is string => name !== undefined))].sort()
+    const found = candidates.filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== undefined)
+    const names = [...new Set(found.map(candidate => candidate.name))].sort()
+    const flatNames = new Set(found.filter(candidate => candidate.flat).map(candidate => candidate.name))
+    const updatableNames = [...new Set(found.filter(candidate => candidate.updatable && !flatNames.has(candidate.name)).map(candidate => candidate.name))].sort()
+    const versions: Record<string, string> = {}
+    for (const name of updatableNames) {
+      const version = await installedVersion(name)
+      if (version !== undefined)
+        versions[name] = version
+    }
+    return { names, versions, updatableNames }
   },
 
   async listSources(): Promise<SkillSourceEntry[]> {
@@ -145,6 +162,47 @@ async function isFile(path: string): Promise<boolean> {
       return false
     throw error
   }
+}
+
+async function isRegularFile(path: string): Promise<boolean> {
+  try {
+    return (await lstat(path)).isFile()
+  }
+  catch (error) {
+    if (error instanceof Error && 'code' in error && (error.code === 'ENOENT' || error.code === 'ENOTDIR'))
+      return false
+    throw error
+  }
+}
+
+async function installedVersion(name: string): Promise<string | undefined> {
+  const file = join(SKILLS_DATA_DIR, name, SKILL_VERSION_FILE_NAME)
+  let info
+  try {
+    info = await lstat(file)
+  }
+  catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT')
+      return undefined
+    throw error
+  }
+  if (!info.isFile() || info.size > MAX_VERSION_FILE_BYTES)
+    throw new Error(`SKILL_VERSION_METADATA_INVALID: ${name}`)
+  let value: unknown
+  try {
+    value = JSON.parse(await readFile(file, 'utf8'))
+  }
+  catch (error) {
+    if (error instanceof SyntaxError)
+      throw new Error(`SKILL_VERSION_METADATA_INVALID: ${name}`)
+    throw error
+  }
+  if (typeof value !== 'object' || value === null || !('source' in value) || value.source !== 'nacos'
+    || !('version' in value) || typeof value.version !== 'string' || !/^\d/.test(value.version)
+    || parseVersion(value.version) === null) {
+    throw new Error(`SKILL_VERSION_METADATA_INVALID: ${name}`)
+  }
+  return value.version
 }
 
 function registry(): SkillsService {

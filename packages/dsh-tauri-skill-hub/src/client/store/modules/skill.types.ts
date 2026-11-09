@@ -20,7 +20,7 @@ export interface SkillUploadedFeedback {
 
 export interface SkillDownloadedFeedback {
   seq: number
-  kind: 'downloaded'
+  kind: 'downloaded' | 'updated'
   skillName: string
   status: SkillInstallStatus
   detail?: string
@@ -63,6 +63,8 @@ export interface SkillHubState {
   loading: boolean
   downloading: readonly string[]
   installedNames: readonly string[]
+  installedVersions: Readonly<Record<string, string>>
+  updatableNames: readonly string[]
   installedChecked: boolean
   installedLoading: boolean
   installedRequestId: number

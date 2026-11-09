@@ -1,10 +1,9 @@
-import type { ChangeEvent, ReactElement } from 'react'
+import type { ReactElement } from 'react'
 import type { Translate } from '../locales/index.types'
 import type { SkillDetail, UserSkillDetails } from '../types'
-import { Action, Button, Card, ChevronDown, GraduationCap, Icon, Tag, Text, TriangleExclamation } from 'dsh-tauri-ui/client'
+import { Action, Card, ChevronDown, GraduationCap, Icon, Tag, Text, TriangleExclamation } from 'dsh-tauri-ui/client'
 import { isEmpty } from 'dsh-tauri/client'
-import { useRef, useState } from 'react'
-import { uploadMySkill } from '../service/skill'
+import { useState } from 'react'
 import { skillTitle } from '../store/modules/skill.utils'
 import { SkillDownload } from './skill-download'
 
@@ -77,7 +76,7 @@ function DetailCard({ t, detail }: { t: Translate, detail: SkillDetail }): React
             title={expanded ? t('skill.collapse') : t('skill.expand')}
             onClick={() => setExpanded(value => !value)}
           />
-          <SkillDownload t={t} name={summary.name} />
+          <SkillDownload t={t} name={summary.name} latestVersion={summary.labels.latest} />
         </Card.End>
       </Card.Header>
       {expanded ? <VersionRows t={t} detail={detail} /> : null}
@@ -86,31 +85,9 @@ function DetailCard({ t, detail }: { t: Translate, detail: SkillDetail }): React
 }
 
 export function MineView({ t, mine, hint, emptyText }: MineViewProps): ReactElement {
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [pending, setPending] = useState(false)
-
-  async function pick(event: ChangeEvent<HTMLInputElement>): Promise<void> {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (file === undefined)
-      return
-    setPending(true)
-    try {
-      await uploadMySkill(file)
-    }
-    finally {
-      setPending(false)
-    }
-  }
-
   return (
     <div className="flex flex-col gap-[12px]">
-      <div className="flex flex-wrap items-center justify-between gap-[8px]">
-        <p className="m-0 text-secondary text-[13px] leading-[20px]">{hint}</p>
-        <Button type="button" variant="add" disabled={pending} onClick={() => fileRef.current?.click()}>
-          {pending ? t('mine.uploading') : t('mine.upload')}
-        </Button>
-      </div>
+      <p className="m-0 text-secondary text-[13px] leading-[20px]">{hint}</p>
       {mine === null || (mine.skills.length === 0 && mine.failed.length === 0)
         ? <Text tone="tertiary" size="sm" className="py-[32px] text-center">{emptyText}</Text>
         : mine.skills.length === 0
@@ -141,13 +118,6 @@ export function MineView({ t, mine, hint, emptyText }: MineViewProps): ReactElem
               ))}
             </div>
           )}
-      <input
-        ref={fileRef}
-        type="file"
-        hidden
-        accept=".zip,application/zip,application/x-zip-compressed"
-        onChange={(event) => { void pick(event) }}
-      />
     </div>
   )
 }

@@ -63,7 +63,7 @@ Plugins propios distribuidos con los recursos del escritorio:
 - [DSH Tauri UI](https://github.com/dsh-tauri/deepseek-harness-desktop/tree/main/packages/dsh-tauri-ui) — Interfaz de ajustes del escritorio, componentes nativos del núcleo, temas y paletas
 - [DSH Tauri Mobile UI](https://github.com/dsh-tauri/deepseek-harness-desktop/tree/main/packages/dsh-tauri-mobile-ui) — Diseños táctiles y preferencias móviles
 - [DSH Tauri Worktree](https://github.com/dsh-tauri/deepseek-harness-desktop/tree/main/packages/dsh-tauri-worktree) — Worktrees Git por sesión y checkout
-- [DSH Tauri Extension](https://github.com/dsh-tauri/deepseek-harness-desktop/tree/main/packages/dsh-tauri-extension) — Gestor oficial de plugins, mercado de plugins, Skills y MCP
+- [DSH Tauri Extension](https://github.com/dsh-tauri/deepseek-harness-desktop/tree/main/packages/dsh-tauri-extension) — Gestor oficial de plugins, mercado de plugins y MCP
 - [DSH Tauri Scheduler](https://github.com/dsh-tauri/deepseek-harness-desktop/tree/main/packages/dsh-tauri-scheduler) — Tareas programadas e historial
 - [DSH Tauri Archive](https://github.com/dsh-tauri/deepseek-harness-desktop/tree/main/packages/dsh-tauri-archive) — Archivo y restauración de chats
 - [DSH Tauri Rightclick Menu](https://github.com/dsh-tauri/deepseek-harness-desktop/tree/main/packages/dsh-tauri-rightclick) — Menús contextuales de sesiones, workspaces y texto
@@ -110,9 +110,11 @@ brew install dsh-tauri/desktop/deepseek-harness
 
 Si el centro de habilidades está habilitado, iniciá sesión con tu cuenta empresarial y descargá habilidades desde **Habilidades empresariales** o **Mis habilidades**. Cuando el núcleo confirme la carga, escribí `/nombre-de-habilidad` en una conversación, por ejemplo `/tdks-frontend-design`.
 
-Después de iniciar sesión, **Habilidades locales** muestra las habilidades descubiertas por el núcleo, incluidas las instaladas desde el centro. Podés buscar, filtrar, actualizar, abrir la carpeta de una habilidad y, según los permisos, ver, editar, eliminar, activar o desactivar habilidades.
+Después de iniciar sesión, **Habilidades locales** muestra las habilidades descubiertas por el núcleo, incluidas las instaladas desde el centro. Podés buscar, actualizar, subir manualmente archivos ZIP de habilidades, abrir la carpeta de una habilidad y, según los permisos, ver, editar, eliminar, activar o desactivar habilidades. **Nueva habilidad** abre una conversación nueva con `/skill-creator` escrito; agregá tus requisitos y enviá el mensaje. Las habilidades creadas no se suben automáticamente.
 
-Las habilidades con el mismo nombre en el directorio de usuario aparecen como descargadas en ambas listas y no se pueden volver a descargar. Al eliminar una habilidad local se comprueba de nuevo su estado. Las descargas no sobrescriben habilidades locales con el mismo nombre. La carga puede demorar; si no se completa, actualizá la lista local o reiniciá. La lista puede no incluir habilidades específicas del workspace; la conversación activa determina cuál se invoca si hay nombres repetidos.
+Las habilidades con el mismo nombre en el directorio de usuario aparecen como descargadas en ambas listas y no se pueden volver a descargar. Al eliminar una habilidad local se comprueba de nuevo su estado. Las descargas no sobrescriben habilidades locales con el mismo nombre. Si hay una versión remota más reciente, **Actualizar** reemplaza toda la carpeta local; las instalaciones anteriores sin versión registrada requieren confirmación. La actualización solicita la versión de la lista y se detiene si la versión más reciente cambia o no coincide con la recibida. La carga puede demorar; si no se completa, actualizá la lista local o reiniciá. La lista puede no incluir habilidades específicas del workspace; la conversación activa determina cuál se invoca si hay nombres repetidos.
+
+Las actualizaciones requieren que el endpoint de descarga admita `expectedVersion` y devuelva la versión real del ZIP. La cuenta `nacos.skill.admin` del backend necesita permiso para leer los metadatos de gobernanza; la caché de descargas normales puede devolver temporalmente una versión anterior.
 
 ### Proxy del escritorio
 

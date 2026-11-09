@@ -62,7 +62,7 @@ First-party plugins distributed with desktop resources:
 - [DSH Tauri UI](https://dshtauri.mintlify.site/en/built-in-plugins/dsh-tauri-ui) — Desktop settings UI, native core components, themes, and palettes
 - [DSH Tauri Mobile UI](https://github.com/dsh-tauri/deepseek-harness-desktop/tree/main/packages/dsh-tauri-mobile-ui) — Touch layouts and mobile preferences
 - [DSH Tauri Worktree](https://dshtauri.mintlify.site/en/built-in-plugins/dsh-tauri-worktree) — Session-level Git worktrees and checkout
-- [DSH Tauri Extension](https://dshtauri.mintlify.site/en/built-in-plugins/dsh-tauri-extension) — Official plugin manager, plugin market, Skills, and MCP
+- [DSH Tauri Extension](https://dshtauri.mintlify.site/en/built-in-plugins/dsh-tauri-extension) — Official plugin manager, plugin market, and MCP
 - [DSH Tauri Scheduler](https://dshtauri.mintlify.site/en/built-in-plugins/dsh-tauri-scheduler) — Scheduled tasks and run history
 - [DSH Tauri Archive](https://dshtauri.mintlify.site/en/built-in-plugins/dsh-tauri-archive) — Chat archiving and restoration
 - [DSH Tauri Rightclick Menu](https://dshtauri.mintlify.site/en/built-in-plugins/dsh-tauri-rightclick) — Session, workspace, and text context menus
@@ -109,9 +109,11 @@ brew install dsh-tauri/desktop/deepseek-harness
 
 When Skill Hub is enabled, sign in with your enterprise account and download skills from **Enterprise skills** or **My skills**. Once the core confirms a skill is loaded, enter `/skill-name` in a conversation, for example `/tdks-frontend-design`.
 
-After signing in, **Local skills** shows skills discovered by the core, including those installed from Skill Hub. You can search, filter, refresh, open an individual skill's folder, and view, edit, delete, or toggle skills where permitted.
+After signing in, **Local skills** shows skills discovered by the core, including those installed from Skill Hub. You can search, refresh, manually upload skill ZIPs, open an individual skill's folder, and view, edit, delete, or toggle skills where permitted. **New skill** opens a new conversation with `/skill-creator` prefilled; add your requirements and send it. Created skills are not uploaded automatically.
 
-Skills already present under the user skills directory are marked **Downloaded** in both lists and cannot be downloaded again. The status is checked again after a local skill is deleted. Downloads do not overwrite local skills with the same name. Loading may take a moment; if it does not complete, refresh the local skills list or restart. Workspace-specific skills may not appear in the list, and the active conversation determines which same-named skill is invoked.
+Skills already present under the user skills directory are marked **Downloaded** in both lists and cannot be downloaded again. The status is checked again after a local skill is deleted. Downloads do not overwrite local skills with the same name. When a newer remote version is available, **Update** replaces the entire local skill directory; older installs with an unknown version require confirmation. Updates request the version shown in the list and stop if the latest version changes or the returned version differs. Loading may take a moment; if it does not complete, refresh the local skills list or restart. Workspace-specific skills may not appear in the list, and the active conversation determines which same-named skill is invoked.
+
+Updates require the download endpoint to support `expectedVersion` and return the ZIP's actual version. The backend `nacos.skill.admin` account needs permission to read skill governance metadata; cached ordinary downloads may temporarily return an older version.
 
 ### Desktop proxy
 

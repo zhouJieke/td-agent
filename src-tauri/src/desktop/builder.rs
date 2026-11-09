@@ -1530,6 +1530,7 @@ pub fn handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
         crate::bridge::desktop_auth_request,
         crate::bridge::desktop_auth_upload,
         crate::bridge::desktop_install_employee_skill,
+        crate::bridge::desktop_update_employee_skill,
         crate::bridge::install_dependencies,
         crate::bridge::check_dsh_update,
         crate::bridge::launch_harness,

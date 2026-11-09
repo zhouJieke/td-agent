@@ -61,7 +61,7 @@
 - [DSH Tauri UI](https://dshtauri.mintlify.site/zh-CN/built-in-plugins/dsh-tauri-ui) — 桌面设置界面、原生核心组件、主题与配色
 - [DSH Tauri Mobile UI](https://dshtauri.mintlify.site/zh-CN/built-in-plugins/dsh-tauri-mobile-ui) — 触屏布局与移动端偏好设置
 - [DSH Tauri Worktree](https://dshtauri.mintlify.site/zh-CN/built-in-plugins/dsh-tauri-worktree) — 会话级 Git 工作树与检出
-- [DSH Tauri Extension](https://dshtauri.mintlify.site/zh-CN/built-in-plugins/dsh-tauri-extension) — 官方插件管理、插件市场、Skills 与 MCP
+- [DSH Tauri Extension](https://dshtauri.mintlify.site/zh-CN/built-in-plugins/dsh-tauri-extension) — 官方插件管理、插件市场与 MCP
 - [DSH Tauri Scheduler](https://dshtauri.mintlify.site/zh-CN/built-in-plugins/dsh-tauri-scheduler) — 定时任务与执行记录
 - [DSH Tauri Archive](https://dshtauri.mintlify.site/zh-CN/built-in-plugins/dsh-tauri-archive) — 聊天归档与恢复
 - [DSH Tauri Rightclick Menu](https://dshtauri.mintlify.site/zh-CN/built-in-plugins/dsh-tauri-rightclick) — 会话、工作区与正文右键菜单
@@ -108,9 +108,11 @@ brew install dsh-tauri/desktop/deepseek-harness
 
 启用技能中心并登录企业账号后，可在“企业公用技能”或“我的技能”中下载技能。内核确认加载后，在会话中输入 `/技能名`，例如 `/tdks-frontend-design`。
 
-登录后可在“本地技能”中查看内核发现的技能，包括从技能中心安装的技能。这里支持搜索、筛选、刷新、打开单个技能目录，并按权限查看、编辑、删除或启停技能。
+登录后可在“本地技能”中查看内核发现的技能，包括从技能中心安装的技能。这里支持搜索、刷新、手动上传技能 ZIP、打开单个技能目录，并按权限查看、编辑、删除或启停技能。点击“新建技能”会打开新会话并预填 `/skill-creator`，补充创建需求后发送；创建的技能不会自动上传。
 
-用户技能目录中已有同名技能时，两个列表会显示“已下载”并禁用下载；删除本地技能后会重新检查状态。下载不会覆盖本地同名技能。加载可能需要短暂等待；若未加载，请刷新本地技能列表或重启。列表不一定包含工作区专属技能，同名技能的实际调用以当前会话为准。
+用户技能目录中已有同名技能时，两个列表会显示“已下载”并禁用下载；删除本地技能后会重新检查状态。下载不会覆盖本地同名技能。远端有更新版本时可点击“更新”，替换整个本地技能目录；历史安装版本未知时需先确认覆盖。更新会请求列表中的目标版本；若远端版本已变化或返回版本不一致，更新会中止。加载可能需要短暂等待；若未加载，请刷新本地技能列表或重启。列表不一定包含工作区专属技能，同名技能的实际调用以当前会话为准。
+
+更新依赖下载接口支持 `expectedVersion` 并返回 ZIP 的实际版本，后端 `nacos.skill.admin` 账号需要读取技能治理元数据；普通下载的缓存可能暂时返回旧版本。
 
 ### 桌面代理
 

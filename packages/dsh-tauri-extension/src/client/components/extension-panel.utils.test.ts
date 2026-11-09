@@ -9,8 +9,8 @@
 import { describe, expect, it } from 'vitest'
 import { resolveActiveTab } from './extension-panel.utils'
 
-const WITH_PLUGINS = [{ id: 'plugins' }, { id: 'skills' }, { id: 'mcp' }]
-const WITHOUT_PLUGINS = [{ id: 'skills' }, { id: 'mcp' }]
+const WITH_PLUGINS = [{ id: 'plugins' }, { id: 'mcp' }]
+const WITHOUT_PLUGINS = [{ id: 'mcp' }]
 
 describe('resolveActiveTab', () => {
   it('请求的标签页仍在场：原样保持，不跳回第一页', () => {
@@ -18,11 +18,11 @@ describe('resolveActiveTab', () => {
   })
 
   it('请求的标签页已消失：回落到首个现存标签页，而不是留一个不存在的活动页', () => {
-    expect(resolveActiveTab(WITHOUT_PLUGINS, 'plugins')).toBe('skills')
+    expect(resolveActiveTab([{ id: 'mcp' }, { id: 'other' }], 'plugins')).toBe('mcp')
   })
 
   it('只剩一个标签页时回落到它', () => {
-    expect(resolveActiveTab([{ id: 'skills' }], 'plugins')).toBe('skills')
+    expect(resolveActiveTab(WITHOUT_PLUGINS, 'plugins')).toBe('mcp')
   })
 
   it('没有任何标签页：返回请求值，不返回 undefined', () => {

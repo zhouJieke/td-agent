@@ -42,6 +42,7 @@ const ALLOWED_INVOKE_CMDS = new Set([
   // 上传文件走 Rust 侧 multipart 转发，保持与 desktop_auth_request 一致的后端基址与鉴权。
   'desktop_auth_upload',
   'desktop_install_employee_skill',
+  'desktop_update_employee_skill',
   // 取当前访问令牌：供帧内插件直连外部业务后端（如本地技能服务）时自附 Bearer。
   // 注意：该命令会把 token 交给帧内，放宽了「token 不进前端」的限制，仅按需开放。
   'desktop_auth_access_token',
@@ -96,6 +97,12 @@ export function useInvokeIframe(iframeRef: RefObject<HTMLIFrameElement | null>):
       request = typeof args?.skillName === 'string'
         ? auth.installEmployeeSkill(args.skillName)
         : Promise.reject(new Error('SKILL_NAME_INVALID'))
+    }
+    else if (cmd === 'desktop_update_employee_skill') {
+      request = typeof args?.skillName === 'string' && typeof args?.expectedVersion === 'string'
+        && (typeof args?.installedVersion === 'string' || args?.installedVersion === null)
+        ? auth.updateEmployeeSkill(args.skillName, args.expectedVersion, args.installedVersion)
+        : Promise.reject(new Error('SKILL_UPDATE_REQUEST_INVALID'))
     }
     else {
       request = invoke<unknown>(cmd, args)

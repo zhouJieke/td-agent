@@ -15,6 +15,12 @@ use tokio::sync::Mutex;
 
 const MAX_SKILL_DOWNLOAD_BYTES: usize = 32 * 1024 * 1024;
 
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct DownloadedSkill {
+    pub bytes: Vec<u8>,
+    pub version: Option<String>,
+}
+
 pub struct AuthService {
     pending: Mutex<HashMap<String, PendingLogin>>,
     tokens: Mutex<Option<TokenSession>>,
@@ -684,9 +690,26 @@ impl AuthService {
         })
     }
 
-    pub async fn download_skill(&self, name: &str) -> Result<Vec<u8>, String> {
+    pub(crate) async fn download_skill(
+        &self,
+        name: &str,
+        expected_version: Option<&str>,
+    ) -> Result<DownloadedSkill, String> {
         crate::service::skill::validate_name(name)?;
-        let path = format!("/api/employee-skills/download?skillName={name}");
+        let mut url = self
+            .endpoint()?
+            .join("/api/employee-skills/download")
+            .map_err(|_| "DESKTOP_AUTH_REQUEST_INVALID")?;
+        {
+            let mut query = url.query_pairs_mut();
+            query.append_pair("skillName", name);
+            if let Some(version) = expected_version {
+                crate::service::skill::validate_version(version)?;
+                query.append_pair("expectedVersion", version);
+            }
+        }
+        let query = url.query().ok_or("DESKTOP_AUTH_REQUEST_INVALID")?;
+        let path = format!("{}?{query}", url.path());
         let mut response = self
             .send_authorized(Method::GET, &path, &Value::Null)
             .await?;
@@ -713,11 +736,29 @@ impl AuthService {
             } else {
                 "request failed".into()
             };
+            if status == StatusCode::CONFLICT && expected_version.is_some() {
+                return Err(format!("SKILL_REMOTE_VERSION_CHANGED: {detail}"));
+            }
             return Err(format!("SKILL_DOWNLOAD_HTTP_{}: {detail}", status.as_u16()));
         }
         if content_type != "application/zip" {
             return Err("SKILL_DOWNLOAD_RESPONSE_INVALID: expected application/zip".into());
         }
+        let mut versions = response.headers().get_all("x-skill-version").iter();
+        let version = match versions.next() {
+            Some(value) => {
+                if versions.next().is_some() {
+                    return Err("SKILL_VERSION_UNAVAILABLE: multiple version headers".into());
+                }
+                let version = value
+                    .to_str()
+                    .map_err(|_| "SKILL_VERSION_UNAVAILABLE: invalid version header")?;
+                crate::service::skill::validate_version(version)
+                    .map_err(|_| "SKILL_VERSION_UNAVAILABLE: invalid version header")?;
+                Some(version.to_string())
+            }
+            None => None,
+        };
         if response
             .content_length()
             .is_some_and(|length| length > MAX_SKILL_DOWNLOAD_BYTES as u64)
@@ -731,7 +772,7 @@ impl AuthService {
             }
             bytes.extend_from_slice(&chunk);
         }
-        Ok(bytes)
+        Ok(DownloadedSkill { bytes, version })
     }
 
     pub async fn upload(
@@ -859,6 +900,7 @@ async fn read_json<T: DeserializeOwned>(mut response: Response) -> Result<T, Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Cursor, Write};
     use std::sync::Arc;
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
@@ -934,6 +976,17 @@ mod tests {
         responses: Vec<(u16, &'static str, Vec<u8>)>,
         gate: Option<Arc<Notify>>,
     ) -> Backend {
+        let responses = responses
+            .into_iter()
+            .map(|(status, content_type, body)| (status, content_type, body, None))
+            .collect();
+        backend_raw_with_version(responses, gate).await
+    }
+
+    async fn backend_raw_with_version(
+        responses: Vec<(u16, &'static str, Vec<u8>, Option<&'static str>)>,
+        gate: Option<Arc<Notify>>,
+    ) -> Backend {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let endpoint = format!("http://{}", listener.local_addr().unwrap());
         let requests = Arc::new(Mutex::new(Vec::new()));
@@ -941,7 +994,7 @@ mod tests {
         let headers = Arc::new(Mutex::new(Vec::new()));
         let captured_headers = headers.clone();
         let task = tokio::spawn(async move {
-            for (status, content_type, body) in responses {
+            for (status, content_type, body, version) in responses {
                 let (mut socket, _) = listener.accept().await.unwrap();
                 let mut bytes = Vec::new();
                 let mut buffer = [0; 4096];
@@ -986,7 +1039,10 @@ mod tests {
                 if let Some(gate) = &gate {
                     gate.notified().await;
                 }
-                socket.write_all(format!("HTTP/1.1 {status} Result\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).as_bytes()).await.unwrap();
+                let version_header = version
+                    .map(|value| format!("X-Skill-Version: {value}\r\n"))
+                    .unwrap_or_default();
+                socket.write_all(format!("HTTP/1.1 {status} Result\r\nContent-Type: {content_type}\r\n{version_header}Content-Length: {}\r\nConnection: close\r\n\r\n", body.len()).as_bytes()).await.unwrap();
                 socket.write_all(&body).await.unwrap();
             }
         });
@@ -1012,6 +1068,21 @@ mod tests {
         json!({"access_token":access, "refresh_token":refresh, "token_type":"Bearer", "expires_in":7200, "refresh_expires_in":2592000, "scope":"mcp", "employee_number":"TD000001", "employee_name":"张三"})
     }
 
+    fn skill_archive(payload: &[u8]) -> Vec<u8> {
+        let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        archive
+            .start_file("SKILL.md", zip::write::FileOptions::default())
+            .unwrap();
+        archive
+            .write_all(b"---\nname: demo\ndescription: Example\n---\nInstructions\n")
+            .unwrap();
+        archive
+            .start_file("payload.txt", zip::write::FileOptions::default())
+            .unwrap();
+        archive.write_all(payload).unwrap();
+        archive.finish().unwrap().into_inner()
+    }
+
     #[tokio::test]
     async fn skill_download_returns_zip_bytes_using_the_authenticated_endpoint() {
         let zip = b"PK\x03\x04example".to_vec();
@@ -1020,7 +1091,17 @@ mod tests {
             TokenSession::new(serde_json::from_value(token("access", "refresh")).unwrap()).unwrap(),
         );
 
-        assert_eq!(server.auth.download_skill("demo-skill").await.unwrap(), zip);
+        assert_eq!(
+            server
+                .auth
+                .download_skill("demo-skill", None)
+                .await
+                .unwrap(),
+            DownloadedSkill {
+                bytes: zip,
+                version: None
+            }
+        );
         assert_eq!(
             server.requests.lock().await[0].0,
             "GET /api/employee-skills/download?skillName=demo-skill HTTP/1.1"
@@ -1051,7 +1132,13 @@ mod tests {
                 .unwrap(),
         );
 
-        assert_eq!(server.auth.download_skill("demo").await.unwrap(), zip);
+        assert_eq!(
+            server.auth.download_skill("demo", None).await.unwrap(),
+            DownloadedSkill {
+                bytes: zip,
+                version: None
+            }
+        );
         let headers = server.headers.lock().await;
         assert!(headers[0]
             .to_lowercase()
@@ -1062,6 +1149,278 @@ mod tests {
         assert_eq!(
             server.requests.lock().await[1].0,
             "POST /desktop/api/refresh HTTP/1.1"
+        );
+    }
+
+    #[tokio::test]
+    async fn skill_download_reads_the_actual_package_version_and_rejects_invalid_headers() {
+        let zip = b"PK\x03\x04example".to_vec();
+        let server = backend_raw_with_version(
+            vec![
+                (200, "application/zip", zip.clone(), Some("1.2.3")),
+                (200, "application/zip", zip.clone(), Some("invalid")),
+            ],
+            None,
+        )
+        .await;
+        *server.auth.tokens.lock().await = Some(
+            TokenSession::new(serde_json::from_value(token("access", "refresh")).unwrap()).unwrap(),
+        );
+
+        assert_eq!(
+            server.auth.download_skill("demo", None).await.unwrap(),
+            DownloadedSkill {
+                bytes: zip,
+                version: Some("1.2.3".into())
+            }
+        );
+        assert_eq!(
+            server.auth.download_skill("demo", None).await.unwrap_err(),
+            "SKILL_VERSION_UNAVAILABLE: invalid version header"
+        );
+    }
+
+    #[tokio::test]
+    async fn skill_update_never_replaces_files_with_a_stale_or_unversioned_download() {
+        let home = tempfile::tempdir().unwrap();
+        let old = skill_archive(b"old");
+        crate::service::skill::install(home.path(), "demo", &old, Some("1.0.0")).unwrap();
+        let new = skill_archive(b"new");
+        let server = backend_raw_with_version(
+            vec![
+                (200, "application/zip", old, Some("1.0.0")),
+                (200, "application/zip", new.clone(), None),
+                (200, "application/zip", new, Some("1.1.0")),
+            ],
+            None,
+        )
+        .await;
+        *server.auth.tokens.lock().await = Some(
+            TokenSession::new(serde_json::from_value(token("access", "refresh")).unwrap()).unwrap(),
+        );
+        let target = home.path().join("skills").join("demo").join("payload.txt");
+
+        for expected_error in [
+            "SKILL_VERSION_MISMATCH: expected=1.1.0, received=1.0.0",
+            "SKILL_VERSION_UNAVAILABLE: download did not include a version",
+        ] {
+            assert_eq!(
+                crate::service::skill::download_update(
+                    &server.auth,
+                    home.path().to_path_buf(),
+                    "demo".into(),
+                    "1.1.0".into(),
+                    Some("1.0.0".into()),
+                )
+                .await
+                .unwrap_err(),
+                expected_error
+            );
+            assert_eq!(std::fs::read(&target).unwrap(), b"old");
+        }
+
+        assert_eq!(
+            crate::service::skill::download_update(
+                &server.auth,
+                home.path().to_path_buf(),
+                "demo".into(),
+                "1.1.0".into(),
+                Some("1.0.0".into()),
+            )
+            .await
+            .unwrap(),
+            "1.1.0"
+        );
+        assert_eq!(std::fs::read(target).unwrap(), b"new");
+        let record: Value = serde_json::from_slice(
+            &std::fs::read(
+                home.path()
+                    .join("skills")
+                    .join("demo")
+                    .join(".dsh-tauri-skill-version.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(record["version"], "1.1.0");
+    }
+
+    #[tokio::test]
+    async fn skill_update_requests_the_expected_version_with_query_encoding() {
+        let home = tempfile::tempdir().unwrap();
+        crate::service::skill::install(home.path(), "demo", &skill_archive(b"old"), Some("1.0.0"))
+            .unwrap();
+        let server = backend_raw_with_version(
+            vec![(
+                200,
+                "application/zip",
+                skill_archive(b"new"),
+                Some("1.1.0+build.1"),
+            )],
+            None,
+        )
+        .await;
+        *server.auth.tokens.lock().await = Some(
+            TokenSession::new(serde_json::from_value(token("access", "refresh")).unwrap()).unwrap(),
+        );
+
+        assert_eq!(
+            crate::service::skill::download_update(
+                &server.auth,
+                home.path().to_path_buf(),
+                "demo".into(),
+                "1.1.0+build.1".into(),
+                Some("1.0.0".into()),
+            )
+            .await
+            .unwrap(),
+            "1.1.0+build.1"
+        );
+        assert_eq!(
+            server.requests.lock().await[0].0,
+            "GET /api/employee-skills/download?skillName=demo&expectedVersion=1.1.0%2Bbuild.1 HTTP/1.1"
+        );
+        assert_eq!(
+            std::fs::read(home.path().join("skills").join("demo").join("payload.txt")).unwrap(),
+            b"new"
+        );
+    }
+
+    #[tokio::test]
+    async fn skill_download_rejects_an_invalid_expected_version_before_network_access() {
+        let server = backend_raw(Vec::new(), None).await;
+
+        assert_eq!(
+            server
+                .auth
+                .download_skill("demo", Some("1.0.0&skillName=other"))
+                .await
+                .unwrap_err(),
+            "SKILL_VERSION_INVALID: invalid semantic version"
+        );
+        assert!(server.requests.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn skill_update_requests_version_0_0_2_when_0_0_1_is_installed() {
+        let home = tempfile::tempdir().unwrap();
+        crate::service::skill::install(home.path(), "demo", &skill_archive(b"old"), Some("0.0.1"))
+            .unwrap();
+        let server = backend_raw_with_version(
+            vec![(200, "application/zip", skill_archive(b"new"), Some("0.0.2"))],
+            None,
+        )
+        .await;
+        *server.auth.tokens.lock().await = Some(
+            TokenSession::new(serde_json::from_value(token("access", "refresh")).unwrap()).unwrap(),
+        );
+
+        assert_eq!(
+            crate::service::skill::download_update(
+                &server.auth,
+                home.path().to_path_buf(),
+                "demo".into(),
+                "0.0.2".into(),
+                Some("0.0.1".into()),
+            )
+            .await
+            .unwrap(),
+            "0.0.2"
+        );
+        assert_eq!(
+            server.requests.lock().await[0].0,
+            "GET /api/employee-skills/download?skillName=demo&expectedVersion=0.0.2 HTTP/1.1"
+        );
+        assert_eq!(
+            std::fs::read(home.path().join("skills").join("demo").join("payload.txt")).unwrap(),
+            b"new"
+        );
+    }
+
+    #[tokio::test]
+    async fn skill_update_surfaces_remote_version_changes_without_replacing_files() {
+        let home = tempfile::tempdir().unwrap();
+        crate::service::skill::install(home.path(), "demo", &skill_archive(b"old"), Some("1.0.0"))
+            .unwrap();
+        let server = backend_raw_with_version(
+            vec![(
+                409,
+                "application/json",
+                br#"{"code":1,"msg":"latest version changed","data":null}"#.to_vec(),
+                None,
+            )],
+            None,
+        )
+        .await;
+        *server.auth.tokens.lock().await = Some(
+            TokenSession::new(serde_json::from_value(token("access", "refresh")).unwrap()).unwrap(),
+        );
+
+        assert_eq!(
+            crate::service::skill::download_update(
+                &server.auth,
+                home.path().to_path_buf(),
+                "demo".into(),
+                "1.1.0".into(),
+                Some("1.0.0".into()),
+            )
+            .await
+            .unwrap_err(),
+            "SKILL_REMOTE_VERSION_CHANGED: latest version changed"
+        );
+        assert_eq!(
+            std::fs::read(home.path().join("skills").join("demo").join("payload.txt")).unwrap(),
+            b"old"
+        );
+    }
+
+    #[tokio::test]
+    async fn skill_update_does_not_replace_files_after_logout_during_download() {
+        let home = tempfile::tempdir().unwrap();
+        crate::service::skill::install(home.path(), "demo", &skill_archive(b"old"), Some("1.0.0"))
+            .unwrap();
+        let gate = Arc::new(Notify::new());
+        let server = backend_raw_with_version(
+            vec![(200, "application/zip", skill_archive(b"new"), Some("1.1.0"))],
+            Some(gate.clone()),
+        )
+        .await;
+        *server.auth.tokens.lock().await = Some(
+            TokenSession::new(serde_json::from_value(token("access", "refresh")).unwrap()).unwrap(),
+        );
+        let auth = server.auth.clone();
+        let root = home.path().to_path_buf();
+        let pending = tokio::spawn(async move {
+            crate::service::skill::download_update(
+                &auth,
+                root,
+                "demo".into(),
+                "1.1.0".into(),
+                Some("1.0.0".into()),
+            )
+            .await
+        });
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if !server.requests.lock().await.is_empty() {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("download request was not received");
+
+        server.auth.logout().await.unwrap();
+        gate.notify_one();
+
+        assert_eq!(
+            pending.await.unwrap().unwrap_err(),
+            "DESKTOP_AUTH_SESSION_MISSING"
+        );
+        assert_eq!(
+            std::fs::read(home.path().join("skills").join("demo").join("payload.txt")).unwrap(),
+            b"old"
         );
     }
 
@@ -1084,11 +1443,15 @@ mod tests {
         );
 
         assert_eq!(
-            server.auth.download_skill("missing").await.unwrap_err(),
+            server
+                .auth
+                .download_skill("missing", None)
+                .await
+                .unwrap_err(),
             "SKILL_DOWNLOAD_HTTP_404: skill unavailable"
         );
         assert_eq!(
-            server.auth.download_skill("demo").await.unwrap_err(),
+            server.auth.download_skill("demo", None).await.unwrap_err(),
             "SKILL_DOWNLOAD_RESPONSE_INVALID: expected application/zip"
         );
     }
@@ -1117,16 +1480,37 @@ mod tests {
         );
 
         assert_eq!(
-            server.auth.download_skill("demo").await.unwrap_err(),
+            server.auth.download_skill("demo", None).await.unwrap_err(),
             "SKILL_DOWNLOAD_HTTP_206: request failed"
         );
         assert_eq!(
-            server.auth.download_skill("demo").await.unwrap_err(),
+            server.auth.download_skill("demo", None).await.unwrap_err(),
             "SKILL_DOWNLOAD_HTTP_403: access denied"
         );
         assert_eq!(
-            server.auth.download_skill("demo").await.unwrap_err(),
+            server.auth.download_skill("demo", None).await.unwrap_err(),
             "SKILL_DOWNLOAD_HTTP_502: service unavailable"
+        );
+    }
+
+    #[tokio::test]
+    async fn ordinary_skill_download_preserves_conflict_errors() {
+        let server = backend_raw(
+            vec![(
+                409,
+                "application/json",
+                br#"{"code":1,"msg":"conflict","data":null}"#.to_vec(),
+            )],
+            None,
+        )
+        .await;
+        *server.auth.tokens.lock().await = Some(
+            TokenSession::new(serde_json::from_value(token("access", "refresh")).unwrap()).unwrap(),
+        );
+
+        assert_eq!(
+            server.auth.download_skill("demo", None).await.unwrap_err(),
+            "SKILL_DOWNLOAD_HTTP_409: conflict"
         );
     }
 
