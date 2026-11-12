@@ -1,16 +1,5 @@
-import type { McpImportItem, ParsedMcpJson } from './mcp-tab.types'
-import { isEmpty, omitBy, orderBy, uniq } from 'dsh-tauri/client'
-
-export function importGroups(items: McpImportItem[]): Array<{ agent: string, label: string, items: Array<{ item: McpImportItem, index: number }> }> {
-  const label = (agent: string): string => agent === 'claude-code' ? 'Claude Code' : agent === 'codex' ? 'Codex' : agent === 'cursor' ? 'Cursor' : agent === 'gemini' ? 'Gemini CLI' : agent
-  const order = ['claude-code', 'codex', 'cursor', 'gemini']
-  const agents = orderBy(uniq(items.map(item => item.server.agent)), agent => order.indexOf(agent))
-  return agents.map(agent => ({
-    agent,
-    label: label(agent),
-    items: items.map((item, index) => ({ item, index })).filter(({ item }) => item.server.agent === agent),
-  }))
-}
+import type { ParsedMcpJson } from './mcp-tab.types'
+import { isEmpty, omitBy } from 'dsh-tauri/client'
 
 export function parsePairs(text: string, separator: ':' | '='): Record<string, string> {
   const map: Record<string, string> = {}

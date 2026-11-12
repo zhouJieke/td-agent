@@ -2457,6 +2457,7 @@ mod tests {
         let auth = AuthService::for_test();
         for path in [
             "https://example.com/api/private",
+            "http://192.168.0.225:8099/api/employee-mcps?pageNo=1&pageSize=20",
             "//example.com/api/private",
             "/api/../desktop/api/refresh",
             "/api/private#fragment",

@@ -22,6 +22,7 @@ export const IMPORT_REFRESH_DELAYS_MS = [250, 750, 1_500] as const
 export const MCP_RESTART_INITIAL_DELAY_MS = 3_000
 export const MCP_RESTART_POLL_INTERVAL_MS = 1_500
 export const MCP_RESTART_TIMEOUT_MS = 60_000
+export const EMPLOYEE_MCP_ID_PREFIX = 'employee-mcp-'
 export const GITHUB_REPOSITORY_PATTERN = /^(?:https?:\/\/github\.com\/)?[\w.-]+\/[\w.-]+\/?$/i
 
 export const SOURCE_LOCALE_KEYS: Readonly<Record<string, LocaleKey>> = {

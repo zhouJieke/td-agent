@@ -2,11 +2,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'pathe'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { parse } from 'yaml'
 import { server } from '.'
 import { resetTestDshHome } from '../../../../.test/test-utils'
 import { mcp } from '../service/mcp'
@@ -305,6 +306,37 @@ describe('能力管理器路由声明', () => {
     expect(await response.json()).toEqual({ servers: [], restartNeeded: false })
 
     dispose()
+  })
+
+  it('安装配置默认启用，关闭写入插件禁用标记，重新开启清除标记，卸载删除配置', async () => {
+    const harness = createHarness()
+    dirs.push(harness.dir)
+    mount(harness, true)
+    const base = await listen(harness.registered)
+    const profileDir = join(harness.dir, 'profiles', 'web')
+    const body = { id: 'employee-mcp-maps', serverName: 'maps', transport: 'streamable-http', url: 'https://mcp.example.test/maps', headers: { 'X-API-Key': 'test-key' }, scope: 'profile' }
+    const saved = await fetch(`${base}${P}/mcp`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    expect(saved.status).toBe(200)
+    expect(await saved.json()).toEqual({ ok: true, id: 'employee-mcp-maps', restartNeeded: false })
+    expect(mcp.peek(profileDir)).toEqual([{ id: 'employee-mcp-maps', serverName: 'maps', transport: 'streamable-http', url: 'https://mcp.example.test/maps', headers: { 'X-API-Key': 'test-key' }, disabled: false }])
+    for (const disabled of [true, false]) {
+      const toggled = await fetch(`${base}${P}/mcp/toggle`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: body.id, scope: 'profile', disabled }) })
+      expect(toggled.status).toBe(200)
+      expect(await toggled.json()).toEqual({ ok: true, restartNeeded: false })
+      const patch = parse(readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8'))
+      expect(patch[0].insert[0]).toEqual({
+        id: 'employee-mcp-maps',
+        name: '@deepseek-ai/dsh-mcp-client',
+        ...(disabled ? { disabled: true } : {}),
+        config: { serverName: 'maps', transport: 'streamable-http', url: 'https://mcp.example.test/maps', headers: { 'X-API-Key': 'test-key' } },
+      })
+      expect(mcp.peek(profileDir)[0].disabled).toBe(disabled)
+    }
+    const removed = await fetch(`${base}${P}/mcp`, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: body.id, scope: 'profile' }) })
+    expect(removed.status).toBe(200)
+    expect(await removed.json()).toEqual({ ok: true, restartNeeded: false })
+    expect(mcp.peek(profileDir)).toEqual([])
+    expect(parse(readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8'))).toEqual([])
   })
 
   it('pOST 变更路由对缺失字段返回 400 领域错误', async () => {

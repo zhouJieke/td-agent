@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { ReactNode } from 'react'
+import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { deleteMcp, getMcp, getMcpAuthorize, postMcp, postMcpAuthorize, postMcpCheck, postMcpToggle } from '../apis'
@@ -15,7 +15,9 @@ vi.mock('../apis', () => ({
   postMcpToggle: vi.fn(),
   getMcpAuthorize: vi.fn(),
 }))
-vi.mock('dsh-tauri/client', () => ({
+vi.mock('dsh-tauri/client', async importOriginal => ({
+  ...await importOriginal<typeof import('dsh-tauri/client')>(),
+  If: ({ cond, children }: { cond: boolean, children?: ReactNode }) => cond ? children : null,
   compact: (items: unknown[]) => items.filter(Boolean),
   isEmpty: (value: object) => Object.keys(value).length === 0,
   omitBy: (value: Record<string, unknown>, reject: (entry: unknown) => boolean) =>
@@ -31,16 +33,24 @@ vi.mock('./mcp-editor-form', () => ({
     </>
   ),
 }))
-vi.mock('./mcp-import-dialog', () => ({ McpImportDialog: () => null }))
 vi.mock('dsh-tauri-ui/client', () => {
   const Content = ({ children }: { children?: ReactNode }) => <div>{children}</div>
   const Empty = () => null
   return {
-    Action: Empty,
+    Action: ({ children, disabled, onClick, 'aria-label': label }: ButtonHTMLAttributes<HTMLButtonElement>) => <button disabled={disabled} onClick={onClick} aria-label={label}>{children}</button>,
     ArrowRotateRight: Empty,
+    CirclePause: Empty,
+    CirclePlay: Empty,
+    Gear: Empty,
+    Magnifier: Empty,
+    Plus: Empty,
+    TerminalLine: Empty,
+    TrashBin: Empty,
     Button: ({ children, disabled, onClick }: { children?: ReactNode, disabled?: boolean, onClick?: () => void }) => <button disabled={disabled} onClick={onClick}>{children}</button>,
     Card: Object.assign(({ children }: { children?: ReactNode }) => <article>{children}</article>, { List: Content, Title: Content, Description: Content }),
     Icon: Empty,
+    Input: Empty,
+    SegmentedControl: Empty,
     Modal: ({ open, description, children, footer }: { open: boolean, description?: string, children?: ReactNode, footer?: ReactNode }) => open
       ? (
           <div data-testid="modal" data-description={description}>
@@ -51,6 +61,7 @@ vi.mock('dsh-tauri-ui/client', () => {
       : null,
     PlugConnection: Empty,
     Select: Empty,
+    Switch: ({ checked, onChange, label, disabled }: { checked: boolean, onChange: () => void, label: string, disabled?: boolean }) => <button role="switch" aria-label={label} aria-checked={checked} disabled={disabled} onClick={onChange} />,
     Tag: Content,
     Text: Content,
     Toast: ({ text }: { text: string }) => <div role="status">{text}</div>,
@@ -208,7 +219,7 @@ it('toggles a global row with its own scope instead of the default profile scope
   ], restartNeeded: false })
   render(<McpTab t={t} />)
   const card = (await screen.findAllByRole('article'))[0]
-  fireEvent.click(within(card).getByRole('button', { name: 'toggle' }))
+  fireEvent.click(within(card).getByRole('switch', { name: 'toggleMcp: global local' }))
   await waitFor(() => expect(postMcpToggle).toHaveBeenCalledWith({ id: 'global-local', disabled: true, scope: 'global' }))
   expect(screen.getByRole('status').textContent).toBe('mcpApplied')
 })
@@ -219,12 +230,12 @@ it('deletes a global row with its own scope so the confirmation targets the conf
   ], restartNeeded: false })
   render(<McpTab t={t} />)
   const card = (await screen.findAllByRole('article'))[0]
-  fireEvent.click(within(card).getByRole('button', { name: 'delete' }))
+  fireEvent.click(within(card).getByRole('button', { name: 'uninstallMcp' }))
   const modal = await screen.findByTestId('modal')
   expect(modal.dataset.description).toBe('global-local')
-  fireEvent.click(within(modal).getByRole('button', { name: 'delete' }))
+  fireEvent.click(within(modal).getByRole('button', { name: 'uninstallMcp' }))
   await waitFor(() => expect(deleteMcp).toHaveBeenCalledWith({ id: 'global-local', scope: 'global' }))
-  expect(screen.getByRole('status').textContent).toBe('mcpApplied')
+  expect(screen.getByRole('status').textContent).toBe('mcpUninstalled')
 })
 
 it('saves an edited global row back to the global layer', async () => {

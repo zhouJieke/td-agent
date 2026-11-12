@@ -7,18 +7,30 @@ import { McpTab } from './mcp-tab'
 import { SkillsTab } from './skills-tab'
 
 vi.mock('../apis', () => ({ getMcp: vi.fn(), getSkills: vi.fn() }))
-vi.mock('dsh-tauri/client', () => ({ orderBy: () => [], uniq: () => [], compact: () => [] }))
+vi.mock('dsh-tauri/client', async importOriginal => ({
+  ...await importOriginal<typeof import('dsh-tauri/client')>(),
+  orderBy: () => [],
+  uniq: () => [],
+  compact: () => [],
+  If: ({ cond, children }: { cond: boolean, children?: ReactNode }) => cond ? children : null,
+}))
 vi.mock('../hooks/use-timers', () => ({ useTimers: () => ({ mounted: { current: true }, later: vi.fn() }) }))
 vi.mock('../service/restart', () => ({ restartHost: vi.fn() }))
 vi.mock('./markdown', () => ({ MarkdownPreview: () => null }))
 vi.mock('./mcp-editor-form', () => ({ McpEditorForm: () => null }))
-vi.mock('./mcp-import-dialog', () => ({ McpImportDialog: () => null }))
 vi.mock('dsh-tauri-ui/client', () => {
   const Content = ({ children }: { children?: ReactNode }) => <div>{children}</div>
   const Empty = () => null
   return {
     Action: Empty,
     ArrowRotateRight: Empty,
+    CirclePause: Empty,
+    CirclePlay: Empty,
+    Gear: Empty,
+    Magnifier: Empty,
+    Plus: Empty,
+    TerminalLine: Empty,
+    TrashBin: Empty,
     Button: Content,
     Card: Content,
     Checkbox: Empty,
