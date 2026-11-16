@@ -1,6 +1,6 @@
 import { invoke } from 'dsh-tauri/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getEmployeeMcp, getEmployeeMcps } from './employee-mcps'
+import { getEmployeeMcp, getEmployeeMcpMeta, getEmployeeMcps } from './employee-mcps'
 
 vi.mock('dsh-tauri/client', () => ({ invoke: vi.fn() }))
 
@@ -85,6 +85,25 @@ describe('企业 MCP 目录 API', () => {
     })
   })
 
+  it('条目图标只接受 https 地址，其余形态不带上 iconUrl 字段', async () => {
+    vi.mocked(invoke).mockResolvedValue({ code: 0, data: {
+      totalCount: 3,
+      pageNumber: 1,
+      pagesAvailable: 1,
+      empty: false,
+      items: [
+        { id: 'a', name: 'A', transport: 'streamable-http', iconUrl: ' https://cdn.example.test/a.png ' },
+        { id: 'b', name: 'B', transport: 'streamable-http', iconUrl: 'http://cdn.example.test/b.png' },
+        { id: 'c', name: 'C', transport: 'stdio', iconUrl: 42 },
+      ],
+    } })
+
+    const page = await getEmployeeMcps()
+    expect(page.items[0]).toEqual({ id: 'a', name: 'A', transport: 'streamable-http', iconUrl: 'https://cdn.example.test/a.png' })
+    expect(Object.hasOwn(page.items[1]!, 'iconUrl')).toBe(false)
+    expect(Object.hasOwn(page.items[2]!, 'iconUrl')).toBe(false)
+  })
+
   it('空白关键词不发送 keyword 参数', async () => {
     await getEmployeeMcps({ keyword: '  ' })
     expect(invoke).toHaveBeenCalledExactlyOnceWith('desktop_auth_request', {
@@ -123,5 +142,37 @@ describe('企业 MCP 目录 API', () => {
   it('鉴权请求失败透传错误供页面重试', async () => {
     vi.mocked(invoke).mockRejectedValue(new Error('DESKTOP_AUTH_SESSION_MISSING'))
     await expect(getEmployeeMcps()).rejects.toThrow('DESKTOP_AUTH_SESSION_MISSING')
+  })
+})
+
+describe('企业 MCP 展示元数据 API', () => {
+  it('一次取回全量元数据并只保留 https 图标', async () => {
+    vi.mocked(invoke).mockResolvedValue({ code: 0, data: [
+      { id: 'a', name: '高德地图 MCP', iconUrl: ' https://cdn.example.test/a.png ' },
+      { id: 'b', name: 'B', iconUrl: 'http://cdn.example.test/b.png' },
+    ] })
+
+    await expect(getEmployeeMcpMeta()).resolves.toEqual([
+      { id: 'a', name: '高德地图 MCP', iconUrl: 'https://cdn.example.test/a.png' },
+      { id: 'b', name: 'B' },
+    ])
+    expect(invoke).toHaveBeenCalledExactlyOnceWith('desktop_auth_request', { method: 'GET', path: '/api/employee-mcps/meta', body: null })
+  })
+
+  it('畸形条目只丢自己，不牵连整批', async () => {
+    vi.mocked(invoke).mockResolvedValue({ code: 0, data: [
+      { id: 'a', name: 'A' },
+      { id: '', name: '缺主键' },
+      { id: 'c', name: '   ' },
+      { id: 'd' },
+      null,
+    ] })
+
+    await expect(getEmployeeMcpMeta()).resolves.toEqual([{ id: 'a', name: 'A' }])
+  })
+
+  it.each([null, {}, { code: 0, data: { items: [] } }])('元数据响应 %j 结构非法时抛错而非伪装为空', async (response) => {
+    vi.mocked(invoke).mockResolvedValue({ code: 0, data: response })
+    await expect(getEmployeeMcpMeta()).rejects.toThrow('EMPLOYEE_MCP_INVALID_RESPONSE')
   })
 })

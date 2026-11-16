@@ -7,7 +7,7 @@ export interface EmployeeMcpPage {
   totalCount: number
   pageNumber: number
   pagesAvailable: number
-  items: { id: string, name: string, transport: string }[]
+  items: { id: string, name: string, transport: string, iconUrl?: string }[]
   empty: boolean
 }
 
@@ -76,6 +76,31 @@ export async function getEmployeeMcp(mcpCode: string): Promise<EmployeeMcpConfig
   return { id: mcpCode, name: data.name, transport: 'streamable-http', url: data.url, headers: stringMap(data.headers) ?? {} }
 }
 
+export interface EmployeeMcpMeta {
+  id: string
+  name: string
+  iconUrl?: string
+}
+
+export async function getEmployeeMcpMeta(): Promise<EmployeeMcpMeta[]> {
+  const data = responseData(await invoke<unknown>('desktop_auth_request', {
+    method: 'GET',
+    path: '/api/employee-mcps/meta',
+    body: null,
+  }))
+  if (!Array.isArray(data))
+    throw new Error('EMPLOYEE_MCP_INVALID_RESPONSE')
+  return data.flatMap((item: unknown) => {
+    if (!isRecord(item) || typeof item.id !== 'string' || item.id.trim() === ''
+      || typeof item.name !== 'string' || item.name.trim() === '')
+      return []
+    const iconUrl = typeof item.iconUrl === 'string' && /^https:\/\/\S+$/i.test(item.iconUrl.trim())
+      ? item.iconUrl.trim()
+      : undefined
+    return [{ id: item.id, name: item.name, ...(iconUrl === undefined ? {} : { iconUrl }) }]
+  })
+}
+
 export async function getEmployeeMcps({ pageNo = 1, pageSize = 20, keyword = '' }: { pageNo?: number, pageSize?: number, keyword?: string } = {}): Promise<EmployeeMcpPage> {
   if (!isCount(pageNo) || pageNo === 0 || !isCount(pageSize) || pageSize === 0 || typeof keyword !== 'string')
     throw new Error('EMPLOYEE_MCP_INVALID_QUERY')
@@ -97,7 +122,15 @@ export async function getEmployeeMcps({ pageNo = 1, pageSize = 20, keyword = '' 
       || typeof item.name !== 'string' || item.name.trim() === '' || typeof item.transport !== 'string' || item.transport.trim() === '') {
       throw new Error('EMPLOYEE_MCP_INVALID_RESPONSE')
     }
-    return { id: item.id, name: item.name, transport: item.transport }
+    const iconUrl = typeof item.iconUrl === 'string' && /^https:\/\/\S+$/i.test(item.iconUrl.trim())
+      ? item.iconUrl.trim()
+      : undefined
+    return {
+      id: item.id,
+      name: item.name,
+      transport: item.transport,
+      ...(iconUrl === undefined ? {} : { iconUrl }),
+    }
   })
   return { totalCount: page.totalCount, pageNumber: page.pageNumber, pagesAvailable: page.pagesAvailable, empty: page.empty, items }
 }

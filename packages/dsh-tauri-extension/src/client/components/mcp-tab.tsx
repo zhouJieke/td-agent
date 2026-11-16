@@ -3,17 +3,16 @@ import type { EmployeeMcpPage } from '../apis/employee-mcps'
 import type { PostApiTauriExtensionMcpBody as McpSaveBody } from '../apis/index.type'
 import type { McpRow } from '../types'
 import type { McpEditorMode, McpEditorState, McpTabProps } from './mcp-tab.types'
-import { Action, ArrowRotateRight, Button, Card, Gear, Icon, Input, Magnifier, Modal, PlugConnection, Plus, SegmentedControl, Select, Switch, Tag, TerminalLine, Text, Toast, TrashBin, TriangleExclamation as Warning } from 'dsh-tauri-ui/client'
+import { Action, ArrowRotateRight, Button, Card, Gear, Icon, Input, Magnifier, Modal, PlugConnection, Plus, SegmentedControl, Switch, Tag, TerminalLine, Text, Toast, TrashBin, TriangleExclamation as Warning } from 'dsh-tauri-ui/client'
 import { compact, If, invoke, useWatchImmediate } from 'dsh-tauri/client'
 import { useEffect, useId, useRef, useState } from 'react'
 import { deleteMcp, getMcp, getMcpAuthorize, postMcp, postMcpAuthorize, postMcpCheck, postMcpToggle } from '../apis'
-import { getEmployeeMcps } from '../apis/employee-mcps'
-import { EMPLOYEE_MCP_ID_PREFIX, MCP_RESTART_INITIAL_DELAY_MS, MCP_RESTART_POLL_INTERVAL_MS, MCP_RESTART_TIMEOUT_MS } from '../constants'
+import { getEmployeeMcpMeta, getEmployeeMcps } from '../apis/employee-mcps'
+import { EMPLOYEE_MCP_ID_PREFIX } from '../constants'
 import { useTimers } from '../hooks/use-timers'
 import { installEmployeeMcp } from '../service/employee-mcps'
-import { restartHost } from '../service/restart'
-import { isDesktopHost } from '../service/restart.utils'
 import { McpEditorForm } from './mcp-editor-form'
+import { McpIcon } from './mcp-icon'
 import { mapToPairs, parseMcpJson, parsePairs } from './mcp-tab.utils'
 import { failText } from './outcome.utils'
 
@@ -36,26 +35,44 @@ export function McpTab({ t }: McpTabProps): ReactElement {
   const [enterpriseLoading, setEnterpriseLoading] = useState(false)
   const [enterpriseError, setEnterpriseError] = useState('')
   const enterpriseRequestRef = useRef(0)
+  const [employeeMeta, setEmployeeMeta] = useState<Record<string, { name: string, iconUrl?: string }>>({})
   const [loadError, setLoadError] = useState('')
   const [editor, setEditor] = useState<McpEditorState | null>(null)
   const [confirmRow, setConfirmRow] = useState<McpRow | null>(null)
   const [revealedCredentials, setRevealedCredentials] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [installing, setInstalling] = useState<string | null>(null)
-  const [restartConfirm, setRestartConfirm] = useState(false)
-  const [restarting, setRestarting] = useState(false)
   const [toast, setToast] = useState<{ text: string, ok: boolean, seq: number } | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
   const [editorMode, setEditorMode] = useState<McpEditorMode>('json')
   const [pasteJson, setPasteJson] = useState('')
   const [pasteError, setPasteError] = useState<string | null>(null)
-  const [scope, setScope] = useState<'all' | 'global' | 'profile'>('all')
   const [checking, setChecking] = useState<string | null>(null)
   const [globalError, setGlobalError] = useState('')
   const [requiresAuth, setRequiresAuth] = useState<Record<string, boolean>>({})
   const [authorizing, setAuthorizing] = useState<string | null>(null)
   const { mounted, later } = useTimers()
+
+  const employeeCodes = (servers ?? [])
+    .filter(row => row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX))
+    .map(row => row.id.slice(EMPLOYEE_MCP_ID_PREFIX.length))
+    .join(' ')
+
+  useEffect(() => {
+    if (employeeCodes === '')
+      return
+    void getEmployeeMcpMeta().then(
+      (entries) => {
+        if (mounted.current)
+          setEmployeeMeta(Object.fromEntries(entries.map(entry => [entry.id, { name: entry.name, ...(entry.iconUrl === undefined ? {} : { iconUrl: entry.iconUrl }) }])))
+      },
+      () => {
+        if (mounted.current)
+          setEmployeeMeta({})
+      },
+    )
+  }, [employeeCodes])
 
   useWatchImmediate([tab, enterpriseQuery.pageNo, enterpriseQuery.keyword, enterpriseReload], () => {
     const request = ++enterpriseRequestRef.current
@@ -309,10 +326,8 @@ export function McpTab({ t }: McpTabProps): ReactElement {
       if ('error' in body)
         throw new Error(body.error)
       setTab('installed')
-      if (editor.id === '') {
+      if (editor.id === '')
         setSearch('')
-        setScope('all')
-      }
       setEditor(null)
       setToast({ text: t(body.restartNeeded ? 'restartNeeded' : 'mcpApplied'), ok: true, seq: Date.now() })
       setReload(value => value + 1)
@@ -338,7 +353,6 @@ export function McpTab({ t }: McpTabProps): ReactElement {
         throw new Error(result.error === 'EMPLOYEE_MCP_INVALID_RESPONSE' ? t('enterpriseMcpInvalidResponse') : result.error === 'EMPLOYEE_MCP_ALREADY_INSTALLED' ? t('mcpAlreadyInstalled') : result.error)
       setTab('installed')
       setSearch('')
-      setScope('all')
       setToast({ text: t(result.restartNeeded ? 'restartNeeded' : 'mcpInstalled'), ok: true, seq: Date.now() })
       setReload(value => value + 1)
     }
@@ -393,32 +407,6 @@ export function McpTab({ t }: McpTabProps): ReactElement {
     }
   }
 
-  const doRestart = (): void => {
-    setRestartConfirm(false)
-    setRestarting(true)
-    setToast({ text: t('restarting'), ok: true, seq: Date.now() })
-    void restartHost()
-    if (isDesktopHost())
-      return
-    const deadline = Date.now() + MCP_RESTART_TIMEOUT_MS
-    const poll = (): void => {
-      if (Date.now() > deadline)
-        return
-      later(() => {
-        void getMcp().then(
-          () => { window.location.reload() },
-          () => { poll() },
-        )
-      }, MCP_RESTART_POLL_INTERVAL_MS)
-    }
-    later(poll, MCP_RESTART_INITIAL_DELAY_MS)
-  }
-
-  const scopeOptions = [
-    { value: 'all', label: t('scopeAll') },
-    { value: 'global', label: t('global') },
-    { value: 'profile', label: t('profile') },
-  ]
   const query = search.trim().toLocaleLowerCase()
   const cards = (servers ?? []).map((row) => {
     const url = row.transport !== 'stdio' && row.url && URL.canParse(row.url) ? new URL(row.url) : null
@@ -432,17 +420,22 @@ export function McpTab({ t }: McpTabProps): ReactElement {
     }
     const description = row.transport === 'stdio' ? `${row.command ?? ''} ${(row.args ?? []).join(' ')}`.trim() : url?.href ?? row.url ?? ''
     const key = rowKey(row)
+    const employeeCode = row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX) ? row.id.slice(EMPLOYEE_MCP_ID_PREFIX.length) : ''
+    const meta = employeeCode === '' ? undefined : employeeMeta[employeeCode]
+    const displayName = meta?.name ?? row.serverName
     return {
       row,
       key,
       scope: rowScope(row),
+      displayName,
+      iconUrl: meta?.iconUrl,
       description,
       credentials,
-      searchText: `${row.serverName} ${row.id} ${description}`.toLocaleLowerCase(),
+      searchText: `${displayName} ${row.serverName} ${row.id} ${description}`.toLocaleLowerCase(),
       waiting: checking === key || (!row.disabled && !row.shadowed && row.transport !== 'stdio' && requiresAuth[key] === undefined),
     }
   })
-  const visibleCards = cards.filter(card => (scope === 'all' || card.scope === scope) && card.searchText.includes(query))
+  const visibleCards = cards.filter(card => card.searchText.includes(query))
   const loaded = servers !== null && loadError === ''
   const installedIds = new Set((servers ?? []).map(row => row.id))
 
@@ -459,12 +452,12 @@ export function McpTab({ t }: McpTabProps): ReactElement {
             className="h-[36px] w-[36px] rounded-lg border border-solid border-border-l2"
             aria-label={t(tab === 'enterprise' ? 'refreshEnterpriseMcp' : 'refreshInstalledMcp')}
             title={t(tab === 'enterprise' ? 'refreshEnterpriseMcp' : 'refreshInstalledMcp')}
-            disabled={busy || restarting || (tab === 'enterprise' && enterpriseLoading)}
+            disabled={busy || (tab === 'enterprise' && enterpriseLoading)}
             onClick={() => tab === 'enterprise' ? setEnterpriseReload(value => value + 1) : setReload(value => value + 1)}
           >
             <Icon as={ArrowRotateRight} size={16} />
           </Action>
-          <Button variant="add" className="h-[36px] gap-[6px] rounded-lg bg-business px-[14px] hover:not-disabled:bg-business" disabled={busy || restarting} onClick={openCreate}>
+          <Button variant="add" className="h-[36px] gap-[6px] rounded-lg bg-business px-[14px] hover:not-disabled:bg-business" disabled={busy} onClick={openCreate}>
             <Icon as={Plus} size={16} />
             {t('addServer')}
           </Button>
@@ -517,7 +510,7 @@ export function McpTab({ t }: McpTabProps): ReactElement {
               {enterprisePage?.items.map(item => (
                 <Card key={item.id} className="mx-0 flex flex-col gap-[20px] rounded-xl border-border-l2 bg-layer-1 p-[20px] transition-colors hover:border-border-l3">
                   <div className="flex items-center gap-[12px] min-w-0">
-                    <span aria-hidden="true" className="inline-flex h-[40px] w-[40px] flex-none items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--dsw-alias-state-business-primary)_8%,transparent)] text-business"><Icon as={item.transport === 'stdio' ? TerminalLine : PlugConnection} size={22} /></span>
+                    <McpIcon name={item.name} transport={item.transport} iconUrl={item.iconUrl} />
                     <div className="flex min-w-0 flex-col gap-[4px]">
                       <Card.Title className="font-medium text-[15px]" title={item.name}>{item.name}</Card.Title>
                       <Card.Description className="text-[12px]" title={item.id}>{item.id}</Card.Description>
@@ -528,7 +521,7 @@ export function McpTab({ t }: McpTabProps): ReactElement {
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={busy || restarting || !loaded || globalError !== '' || installedIds.has(`${EMPLOYEE_MCP_ID_PREFIX}${item.id}`)}
+                      disabled={busy || !loaded || globalError !== '' || installedIds.has(`${EMPLOYEE_MCP_ID_PREFIX}${item.id}`)}
                       onClick={() => void doInstall(item.id)}
                     >
                       {t(installing === item.id ? 'mcpInstalling' : installedIds.has(`${EMPLOYEE_MCP_ID_PREFIX}${item.id}`) ? 'mcpAlreadyInstalled' : 'installMcp')}
@@ -551,12 +544,6 @@ export function McpTab({ t }: McpTabProps): ReactElement {
 
       <section id={`${tabsId}-installed-panel`} role="tabpanel" aria-labelledby={`${tabsId}-installed`} hidden={tab !== 'installed'}>
         <div className="flex flex-col gap-[16px]">
-          <div className="flex items-center justify-between gap-[8px] flex-wrap">
-            <Select className="text-secondary text-[12px]" label={t('scope')} options={scopeOptions} value={scope} onChange={next => setScope(next as typeof scope)} />
-            <div className="flex items-center gap-[6px] flex-wrap">
-              <Button variant="ghost" size="sm" disabled={busy || restarting} onClick={() => setRestartConfirm(true)}>{t('restart')}</Button>
-            </div>
-          </div>
           <If cond={loadError !== ''}>
             <Text tone="error" role="alert">{loadError}</Text>
           </If>
@@ -575,47 +562,50 @@ export function McpTab({ t }: McpTabProps): ReactElement {
           </If>
           <If cond={loaded && visibleCards.length > 0}>
             <Card.List className="grid grid-cols-[repeat(2,minmax(0,1fr))] items-stretch gap-[16px] max-[680px]:grid-cols-[minmax(0,1fr)]">
-              {visibleCards.map(({ row, key, description, credentials, scope: cardScope, waiting }) => (
+              {visibleCards.map(({ row, key, description, credentials, displayName, iconUrl, waiting }) => (
                 <Card key={key} className="mx-0 flex flex-col gap-[16px] rounded-xl border-border-l2 bg-layer-1 p-[20px] transition-colors hover:border-border-l3">
                   <div className="flex items-center gap-[12px] min-w-0">
-                    <span aria-hidden="true" className="inline-flex items-center justify-center flex-none w-[40px] h-[40px] rounded-xl bg-[color-mix(in_srgb,var(--dsw-alias-state-business-primary)_8%,transparent)] text-business"><Icon as={row.transport === 'stdio' ? TerminalLine : PlugConnection} size={22} /></span>
+                    {row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX)
+                      ? (
+                          <McpIcon name={displayName} transport={row.transport} iconUrl={iconUrl} />
+                        )
+                      : (
+                          <span aria-hidden="true" className="inline-flex h-[40px] w-[40px] flex-none items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--dsw-alias-state-business-primary)_8%,transparent)] text-business"><Icon as={row.transport === 'stdio' ? TerminalLine : PlugConnection} size={22} /></span>
+                        )}
                     <div className="flex min-w-0 flex-1 flex-col gap-[4px]">
-                      <Card.Title className="font-medium text-[15px]" title={row.serverName}>{row.serverName}</Card.Title>
-                      <Text tone="tertiary" size="sm">{t(cardScope === 'global' ? 'scopeGlobal' : 'scopeProfile')}</Text>
+                      <Card.TitleRow>
+                        <Card.Title className="font-medium text-[15px]" title={displayName}>{displayName}</Card.Title>
+                        <Tag tone={row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX) ? 'info' : 'quiet'}>{t(row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX) ? 'enterpriseConnector' : 'localConnector')}</Tag>
+                      </Card.TitleRow>
                     </div>
-                    <span className="inline-flex shrink-0 items-center gap-[5px] text-[12px] text-secondary">
-                      <Switch checked={!row.disabled} onChange={() => void doToggle(row)} label={`${t('toggleMcp')}: ${row.serverName}`} title={t('toggleMcpHint')} disabled={busy || restarting || row.shadowed === true} />
-                      {t(row.disabled ? 'disabled' : 'enabled')}
+                    <span className="flex-none">
+                      <Switch checked={!row.disabled} onChange={() => void doToggle(row)} label={`${t('toggleMcp')}: ${row.serverName}`} title={`${t('toggleMcpHint')} · ${t(row.disabled ? 'disabled' : 'enabled')}`} disabled={busy || row.shadowed === true} />
                     </span>
                   </div>
-                  <Card.Description className="rounded-lg bg-module-platform px-[10px] py-[8px] font-mono text-[11px] leading-[18px] text-secondary line-clamp-1 break-all" title={description}>{description}</Card.Description>
-                  <If cond={!row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX)}>
+                  {row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX) ? null : <Card.Description className="rounded-lg bg-module-platform px-[10px] py-[8px] font-mono text-[11px] leading-[18px] text-secondary line-clamp-1 break-all" title={description}>{description}</Card.Description>}
+                  <If cond={!row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX) && credentials.length > 0}>
                     <div className="flex min-w-0 flex-col gap-[8px]">
                       <div className="flex items-center justify-between gap-[8px]">
-                        <Text tone="secondary" size="sm">{t('mcpCredentials')}</Text>
-                        <If cond={credentials.length > 0}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            aria-label={`${t(revealedCredentials.includes(key) ? 'hideCredentials' : 'showCredentials')}: ${row.serverName}`}
-                            aria-pressed={revealedCredentials.includes(key)}
-                            onClick={() => setRevealedCredentials(current => current.includes(key) ? current.filter(item => item !== key) : [...current, key])}
-                          >
-                            {t(revealedCredentials.includes(key) ? 'hideCredentials' : 'showCredentials')}
-                          </Button>
-                        </If>
+                        <Text tone="secondary" size="xs">{t('mcpCredentials')}</Text>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`${t(revealedCredentials.includes(key) ? 'hideCredentials' : 'showCredentials')}: ${row.serverName}`}
+                          aria-pressed={revealedCredentials.includes(key)}
+                          onClick={() => setRevealedCredentials(current => current.includes(key) ? current.filter(item => item !== key) : [...current, key])}
+                        >
+                          {t(revealedCredentials.includes(key) ? 'hideCredentials' : 'showCredentials')}
+                        </Button>
                       </div>
-                      {credentials.length === 0
-                        ? <Text tone="tertiary" size="sm">{t('noCredentials')}</Text>
-                        : (
+                      {credentials.length > 0 && (
                             <dl className="m-0 flex min-w-0 flex-col gap-[8px]">
                               {credentials.map(({ source, name, value }) => (
                                 <div key={`${source}:${name}`} className="flex min-w-0 flex-col gap-[4px]">
-                                  <dt className="flex items-center gap-[6px] text-[12px] text-secondary">
-                                    <span>{source}</span>
-                                    <span className="font-mono break-all">{name}</span>
+                                  <dt className="flex min-w-0 items-center gap-[6px] text-[12px] text-secondary">
+                                    <span className="flex-none">{source}</span>
+                                    <span className="min-w-0 truncate font-mono">{name}</span>
                                   </dt>
-                                  <dd className="m-0 rounded-lg bg-module-platform px-[10px] py-[8px] font-mono text-[11px] leading-[18px] text-secondary break-all">{revealedCredentials.includes(key) ? value : '••••••••'}</dd>
+                                  <dd className="m-0 line-clamp-1 overflow-hidden rounded-lg bg-module-platform px-[10px] py-[8px] font-mono text-[11px] leading-[18px] text-secondary">{revealedCredentials.includes(key) ? value : '••••••••'}</dd>
                                 </div>
                               ))}
                             </dl>
@@ -623,21 +613,18 @@ export function McpTab({ t }: McpTabProps): ReactElement {
                     </div>
                   </If>
                   <If cond={row.shadowed === true}>
-                    <Text tone="error">{t('shadowedByGlobal')}</Text>
+                    <Text tone="error" size="xs">{t('shadowedByGlobal')}</Text>
                   </If>
                   <div className="flex items-center justify-between gap-[8px] border-0 border-t border-solid border-border-l2 pt-[12px] mt-auto">
-                    <Tag variant="version" tone="neutral">{row.transport}</Tag>
-                    <div className="flex items-center gap-[4px]">
-                      <Action variant="model" aria-label={t('edit')} title={t('edit')} disabled={busy} onClick={() => openEdit(row)}><Icon as={Gear} size={16} /></Action>
-                      <Button variant="ghost" size="sm" className="hover:not-disabled:text-error" disabled={busy || restarting} onClick={() => setConfirmRow(row)}>
-                        <Icon as={TrashBin} size={16} />
-                        {t('uninstallMcp')}
-                      </Button>
+                    <Tag variant="version" tone="neutral" className="min-w-0 max-w-full truncate">{row.transport}</Tag>
+                    <div className="flex flex-none items-center gap-[4px]">
+                      {row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX) ? null : <Action variant="model" aria-label={t('edit')} title={t('edit')} disabled={busy} onClick={() => openEdit(row)}><Icon as={Gear} size={16} /></Action>}
+                      <Action variant="model" className="hover:not-disabled:text-error" aria-label={t('uninstallMcp')} title={t('uninstallMcp')} disabled={busy} onClick={() => setConfirmRow(row)}><Icon as={TrashBin} size={16} /></Action>
                       <Button
                         variant="outline"
-                        className="ml-[4px] min-w-[60px] rounded-lg text-[12px]"
+                        className="flex-none whitespace-nowrap rounded-lg px-[10px] text-[12px]"
                         size="sm"
-                        disabled={busy || restarting || row.disabled || row.shadowed === true || checking !== null || authorizing !== null || waiting}
+                        disabled={busy || row.disabled || row.shadowed === true || checking !== null || authorizing !== null || waiting}
                         onClick={() => void (requiresAuth[key] ? authorize(row) : checkConnectivity(row))}
                       >
                         {authorizing === key ? t('authorizationRunning') : waiting ? t('checkRunning') : t(requiresAuth[key] ? 'authorizeLabel' : 'checkLabel')}
@@ -695,21 +682,6 @@ export function McpTab({ t }: McpTabProps): ReactElement {
         )}
       >
         <p>{t('removeWarn')}</p>
-      </Modal>
-
-      <Modal
-        open={restartConfirm}
-        onClose={() => setRestartConfirm(false)}
-        closeLabel={t('close')}
-        title={t('restartConfirmTitle')}
-        footer={(
-          <>
-            <Button variant="ghost" onClick={() => setRestartConfirm(false)}>{t('cancel')}</Button>
-            <Button variant="primary" onClick={doRestart}>{t('restartNow')}</Button>
-          </>
-        )}
-      >
-        <p>{t('restartConfirmBody')}</p>
       </Modal>
 
       {toast !== null && <Toast key={toast.seq} text={toast.text} icon={toast.ok ? undefined : <Icon as={Warning} />} onDone={() => setToast(null)} />}

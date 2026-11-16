@@ -69,11 +69,12 @@ describe('独立 MCP 管理页面', () => {
     expect(document.body.innerHTML).not.toContain('enterprise-secret')
   })
 
-  it('未配置请求头、环境变量或 URL 参数的连接器显示空密钥提示', async () => {
+  it('未配置请求头、环境变量或 URL 参数的连接器整块不显示密钥区', async () => {
     vi.mocked(getMcp).mockResolvedValue({ servers: [{ id: 'local', serverName: 'Local MCP', transport: 'stdio', command: 'node', disabled: false }], restartNeeded: false })
     render(<McpTab t={locale.text} />)
     await screen.findByText('Local MCP')
-    expect(screen.getByText('No credentials configured').textContent).toBe('No credentials configured')
+    expect(screen.queryByText('No credentials configured')).toBeNull()
+    expect(screen.queryByText('Credentials')).toBeNull()
     expect(screen.queryByRole('button', { name: /Show credentials/ })).toBeNull()
   })
 
@@ -224,7 +225,7 @@ describe('独立 MCP 管理页面', () => {
     expect(screen.queryByText('Credentials')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Show credentials: amap-maps-streamableHTTP' })).toBeNull()
     expect(document.body.innerHTML).not.toContain('enterprise-secret')
-    expect(invoke).toHaveBeenLastCalledWith('desktop_auth_request', { method: 'GET', path: '/api/employee-mcps/amap-maps-streamableHTTP', body: null })
+    expect(invoke).toHaveBeenCalledWith('desktop_auth_request', { method: 'GET', path: '/api/employee-mcps/amap-maps-streamableHTTP', body: null })
     await waitFor(() => expect(postMcpCheck).toHaveBeenCalledTimes(1))
     fireEvent.click(toggle)
     await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('false'))

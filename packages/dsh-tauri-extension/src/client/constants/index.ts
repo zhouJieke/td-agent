@@ -19,9 +19,6 @@ export const SKILL_CREATOR_DRAFT = '/skill-creator '
 export const SKILL_REFRESH_INTERVAL_MS = 300
 export const SKILL_REFRESH_TIMEOUT_MS = 5_000
 export const IMPORT_REFRESH_DELAYS_MS = [250, 750, 1_500] as const
-export const MCP_RESTART_INITIAL_DELAY_MS = 3_000
-export const MCP_RESTART_POLL_INTERVAL_MS = 1_500
-export const MCP_RESTART_TIMEOUT_MS = 60_000
 export const EMPLOYEE_MCP_ID_PREFIX = 'employee-mcp-'
 export const GITHUB_REPOSITORY_PATTERN = /^(?:https?:\/\/github\.com\/)?[\w.-]+\/[\w.-]+\/?$/i
 
