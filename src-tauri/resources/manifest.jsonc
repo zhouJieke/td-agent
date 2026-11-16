@@ -78,7 +78,8 @@
       "dsh-tauri-running-changes",
       "dsh-tauri-kernel",
       "dsh-tauri-pet",
-      "dsh-tauri-remote"
+      "dsh-tauri-remote",
+      "dsh-tauri-token-stats"
     ],
     "built-in": [
       {
@@ -187,12 +188,6 @@
         "spec": "dsh-tauri-skill-hub",
         "name": "DSH Tauri Skill Hub",
         "repo": "https://gitee.com/zhaoq20205/deepseek-harness-desktop/tree/master-plus-v.0.0.1/packages/dsh-tauri-skill-hub"
-      },
-      {
-        "id": "dsh-tauri-token-stats",
-        "spec": "dsh-tauri-token-stats",
-        "name": "DSH Tauri Token Stats",
-        "repo": "https://gitee.com/zhaoq20205/deepseek-harness-desktop/tree/master-plus-v.0.0.1/packages/dsh-tauri-token-stats"
       },
       {
         "id": "dsh-tauri-archive",

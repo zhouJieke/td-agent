@@ -858,6 +858,12 @@ mod tests {
     }
 
     #[test]
+    fn deprecated_manifest_lists_the_retired_token_stats() {
+        // Token 用量面板下线，内置清单条目删掉：档案里的 link: 依赖靠弃用名单兜底卸载。
+        assert!(shipped_deprecated_ids().contains("dsh-tauri-token-stats"));
+    }
+
+    #[test]
     fn deprecated_manifest_lists_absorbed_running_changes() {
         assert!(shipped_deprecated_ids().contains("dsh-tauri-running-changes"));
     }
