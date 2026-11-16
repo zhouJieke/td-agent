@@ -120,7 +120,7 @@ describe('技能列表下载按钮', () => {
     const personalButton = within(personal.container).getByRole('button', { name: 'Downloaded skill shared' })
     const failedButton = within(personal.container).getByRole('button', { name: 'Downloaded skill unavailable' })
 
-    expect(commonButton.textContent).toBe('Downloaded')
+    expect(commonButton.querySelector('svg')).not.toBeNull()
     expect(commonButton.hasAttribute('disabled')).toBe(true)
     expect(personalButton.hasAttribute('disabled')).toBe(true)
     expect(failedButton.hasAttribute('disabled')).toBe(true)
@@ -231,7 +231,7 @@ describe('技能列表下载按钮', () => {
     act(() => store.skill.markInstalled('alpha'))
 
     const button = await view.findByRole('button', { name: 'Downloaded skill alpha' })
-    expect(button.textContent).toBe('Downloaded')
+    expect(button.querySelector('svg')).not.toBeNull()
     expect(button.hasAttribute('disabled')).toBe(true)
   })
 

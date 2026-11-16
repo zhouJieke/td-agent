@@ -18,7 +18,7 @@ export function SkillList({ t, skills, emptyText, actions }: SkillListProps): Re
     return <Text tone="tertiary" size="sm" className="py-[32px] text-center">{emptyText}</Text>
 
   return (
-    <Card.List className="gap-[8px]">
+    <Card.List className="grid grid-cols-[repeat(2,minmax(0,1fr))] items-stretch gap-[12px]">
       {sortSummaries(skills).map(skill => (
         <SkillCard
           key={`${skill.namespaceId}/${skill.name}`}
