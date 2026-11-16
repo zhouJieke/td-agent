@@ -589,37 +589,39 @@ export function McpTab({ t }: McpTabProps): ReactElement {
                     </span>
                   </div>
                   <Card.Description className="rounded-lg bg-module-platform px-[10px] py-[8px] font-mono text-[11px] leading-[18px] text-secondary line-clamp-1 break-all" title={description}>{description}</Card.Description>
-                  <div className="flex min-w-0 flex-col gap-[8px]">
-                    <div className="flex items-center justify-between gap-[8px]">
-                      <Text tone="secondary" size="sm">{t('mcpCredentials')}</Text>
-                      <If cond={credentials.length > 0}>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          aria-label={`${t(revealedCredentials.includes(key) ? 'hideCredentials' : 'showCredentials')}: ${row.serverName}`}
-                          aria-pressed={revealedCredentials.includes(key)}
-                          onClick={() => setRevealedCredentials(current => current.includes(key) ? current.filter(item => item !== key) : [...current, key])}
-                        >
-                          {t(revealedCredentials.includes(key) ? 'hideCredentials' : 'showCredentials')}
-                        </Button>
-                      </If>
+                  <If cond={!row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX)}>
+                    <div className="flex min-w-0 flex-col gap-[8px]">
+                      <div className="flex items-center justify-between gap-[8px]">
+                        <Text tone="secondary" size="sm">{t('mcpCredentials')}</Text>
+                        <If cond={credentials.length > 0}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`${t(revealedCredentials.includes(key) ? 'hideCredentials' : 'showCredentials')}: ${row.serverName}`}
+                            aria-pressed={revealedCredentials.includes(key)}
+                            onClick={() => setRevealedCredentials(current => current.includes(key) ? current.filter(item => item !== key) : [...current, key])}
+                          >
+                            {t(revealedCredentials.includes(key) ? 'hideCredentials' : 'showCredentials')}
+                          </Button>
+                        </If>
+                      </div>
+                      {credentials.length === 0
+                        ? <Text tone="tertiary" size="sm">{t('noCredentials')}</Text>
+                        : (
+                            <dl className="m-0 flex min-w-0 flex-col gap-[8px]">
+                              {credentials.map(({ source, name, value }) => (
+                                <div key={`${source}:${name}`} className="flex min-w-0 flex-col gap-[4px]">
+                                  <dt className="flex items-center gap-[6px] text-[12px] text-secondary">
+                                    <span>{source}</span>
+                                    <span className="font-mono break-all">{name}</span>
+                                  </dt>
+                                  <dd className="m-0 rounded-lg bg-module-platform px-[10px] py-[8px] font-mono text-[11px] leading-[18px] text-secondary break-all">{revealedCredentials.includes(key) ? value : '••••••••'}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          )}
                     </div>
-                    {credentials.length === 0
-                      ? <Text tone="tertiary" size="sm">{t('noCredentials')}</Text>
-                      : (
-                          <dl className="m-0 flex min-w-0 flex-col gap-[8px]">
-                            {credentials.map(({ source, name, value }) => (
-                              <div key={`${source}:${name}`} className="flex min-w-0 flex-col gap-[4px]">
-                                <dt className="flex items-center gap-[6px] text-[12px] text-secondary">
-                                  <span>{source}</span>
-                                  <span className="font-mono break-all">{name}</span>
-                                </dt>
-                                <dd className="m-0 rounded-lg bg-module-platform px-[10px] py-[8px] font-mono text-[11px] leading-[18px] text-secondary break-all">{revealedCredentials.includes(key) ? value : '••••••••'}</dd>
-                              </div>
-                            ))}
-                          </dl>
-                        )}
-                  </div>
+                  </If>
                   <If cond={row.shadowed === true}>
                     <Text tone="error">{t('shadowedByGlobal')}</Text>
                   </If>

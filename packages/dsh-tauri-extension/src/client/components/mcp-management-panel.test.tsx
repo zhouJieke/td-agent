@@ -51,6 +51,24 @@ describe('独立 MCP 管理页面', () => {
     expect(document.body.textContent).not.toContain(secret)
   })
 
+  it.each([
+    { source: '请求头', config: { transport: 'streamable-http', url: 'https://mcp.example.test', headers: { Authorization: 'Bearer enterprise-secret' } } },
+    { source: '环境变量', config: { transport: 'stdio', command: 'node', env: { API_KEY: 'enterprise-secret' } } },
+    { source: 'URL 参数', config: { transport: 'streamable-http', url: 'https://mcp.example.test?key=enterprise-secret' } },
+    { source: '空配置', config: { transport: 'stdio', command: 'node' } },
+  ] satisfies { source: string, config: Partial<McpRow> }[])('通过企业入口安装的 MCP 不显示密钥区域：$source', async ({ config }) => {
+    vi.mocked(getMcp).mockResolvedValue({ servers: [{ id: 'employee-mcp-secured', serverName: 'Enterprise MCP', disabled: false, scope: 'profile', ...config }], restartNeeded: false })
+    render(<McpTab t={locale.text} />)
+    await screen.findByText('Enterprise MCP')
+    expect(screen.queryByText('Credentials')).toBeNull()
+    expect(screen.queryByText('No credentials configured')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Show credentials|Hide credentials/ })).toBeNull()
+    expect(screen.queryByText('Authorization')).toBeNull()
+    expect(screen.queryByText('API_KEY')).toBeNull()
+    expect(screen.queryByText('key')).toBeNull()
+    expect(document.body.innerHTML).not.toContain('enterprise-secret')
+  })
+
   it('未配置请求头、环境变量或 URL 参数的连接器显示空密钥提示', async () => {
     vi.mocked(getMcp).mockResolvedValue({ servers: [{ id: 'local', serverName: 'Local MCP', transport: 'stdio', command: 'node', disabled: false }], restartNeeded: false })
     render(<McpTab t={locale.text} />)
@@ -126,31 +144,35 @@ describe('独立 MCP 管理页面', () => {
     expect(getMcp).toHaveBeenCalledOnce()
   })
 
-  it('从企业页添加自定义 MCP 后回到已安装列表并刷新数量', async () => {
+  it('从企业页自定义安装与企业目录同名同地址的 MCP 后仍可查看密钥', async () => {
     render(<McpTab t={locale.text} />)
     await screen.findByText('No MCP servers configured yet')
     fireEvent.click(screen.getByRole('tab', { name: 'Enterprise MCPs' }))
+    await screen.findByText('高德地图 MCP')
     fireEvent.click(screen.getByRole('button', { name: 'Add custom MCP' }))
     fireEvent.change(screen.getByRole('textbox', { name: 'Paste a JSON config (wrapper or bare entry)' }), {
-      target: { value: '{"mcpServers":{"custom":{"command":"node","args":["tools.js"]}}}' },
+      target: { value: '{"mcpServers":{"amap-maps-streamableHTTP":{"url":"https://mcp.example.test/maps","headers":{"Authorization":"Bearer custom-secret"}}}}' },
     })
     vi.mocked(getMcp).mockResolvedValue({ servers: [
-      { id: 'custom', serverName: 'custom', transport: 'stdio', command: 'node', args: ['tools.js'], disabled: false, scope: 'profile' },
+      { id: 'mcp-amap-maps-streamableHTTP', serverName: 'amap-maps-streamableHTTP', transport: 'streamable-http', url: 'https://mcp.example.test/maps', headers: { Authorization: 'Bearer custom-secret' }, disabled: false, scope: 'profile' },
     ], restartNeeded: false })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(postMcp).toHaveBeenCalledExactlyOnceWith({
       id: '',
       scope: 'profile',
-      serverName: 'custom',
-      transport: 'stdio',
-      command: 'node',
-      args: ['tools.js'],
-      env: {},
+      serverName: 'amap-maps-streamableHTTP',
+      transport: 'streamable-http',
+      url: 'https://mcp.example.test/maps',
+      headers: { Authorization: 'Bearer custom-secret' },
     }))
-    await screen.findByText('custom')
+    const showCredentials = await screen.findByRole('button', { name: 'Show credentials: amap-maps-streamableHTTP' })
     expect(screen.getByRole('tab', { name: 'Installed 1' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(getMcp).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('Credentials').textContent).toBe('Credentials')
+    expect(screen.queryByText('Bearer custom-secret')).toBeNull()
+    fireEvent.click(showCredentials)
+    expect(screen.getByText('Bearer custom-secret').textContent).toBe('Bearer custom-secret')
   })
 
   it('自定义保存失败时保留配置内容并显示错误，允许重试', async () => {
@@ -172,7 +194,7 @@ describe('独立 MCP 管理页面', () => {
     vi.mocked(getMcp).mockImplementation(async () => ({ servers, restartNeeded: false }))
     vi.mocked(invoke).mockImplementation(async (_command, args) => ({
       code: 0,
-      data: (args as { path: string }).path.includes('?') ? enterprisePage : { ...enterprisePage.items[0], url: 'https://mcp.example.test/maps' },
+      data: (args as { path: string }).path.includes('?') ? enterprisePage : { ...enterprisePage.items[0], url: 'https://mcp.example.test/maps', headers: { Authorization: 'Bearer enterprise-secret' } },
     }))
     vi.mocked(postMcp).mockImplementation(async (body) => {
       servers = [{ ...body, disabled: false }]
@@ -196,9 +218,12 @@ describe('独立 MCP 管理页面', () => {
       serverName: 'amap-maps-streamableHTTP',
       transport: 'streamable-http',
       url: 'https://mcp.example.test/maps',
-      headers: {},
+      headers: { Authorization: 'Bearer enterprise-secret' },
       scope: 'profile',
     })
+    expect(screen.queryByText('Credentials')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Show credentials: amap-maps-streamableHTTP' })).toBeNull()
+    expect(document.body.innerHTML).not.toContain('enterprise-secret')
     expect(invoke).toHaveBeenLastCalledWith('desktop_auth_request', { method: 'GET', path: '/api/employee-mcps/amap-maps-streamableHTTP', body: null })
     await waitFor(() => expect(postMcpCheck).toHaveBeenCalledTimes(1))
     fireEvent.click(toggle)

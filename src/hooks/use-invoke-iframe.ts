@@ -2,6 +2,7 @@ import type { RefObject } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useIframeMessage } from '@/hooks/use-iframe-message'
 import { auth } from '@/store/modules/auth'
+import { harness } from '@/store/modules/harness'
 
 /**
  * 壳层 invoke 桥（宿主侧）：把 iframe 内 dsh 界面/插件的 Tauri 调用
@@ -35,6 +36,7 @@ interface InvokeBridgeRequest {
 const ALLOWED_INVOKE_CMDS = new Set([
   // 只读布尔量，供 dsh-tauri-ui 决定是否挂载仅 dev 可见的调试面板。
   'is_dev_build',
+  'restart_harness',
   'desktop_auth_employee',
   'desktop_auth_logout',
   // 带登录态的同源业务请求：命令侧只放行 /api/** 并自动附 Bearer（见 service/auth.rs），token 不进帧内。
@@ -84,7 +86,10 @@ export function useInvokeIframe(iframeRef: RefObject<HTMLIFrameElement | null>):
     }
     // 统一以字符串承载错误（command 已按约定 `Result<_, String>` 返回带前缀 error）。
     let request: Promise<unknown>
-    if (cmd === 'desktop_auth_employee') {
+    if (cmd === 'restart_harness') {
+      request = harness.restart()
+    }
+    else if (cmd === 'desktop_auth_employee') {
       request = auth.employee()
     }
     else if (cmd === 'desktop_auth_logout') {

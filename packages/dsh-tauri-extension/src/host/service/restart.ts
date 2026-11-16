@@ -50,5 +50,5 @@ function scheduleRestart(
 }
 
 function restartOwnedByShell(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.DSH_DESKTOP === '1'
+  return env.DSH_DESKTOP === '1' || env.DSH_TAURI_EMBEDDED === '1'
 }

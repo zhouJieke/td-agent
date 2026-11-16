@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@changfenhuang/dsh-genui": "catalog:plugins",
+    "@max-null/dsh-chinese-thinking": "catalog:plugins",
+    "@nanmicoder/dsh-agent-teams": "catalog:plugins",
+    "@xmanrui/dsh-im": "workspace:../../../dsh-im",
+    "dsh-inner-browser-use": "catalog:plugins",
     "dsh-tauri": "workspace:*",
     "dsh-tauri-archive": "workspace:*",
     "dsh-tauri-extension": "workspace:*",
@@ -14,6 +19,7 @@
     "dsh-tauri-skill-hub": "workspace:*",
     "dsh-tauri-token-stats": "workspace:*",
     "dsh-tauri-ui": "workspace:*",
-    "dsh-tauri-worktree": "workspace:*"
+    "dsh-tauri-worktree": "workspace:*",
+    "dsh-univer-office": "catalog:plugins"
   }
 }

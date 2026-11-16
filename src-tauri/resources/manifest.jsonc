@@ -82,6 +82,71 @@
     ],
     "built-in": [
       {
+        "id": "@changfenhuang/dsh-genui",
+        "spec": "@changfenhuang/dsh-genui",
+        "name": "DSH GenUI",
+        "repo": "https://github.com/omdsh-dev/dsh-genui",
+        "version": [
+          {
+            "version": "0.16.0",
+            "dsh": "^0.2.0-rc.1"
+          },
+          {
+            "version": "0.16.0",
+            "dsh": "^0.2.1-rc.1"
+          },
+          {
+            "version": "0.16.0",
+            "dsh": "^0.2.2-alpha.2"
+          }
+        ]
+      },
+      {
+        "id": "@max-null/dsh-chinese-thinking",
+        "spec": "@max-null/dsh-chinese-thinking",
+        "name": "DSH Chinese Thinking",
+        "repo": "https://github.com/Max-Null/dsh-chinese-thinking",
+        "version": "0.3.1"
+      },
+      {
+        "id": "@nanmicoder/dsh-agent-teams",
+        "spec": "@nanmicoder/dsh-agent-teams",
+        "name": "DSH Agent Teams",
+        "repo": "https://github.com/NanmiCoder/dsh-agent-teams",
+        "version": "0.1.30"
+      },
+      {
+        "id": "@xmanrui/dsh-im",
+        "spec": "@xmanrui/dsh-im",
+        "name": "DSH IM",
+        "repo": "https://github.com/xmanrui/dsh-im",
+        "version": [
+          {
+            "version": "5.10.0",
+            "dsh": "0.2.1-rc.2"
+          }
+        ]
+      },
+      {
+        "id": "dsh-inner-browser-use",
+        "spec": "dsh-inner-browser-use",
+        "name": "DSH Inner Browser Use",
+        "repo": "https://github.com/regrevia/dsh-inner-browser-use",
+        "version": [
+          {
+            "version": "0.47.98",
+            "dsh": ">=0.2.0"
+          }
+        ]
+      },
+      {
+        "id": "dsh-univer-office",
+        "spec": "dsh-univer-office",
+        "name": "DSH Univer Office",
+        "repo": "https://github.com/dream-num/dsh-univer-office",
+        "version": "0.4.0"
+      },
+      {
         "id": "dsh-tauri",
         "spec": "dsh-tauri",
         "name": "DSH Tauri",
@@ -229,35 +294,6 @@
         "name": "DSH Market",
         "repo": "https://github.com/dsh-market/dsh-market",
         "description": "The plugin market inside DeepSeek Harness — browse, search, one-click install · DSH 可视化插件市场",
-        "recommended": false,
-        "checked": false,
-        "version": "latest"
-      },
-      {
-        "id": "@xmanrui/dsh-im",
-        "spec": "@xmanrui/dsh-im",
-        "name": "DSH IM",
-        "description": "通过扫码或机器人凭据把IM机器人接入DeepSeek Harness（支持飞书、微信、钉钉、企业微信、QQ、Slack、Telegram、Discord和WhatsApp）。 Connect IM bots to DeepSeek Harness via QR code or credentials (9 channels).",
-        "repo": "https://github.com/xmanrui/dsh-im",
-        "recommended": false,
-        "checked": false,
-        "version": [
-          {
-            "version": "^4.29.0",
-            "dsh": "^0.1.7-rc.1"
-          },
-          {
-            "version": "latest",
-            "dsh": "^0.2.0-rc.1"
-          }
-        ]
-      },
-      {
-        "id": "@changfenhuang/dsh-genui",
-        "spec": "@changfenhuang/dsh-genui",
-        "name": "DSH GenUI",
-        "description": "交互式界面插件，通过 dsh-ui 代码块在助手回复中直接呈现布局、图表、绘图、表单、测验、Mermaid 和 3D 场景，并将交互事件回传模型。内含宿主插件、浏览器渲染器和 genui 技能。 ｜ GenUI for DeepSeek Harness: interactive UI components rendered inline in assistant replies via the dsh-ui fence — layout, charts, plots, forms, quizzes, mermaid, 3D scenes, and an action event loop back to the model. Ships the fence-teaching host plugin, the browser renderer (client half), and the genui skill.",
-        "repo": "https://github.com/omdsh-dev/dsh-genui",
         "recommended": false,
         "checked": false,
         "version": "latest"

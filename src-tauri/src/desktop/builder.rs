@@ -456,21 +456,6 @@ pub fn install_macos_menu(app: &tauri::AppHandle<Wry>) -> tauri::Result<()> {
         true,
         None::<&str>,
     )?;
-    let desktop_feedback = MenuItem::with_id(
-        app,
-        "desktop-feedback",
-        crate::config::i18n::t("menu.desktop_feedback"),
-        true,
-        None::<&str>,
-    )?;
-    let harness_feedback = MenuItem::with_id(
-        app,
-        "desktop-harness-feedback",
-        crate::config::i18n::t("menu.harness_feedback"),
-        true,
-        None::<&str>,
-    )?;
-    let feedback_separator = PredefinedMenuItem::separator(app)?;
     let help_menu = Submenu::with_id_and_items(
         app,
         "desktop-help-menu",
@@ -480,9 +465,6 @@ pub fn install_macos_menu(app: &tauri::AppHandle<Wry>) -> tauri::Result<()> {
             &documentation,
             &keyboard_shortcuts,
             &help_separator,
-            &desktop_feedback,
-            &harness_feedback,
-            &feedback_separator,
             &run_logs,
             &toggle_devtools,
             &task_manager,
@@ -1692,7 +1674,7 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
                     }
                 }
             }
-            "desktop-documentation" | "desktop-feedback" | "desktop-harness-feedback" => {
+            "desktop-documentation" => {
                 let windows = app.webview_windows();
                 let target = help_menu_window_label(
                     windows

@@ -146,6 +146,32 @@ describe('plugin deployment build-tool pruning', () => {
 })
 
 describe('plugin deployment relative dependencies', () => {
+  it('uses Node exports instead of obsolete main and module entries', () => {
+    const root = deploymentFixture()
+    writeFileSync(join(root, 'plugin', 'package.json'), JSON.stringify({
+      main: './missing.js',
+      module: './missing.mjs',
+      exports: { '.': { import: './index.js', require: './index.js' } },
+      dependencies: { 'dsh-h3': '0.2.1' },
+    }))
+
+    pruneDeployment(root, ['plugin'])
+
+    const require = createRequire(join(root, 'consumer.cjs'))
+    expect(require.resolve('plugin')).toBe(join(root, 'plugin', 'index.js'))
+  })
+
+  it('rejects a missing exported entry even when main exists', () => {
+    const root = deploymentFixture()
+    writeFileSync(join(root, 'plugin', 'package.json'), JSON.stringify({
+      main: './index.js',
+      exports: './missing.js',
+      dependencies: { 'dsh-h3': '0.2.1' },
+    }))
+
+    expect(() => pruneDeployment(root, ['plugin'])).toThrow('PLUGIN_DEPLOY_ENTRY_MISSING: plugin/missing.js')
+  })
+
   it('collects static imports and re-exports including side effects', () => {
     expect(relativeSpecifiers(`
       import value from './value.js'
@@ -164,6 +190,18 @@ describe('plugin deployment relative dependencies', () => {
       require('node:fs')
       import('./dynamic/' + name)
     `)).toEqual(['./value.cjs', '../lazy.mjs', './template.js'])
+  })
+
+  it('ignores bundled require parameters while preserving Node imports', () => {
+    expect(relativeSpecifiers(`
+      const modules = [function(require, module, exports) {
+        require('./bundled.js')
+        function nested() { require('./nested-bundle.js') }
+        import('./native-import.mjs')
+      }]
+      function native() { require('./native.cjs') }
+      require('./outside.cjs')
+    `)).toEqual(['./native-import.mjs', './native.cjs', './outside.cjs'])
   })
 
   it('ignores example code in strings, templates, comments and regular expressions', () => {
@@ -193,6 +231,33 @@ describe('plugin deployment relative dependencies', () => {
 })
 
 describe('plugin deployment documentation pruning', () => {
+  it('retains runtime modules imported with cache-busting query strings', async () => {
+    const root = deploymentFixture()
+    const plugin = join(root, 'plugin')
+    writeFileSync(join(plugin, 'index.js'), 'export { value } from "./runtime.js?v=1"')
+    writeFileSync(join(plugin, 'runtime.js'), 'export const value = 42')
+
+    pruneDeployment(root, ['plugin'])
+
+    expect(await import(pathToFileURL(join(plugin, 'index.js')).href)).toMatchObject({ value: 42 })
+  })
+
+  it('retains an exported root skill file for a bundled skill provider', () => {
+    const root = deploymentFixture()
+    const plugin = join(root, 'plugin')
+    const skill = '---\nname: genui\ndescription: Render interactive UI\n---\nUse the render tool.'
+    writeFileSync(join(plugin, 'package.json'), JSON.stringify({
+      exports: { '.': './index.js', './skill': './SKILL.md' },
+    }))
+    writeFileSync(join(plugin, 'SKILL.md'), skill)
+    writeFileSync(join(plugin, 'README.md'), 'Development instructions')
+
+    pruneDeployment(root, ['plugin'])
+
+    expect(readFileSync(join(plugin, 'SKILL.md'), 'utf8')).toBe(skill)
+    expect(existsSync(join(plugin, 'README.md'))).toBe(false)
+  })
+
   it('prunes documentation, sourcemaps and type declarations', () => {
     expect(isNonRuntimeFile(join('pkg', 'README.md'))).toBe(true)
     expect(isNonRuntimeFile(join('pkg', 'CHANGELOG.md'))).toBe(true)
@@ -203,7 +268,38 @@ describe('plugin deployment documentation pruning', () => {
   it('keeps attribution files and runtime code', () => {
     expect(isNonRuntimeFile(join('pkg', 'LICENSE'))).toBe(false)
     expect(isNonRuntimeFile(join('pkg', 'NOTICE.md'))).toBe(false)
+    expect(isNonRuntimeFile(join('pkg', 'THIRD_PARTY_NOTICES.md'))).toBe(false)
     expect(isNonRuntimeFile(join('pkg', 'dist', 'index.js'))).toBe(false)
+    expect(isNonRuntimeFile(join('pkg', 'dist', 'history-buffer.js'))).toBe(false)
+    expect(isNonRuntimeFile(join('pkg', 'src', 'history-command.mjs'))).toBe(false)
+  })
+
+  it('retains history modules referenced by runtime code', () => {
+    const root = deploymentFixture()
+    const plugin = join(root, 'plugin')
+    writeFileSync(join(plugin, 'index.js'), 'export { history } from "./history-buffer.js"')
+    writeFileSync(join(plugin, 'history-buffer.js'), 'export const history = []')
+
+    pruneDeployment(root, ['plugin'])
+
+    expect(readFileSync(join(plugin, 'history-buffer.js'), 'utf8')).toBe('export const history = []')
+  })
+
+  it('removes the unused DingTalk development CLI without removing SDK exports', () => {
+    const root = deploymentFixture()
+    const plugin = join(root, 'plugin')
+    const sdk = join(root, 'dingtalk-stream')
+    mkdirSync(join(sdk, 'dist'), { recursive: true })
+    writeFileSync(join(plugin, 'package.json'), JSON.stringify({ dependencies: { 'dingtalk-stream': '2.1.4' } }))
+    writeFileSync(join(plugin, 'index.js'), 'import "dingtalk-stream"')
+    writeFileSync(join(sdk, 'package.json'), JSON.stringify({ main: './dist/index.mjs' }))
+    writeFileSync(join(sdk, 'dist', 'index.mjs'), 'export const client = true')
+    writeFileSync(join(sdk, 'vite-node.mjs'), 'import("./dist/cli.mjs")')
+
+    pruneDeployment(root, ['plugin'])
+
+    expect(existsSync(join(sdk, 'vite-node.mjs'))).toBe(false)
+    expect(readFileSync(join(sdk, 'dist', 'index.mjs'), 'utf8')).toBe('export const client = true')
   })
 
   it('keeps skills packaged with a plugin for the skill provider to scan', () => {

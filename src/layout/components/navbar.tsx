@@ -41,9 +41,7 @@ const APP_IDENTIFIER_QUERY = {
 }
 
 const HELP_LINKS = {
-  'documentation': 'https://dshtauri.mintlify.site',
-  'desktop-feedback': 'https://github.com/dsh-tauri/deepseek-harness-desktop/issues',
-  'harness-feedback': 'https://trtgsjkv6r.feishu.cn/share/base/form/shrcnlCoGElW7MQznGy9r3YYXcg?hide_uid=1&hide_device_info=1&hide_harness_version=1',
+  documentation: 'https://dshtauri.mintlify.site',
 }
 
 /** 「文件」菜单的动作 id（宿主侧统一分发，避免菜单项内散落逻辑）。 */
@@ -195,7 +193,7 @@ export function Navbar({ sidebarCollapsed = false, onToggleSidebar, onNewChat, o
       void openAboutDialog().catch(() => { })
     else if (key === 'copy-run-logs')
       void copyRunLogs()
-    else if (key === 'documentation' || key === 'desktop-feedback' || key === 'harness-feedback')
+    else if (key === 'documentation')
       void openHelpLink(key)
     else if (key === 'keyboard-shortcuts')
       onOpenShortcuts?.()
@@ -344,12 +342,6 @@ export function Navbar({ sidebarCollapsed = false, onToggleSidebar, onNewChat, o
         break
       case 'desktop-documentation':
         void openHelpLink('documentation')
-        break
-      case 'desktop-feedback':
-        void openHelpLink('desktop-feedback')
-        break
-      case 'desktop-harness-feedback':
-        void openHelpLink('harness-feedback')
         break
       case 'desktop-keyboard-shortcuts':
         onOpenShortcuts?.()
@@ -582,23 +574,6 @@ export function Navbar({ sidebarCollapsed = false, onToggleSidebar, onNewChat, o
                   onAction={() => onHelpAction('keyboard-shortcuts')}
                 >
                   <ShortcutLabel label={t('menu.keyboard_shortcuts')} hint={shortcutHint(shortcutRows, 'shortcuts.open')} />
-                </Dropdown.Item>
-                <Separator />
-                <Dropdown.Item
-                  id="desktop-feedback"
-                  data-testid="dsh-navbar-item-desktop-feedback"
-                  textValue={t('menu.desktop_feedback')}
-                  onAction={() => onHelpAction('desktop-feedback')}
-                >
-                  <Label>{t('menu.desktop_feedback')}</Label>
-                </Dropdown.Item>
-                <Dropdown.Item
-                  id="harness-feedback"
-                  data-testid="dsh-navbar-item-harness-feedback"
-                  textValue={t('menu.harness_feedback')}
-                  onAction={() => onHelpAction('harness-feedback')}
-                >
-                  <Label>{t('menu.harness_feedback')}</Label>
                 </Dropdown.Item>
                 <Separator />
                 <Dropdown.Item

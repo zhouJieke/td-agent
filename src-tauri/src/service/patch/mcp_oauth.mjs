@@ -17,7 +17,8 @@ export function desktopMcpOAuth(sdk, credentials) {
   }
   const keyOf = row => `mcp-client/oauth-${oauthHash('sha256').update(`${row.serverName}\0${endpoint(row).href}`).digest('hex')}`
   const read = async key => (await credentials.readRecord(key))?.payload ?? {}
-  const write = (key, update) => credentials.modifyRecord(key, async current => ({ kind: 'grant', payload: update(current?.payload ?? {}) }))
+  const grant = payload => ({ kind: 'grant', payload: JSON.parse(JSON.stringify(payload)) })
+  const write = (key, update) => credentials.modifyRecord(key, async current => grant(update(current?.payload ?? {})))
   const fetchWithin = signal => (url, init) => fetch(url, { ...init, signal: AbortSignal.any([AbortSignal.timeout(15000), ...(signal ? [signal] : []), ...(init?.signal ? [init.signal] : [])]) })
   function provider(row, interaction, signal) {
     const key = keyOf(row)
@@ -82,7 +83,7 @@ export function desktopMcpOAuth(sdk, credentials) {
           }, false)
           Object.defineProperty(transaction, 'redirectUrl', { get: () => locked.redirectUrl ?? 'http://127.0.0.1/callback' })
           await sdk.auth(transaction, { serverUrl: endpoint(row), fetchFn: fetchWithin(signal) })
-          return { kind: 'grant', payload: locked }
+          return grant(locked)
         })
         data = await read(key)
       }
@@ -112,7 +113,7 @@ export function desktopMcpOAuth(sdk, credentials) {
           Object.defineProperty(transaction, 'redirectUrl', { get: () => locked.redirectUrl ?? 'http://127.0.0.1/callback' })
           const challenge = sdk.extractWWWAuthenticateParams(context.response)
           await sdk.auth(transaction, { serverUrl: endpoint(row), ...challenge, fetchFn: fetchWithin(signal) })
-          return { kind: 'grant', payload: locked }
+          return grant(locked)
         })
       },
     }

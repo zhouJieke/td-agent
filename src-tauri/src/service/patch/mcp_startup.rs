@@ -16,8 +16,48 @@ const OAUTH_SOURCE: &str = include_str!("mcp_oauth.mjs");
 const OAUTH_IMPORT: &str = "import * as desktopMcpSdk from \"@modelcontextprotocol/client\";\n";
 const TRANSPORT_ANCHOR: &str = "case \"streamable-http\": return new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers: config.headers } });";
 const TRANSPORT_PATCHED: &str = "case \"streamable-http\": return new StreamableHTTPClientTransport(new URL(config.url), { authProvider: desktopMcpOAuth(desktopMcpSdk, credentials).provider(config), requestInit: { headers: config.headers } });";
+const NEGOTIATION_ANCHOR: &str = "versionNegotiation: { mode: \"auto\" }";
+const CONNECT_ANCHOR: &str = "await generation.connect(transport);";
+const CONNECT_PATCHED: &str = r#"try {
+				await generation.connect(transport);
+			} catch (error) {
+				if (disposed || config.transport !== "streamable-http" || generation.transport !== void 0 || !(error instanceof desktopMcpSdk.SdkHttpError) || error.code !== desktopMcpSdk.SdkErrorCode.EraNegotiationFailed || error.status !== 500) throw error;
+				transport = createTransport(config, ctx.credentials);
+				await generation.connect(transport, { prior: { kind: "legacy" } });
+			}"#;
 
 fn patch_source(source: &str) -> PatchOutcome {
+    if source.matches(CONNECT_PATCHED).count() > 1 {
+        return PatchOutcome::AnchorMissing;
+    }
+    let normalized = source.replacen(CONNECT_PATCHED, CONNECT_ANCHOR, 1);
+    let patched = match patch_oauth_source(&normalized) {
+        PatchOutcome::Patched(patched) => patched,
+        PatchOutcome::AlreadyPatched => normalized,
+        outcome => return outcome,
+    };
+    let patched = if patched.contains(NEGOTIATION_ANCHOR) {
+        if patched.matches(NEGOTIATION_ANCHOR).count() != 1
+            || patched.matches(CONNECT_ANCHOR).count() != 1
+            || !patched.starts_with(OAUTH_IMPORT)
+        {
+            return PatchOutcome::AnchorMissing;
+        }
+        patched.replacen(CONNECT_ANCHOR, CONNECT_PATCHED, 1)
+    } else {
+        if source.contains(CONNECT_PATCHED) {
+            return PatchOutcome::AnchorMissing;
+        }
+        patched
+    };
+    if patched == source {
+        PatchOutcome::AlreadyPatched
+    } else {
+        PatchOutcome::Patched(patched)
+    }
+}
+
+fn patch_oauth_source(source: &str) -> PatchOutcome {
     if source.contains(OAUTH_IMPORT) || source.contains("desktopMcpOAuth") {
         let Some(start) = source.find(
             "\nimport { createHash as oauthHash, randomBytes as oauthRandom } from 'node:crypto'\n",
@@ -52,9 +92,11 @@ fn patch_source(source: &str) -> PatchOutcome {
         if helper == OAUTH_SOURCE {
             return PatchOutcome::AlreadyPatched;
         }
-        // #1101 已覆盖原始锚点，只替换完整已知尾部，拒绝未知追加源码。
-        return if format!("{:x}", Sha256::digest(helper.as_bytes()))
-            == "d2f9d978bb36c9324556af502fa92a45fe83e72818427b4d9969b8a23b376974"
+        return if [
+            "d2f9d978bb36c9324556af502fa92a45fe83e72818427b4d9969b8a23b376974",
+            "9aa1dc3cf7c75f913688b411607a2858c38a4a96132c5ba3c60630581d3333b9",
+        ]
+        .contains(&format!("{:x}", Sha256::digest(helper.as_bytes())).as_str())
         {
             PatchOutcome::Patched(format!("{prefix}{OAUTH_SOURCE}"))
         } else {
@@ -120,6 +162,48 @@ mod tests {
     use super::*;
 
     const OAUTH_1101: &str = include_str!("../../../../test/fixtures/mcp-oauth-1101.mjs");
+    const OAUTH_BEFORE_JSON: &str =
+        include_str!("../../../../test/fixtures/mcp-oauth-before-json.mjs");
+
+    #[test]
+    fn upgrades_http_negotiation_on_fresh_and_existing_oauth_sources() {
+        let original = format!("function createTransport(config) {{\n{TRANSPORT_ANCHOR}\n}}\ntransport = createTransport(config);\n{NEGOTIATION_ANCHOR}\n{CONNECT_ANCHOR}\nconst inject = [\"tools\"];\n{READY_ANCHOR}");
+        let current = format!(
+            "{}{OAUTH_SOURCE}",
+            oauth_prefix(&format!("transport = createTransport(config, ctx.credentials);\n{NEGOTIATION_ANCHOR}\n{CONNECT_ANCHOR}"))
+        );
+        for source in [original, current] {
+            let PatchOutcome::Patched(patched) = patch_source(&source) else {
+                panic!("expected negotiation fallback patch")
+            };
+            assert_eq!(patched.matches(CONNECT_PATCHED).count(), 1);
+            assert_eq!(patched.matches(OAUTH_SOURCE).count(), 1);
+            assert_eq!(patch_source(&patched), PatchOutcome::AlreadyPatched);
+            assert_eq!(
+                patch_source(&patched.replacen(NEGOTIATION_ANCHOR, "", 1)),
+                PatchOutcome::AnchorMissing
+            );
+        }
+    }
+
+    #[test]
+    fn negotiation_patch_rejects_missing_or_duplicate_connection_anchors() {
+        let prefix = oauth_prefix(&format!("transport = createTransport(config, ctx.credentials);\n{NEGOTIATION_ANCHOR}\n{CONNECT_ANCHOR}"));
+        for anchor in [NEGOTIATION_ANCHOR, CONNECT_ANCHOR] {
+            let source = format!("{prefix}{OAUTH_SOURCE}");
+            assert_eq!(
+                patch_source(&source.replacen(anchor, &format!("{anchor}\n{anchor}"), 1)),
+                PatchOutcome::AnchorMissing
+            );
+        }
+        assert_eq!(
+            patch_source(&format!(
+                "{}{OAUTH_SOURCE}",
+                prefix.replace(CONNECT_ANCHOR, "")
+            )),
+            PatchOutcome::AnchorMissing
+        );
+    }
 
     fn oauth_prefix(call: &str) -> String {
         r#"import * as desktopMcpSdk from "@modelcontextprotocol/client";
@@ -150,25 +234,35 @@ export { activate, inject };
     }
 
     #[test]
-    fn upgrades_1101_oauth_helper_without_changing_core_wiring() {
-        assert!(
-            OAUTH_1101 != OAUTH_SOURCE,
-            "upgrade requires a newer OAuth helper"
+    fn oauth_upgrade_fixture_matches_the_pre_json_helper() {
+        assert_eq!(
+            format!("{:x}", Sha256::digest(OAUTH_BEFORE_JSON.as_bytes())),
+            "9aa1dc3cf7c75f913688b411607a2858c38a4a96132c5ba3c60630581d3333b9"
         );
-        for call in [
-            "transport = createTransport(config, ctx.credentials);",
-            "generation.connect(createTransport(config, ctx.credentials));",
-        ] {
-            let prefix = oauth_prefix(call);
-            let source = format!("{prefix}{OAUTH_1101}");
-            let outcome = patch_source(&source);
-            let PatchOutcome::Patched(patched) = outcome else {
-                panic!("expected #1101 helper upgrade for {call}, got {outcome:?}");
-            };
-            assert_eq!(patched, format!("{prefix}{OAUTH_SOURCE}"));
-            assert_eq!(patched.matches(OAUTH_SOURCE).count(), 1);
-            assert!(!patched.contains(OAUTH_1101));
-            assert_eq!(patch_source(&patched), PatchOutcome::AlreadyPatched);
+    }
+
+    #[test]
+    fn upgrades_known_oauth_helpers_without_changing_core_wiring() {
+        for helper in [OAUTH_1101, OAUTH_BEFORE_JSON] {
+            assert!(
+                helper != OAUTH_SOURCE,
+                "upgrade requires a newer OAuth helper"
+            );
+            for call in [
+                "transport = createTransport(config, ctx.credentials);",
+                "generation.connect(createTransport(config, ctx.credentials));",
+            ] {
+                let prefix = oauth_prefix(call);
+                let source = format!("{prefix}{helper}");
+                let outcome = patch_source(&source);
+                let PatchOutcome::Patched(patched) = outcome else {
+                    panic!("expected OAuth helper upgrade for {call}, got {outcome:?}");
+                };
+                assert_eq!(patched, format!("{prefix}{OAUTH_SOURCE}"));
+                assert_eq!(patched.matches(OAUTH_SOURCE).count(), 1);
+                assert!(!patched.contains(helper));
+                assert_eq!(patch_source(&patched), PatchOutcome::AlreadyPatched);
+            }
         }
     }
 
@@ -183,7 +277,7 @@ export { activate, inject };
 
     #[test]
     fn oauth_patches_reject_missing_or_duplicate_wiring() {
-        for helper in [OAUTH_1101, OAUTH_SOURCE] {
+        for helper in [OAUTH_1101, OAUTH_BEFORE_JSON, OAUTH_SOURCE] {
             let source = format!(
                 "{}{helper}",
                 oauth_prefix("transport = createTransport(config, ctx.credentials);")
@@ -225,7 +319,7 @@ export { activate, inject };
 
     #[test]
     fn oauth_patches_reject_unknown_or_unbounded_helpers() {
-        for helper in [OAUTH_1101, OAUTH_SOURCE] {
+        for helper in [OAUTH_1101, OAUTH_BEFORE_JSON, OAUTH_SOURCE] {
             let prefix = oauth_prefix("transport = createTransport(config, ctx.credentials);");
             for (case, tail) in [
                 (
@@ -259,7 +353,9 @@ export { activate, inject };
     #[test]
     fn patch_read_failure_is_reported_before_launch() {
         let core = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(core.path().join(MCP_INDEX_JS)).unwrap();
+        let target = core.path().join(MCP_INDEX_JS);
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        std::fs::write(target, [0xff]).unwrap();
         let error = apply_at(core.path()).expect_err("unreadable MCP file must fail");
         assert!(error.starts_with("DSH_PATCH_READ:"));
     }

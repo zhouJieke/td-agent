@@ -228,8 +228,6 @@ describe('native View menu recipients', () => {
 describe('native Help menu links', () => {
   it.each([
     ['desktop-documentation', 'https://dshtauri.mintlify.site'],
-    ['desktop-feedback', 'https://github.com/dsh-tauri/deepseek-harness-desktop/issues'],
-    ['desktop-harness-feedback', 'https://trtgsjkv6r.feishu.cn/share/base/form/shrcnlCoGElW7MQznGy9r3YYXcg?hide_uid=1&hide_device_info=1&hide_harness_version=1'],
   ])('opens the expected destination for %s', async (action, url) => {
     render(<Navbar />)
     await waitFor(() => expect([...listeners.values()].filter(listener => listener.event === 'macos-menu-action')).toHaveLength(1))

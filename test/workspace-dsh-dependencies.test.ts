@@ -28,7 +28,9 @@ describe('workspace DSH development dependency ownership', () => {
       .map(([, name, version]) => [name, version])
     expect(Object.fromEntries(entries)).toEqual(Object.fromEntries(names.map(name => [name, '0.2.1-rc.2'])))
     const lockfile = readFileSync(new URL('pnpm-lock.yaml', root), 'utf8')
-    expect(lockfile).not.toContain('0.2.1-rc.1')
+    const resolvedCoreVersions = [...lockfile.matchAll(/^ {2}'?@deepseek-ai\/dsh-[^@\r\n]+@([^'(:\r\n]+)/gm)]
+      .map(([, version]) => version)
+    expect(resolvedCoreVersions).not.toContain('0.2.1-rc.1')
     for (const name of names)
       expect(lockfile).toContain(`'${name}':\n      specifier: 0.2.1-rc.2\n      version: 0.2.1-rc.2`)
   })

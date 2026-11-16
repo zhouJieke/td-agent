@@ -39,8 +39,6 @@ vi.mock('@/utils/toast', () => ({ toast }))
 
 const HELP_DESTINATIONS = [
   ['documentation', 'https://dshtauri.mintlify.site'],
-  ['desktop-feedback', 'https://github.com/dsh-tauri/deepseek-harness-desktop/issues'],
-  ['harness-feedback', 'https://trtgsjkv6r.feishu.cn/share/base/form/shrcnlCoGElW7MQznGy9r3YYXcg?hide_uid=1&hide_device_info=1&hide_harness_version=1'],
 ] as const
 
 async function selectHelpLink(id: string) {
@@ -149,12 +147,12 @@ describe('help menu links', () => {
     expect(toast).not.toHaveBeenCalled()
   })
 
-  it('reports a clipboard failure once when copying a failed feedback link', async () => {
+  it('reports a clipboard failure once when copying a failed documentation link', async () => {
     const failure = new Error('clipboard unavailable')
     const log = vi.spyOn(console, 'error').mockImplementation(() => {})
     openUrl.mockRejectedValue(new Error('browser unavailable'))
     writeText.mockRejectedValue(failure)
-    await selectHelpLink('desktop-feedback')
+    await selectHelpLink('documentation')
     await waitFor(() => expect(toast).toHaveBeenCalledOnce())
 
     await act(async () => toast.mock.calls[0]![1]!.actionProps!.onPress())
