@@ -1,5 +1,4 @@
 import type { Translate } from '../locales/index.types'
-import type { ImportedServerView } from '../types'
 
 export type McpEditorMode = 'json' | 'form'
 
@@ -13,12 +12,6 @@ export interface McpEditorState {
   env: string
   url: string
   headers: string
-}
-
-export interface McpImportItem {
-  server: ImportedServerView
-  existing: boolean
-  checked: boolean
 }
 
 export interface ParsedMcpJson {

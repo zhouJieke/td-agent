@@ -15,7 +15,6 @@ vi.mock('dsh-tauri-ui/client', async () => {
   return { cssr, mountStyle, SegmentedControl, SlotOutlet: () => null }
 })
 vi.mock('../components/skills-tab', () => ({ SkillsTab: () => <section>Skills</section> }))
-vi.mock('../components/mcp-tab', () => ({ McpTab: () => <section>MCP</section> }))
 
 const disposers: Array<() => void> = []
 const styleSelector = `style[cssr-id="${PANEL_ID}-plugins"]`
@@ -169,7 +168,7 @@ describe('embedded official plugin headers', () => {
     install()
     const view = renderPanel()
     const tabs = view.getAllByRole('tab')
-    expect(tabs.map(tab => tab.textContent)).toEqual(['插件', 'MCP'])
+    expect(tabs.map(tab => tab.textContent)).toEqual(['插件'])
     expect(tabs[0]?.getAttribute('aria-selected')).toBe('true')
     const mainTitle = view.getByRole('heading', { name: '官方插件', level: 1 })
     expect(getComputedStyle(mainTitle).paddingLeft).toBe('32px')
@@ -293,18 +292,18 @@ describe('embedded official plugin headers', () => {
     expect(view.getByRole('heading', { name: '官方插件', level: 1 })).toBeTruthy()
   })
 
-  it('cleans detached buttons on tab switches and patches the next mount once', async () => {
+  it('cleans detached buttons on page switches and patches the next mount once', async () => {
     install()
     const view = renderPanel()
     fireEvent.click(view.getByRole('button', { name: '更多' }))
     await waitFor(() => expect(view.getByRole('button', { name: '回退' })).toBeTruthy())
     const back = view.getByRole('button', { name: '回退' })
-    fireEvent.click(view.getByRole('tab', { name: 'MCP' }))
+    fireEvent.click(back)
     await waitFor(() => expect(back.querySelector('span')).toBeNull())
     expect(back.isConnected).toBe(false)
     expect(back.getAttribute('aria-label')).toBe('返回插件')
     expect(back.hasAttribute('data-dsh-plugins-back')).toBe(false)
-    fireEvent.click(view.getByRole('tab', { name: '插件' }))
+    expect(view.getByRole('heading', { name: '官方插件', level: 1 })).toBeTruthy()
     fireEvent.click(view.getByRole('button', { name: '更多' }))
     await waitFor(() => expect(view.getAllByRole('button', { name: '回退' })).toHaveLength(1))
     expect(view.getByRole('button', { name: '回退' })).not.toBe(back)

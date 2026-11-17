@@ -18,10 +18,10 @@ describe('native application identity', () => {
 
   it('nightly uses a separate notification identity and its bundled icon', () => {
     expect(nightly.identifier).toBe('dsh-tauri-nightly')
-    expect(nightly.productName).toBe('DSH Tauri Nightly')
+    expect(nightly.productName).toBe('Td-Agent Nightly')
     expect(nightly.mainBinaryName).toBe('deepseek-harness-desktop-nightly')
     expect(config.identifier).toBe('dsh-tauri')
-    expect(config.productName).toBe('DSH Tauri')
+    expect(config.productName).toBe('Td-Agent')
     expect(nightly.plugins.notifications.windows.toastActivatorClsid).toBe('77B0D48C-22BB-46A8-B57D-895B403B3148')
     expect(nightly.plugins.notifications.windows.toastActivatorClsid).not.toBe(config.plugins.notifications.windows.toastActivatorClsid)
     expect(nightly.plugins.notifications.windows.iconPath).toBe('icons/nightly/32x32.png')

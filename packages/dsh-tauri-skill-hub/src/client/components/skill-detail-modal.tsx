@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { closeSkillDetail } from '../service/skill'
 import { store } from '../store'
 import { MarkdownPreview } from './markdown'
+import { SkillDownloadHints } from './skill-download'
 
 /** 企业/我的技能的只读详情弹窗：版式对齐本地技能编辑器，仅展示、不提供保存。 */
 export function SkillDetailModal({ t }: { t: Translate }): ReactElement {
@@ -29,6 +30,7 @@ export function SkillDetailModal({ t }: { t: Translate }): ReactElement {
           <Field label={t('skillDescription')}>
             <Input value={detail.description} disabled />
           </Field>
+          <SkillDownloadHints t={t} name={detail.name} latestVersion={detail.latestVersion} />
           {detail.local
             ? (
                 <>

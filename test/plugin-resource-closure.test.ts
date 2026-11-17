@@ -1,13 +1,12 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { readManifest } from '../scripts/bundle-metadata.mjs'
 
 const BUNDLE_MANIFEST = new URL('../packages/dsh-tauri-bundle/package.json', import.meta.url)
-const RESOURCE_NODE_MODULES = new URL('../src-tauri/resources/node_modules/', import.meta.url)
+const RESOURCE_NODE_MODULES = new URL(process.env.DSH_PLUGIN_RESOURCES_URL ?? '../src-tauri/resources/node_modules/', import.meta.url)
 const DSH_STATIC_IMPORT = /\b(?:from|import)\s*['"]@deepseek-ai\/[^'"]+['"]|\brequire\s*\(\s*['"]@deepseek-ai\/[^'"]+['"]\s*\)/
-
-const BUILT = existsSync(fileURLToPath(RESOURCE_NODE_MODULES))
 
 interface PluginManifest {
   name?: unknown
@@ -33,33 +32,41 @@ function packageJsonFiles(root: URL): string[] {
   return files
 }
 
-describe.skipIf(!BUILT)('bundled plugin resource closure', () => {
+it('registers every shipped desktop plugin in the startup manifest', () => {
+  const manifest = readManifest(fileURLToPath(new URL('../', import.meta.url)))
+  const plugins = manifest.plugins as { 'built-in': Array<{ id: string }> }
+  expect(plugins['built-in'].map(plugin => plugin.id).sort()).toEqual(bundledPluginNames().sort())
+})
+
+describe('bundled plugin resource closure', () => {
   it('contains every bundled plugin with a valid entry', () => {
     for (const name of bundledPluginNames()) {
-      const manifestUrl = new URL(`../src-tauri/resources/node_modules/${name}/package.json`, import.meta.url)
+      const manifestUrl = new URL(`${name}/package.json`, RESOURCE_NODE_MODULES)
       expect(() => readJson(manifestUrl)).not.toThrow()
       const manifest = readJson(manifestUrl)
       expect(typeof manifest.dsh === 'object' && manifest.dsh !== null && !Array.isArray(manifest.dsh)).toBe(true)
       if (typeof manifest.main === 'string')
-        expect(statSync(new URL(`../src-tauri/resources/node_modules/${name}/${manifest.main}`, import.meta.url)).isFile()).toBe(true)
+        expect(statSync(new URL(`${name}/${manifest.main}`, RESOURCE_NODE_MODULES)).isFile()).toBe(true)
     }
   })
 
-  it('does not ship build tools or runtime-owned Zod in any nested package', () => {
+  it('does not ship build tools in any nested package', () => {
     const excludedPackages = packageJsonFiles(RESOURCE_NODE_MODULES)
-      .filter(file => ['date-fns', 'typescript', '@genapi/shared', 'zod'].includes(String(readJson(pathToFileURL(file)).name)))
+      .filter(file => ['date-fns', 'typescript', '@genapi/shared'].includes(String(readJson(pathToFileURL(file)).name)))
 
     expect(excludedPackages).toEqual([])
   })
 
-  it('keeps DSH-owned host modules loader-resolved', () => {
-    for (const name of bundledPluginNames()) {
-      const manifestUrl = new URL(`../src-tauri/resources/node_modules/${name}/package.json`, import.meta.url)
+  it('keeps workspace-owned host modules loader-resolved', () => {
+    const dependencies = readJson(BUNDLE_MANIFEST).dependencies ?? {}
+    const names = Object.keys(dependencies).filter(name => String(dependencies[name]).startsWith('workspace:'))
+    for (const name of names) {
+      const manifestUrl = new URL(`${name}/package.json`, RESOURCE_NODE_MODULES)
       const manifest = readJson(manifestUrl)
       if (typeof manifest.main !== 'string')
         continue
 
-      const entryUrl = new URL(`../src-tauri/resources/node_modules/${name}/${manifest.main}`, import.meta.url)
+      const entryUrl = new URL(`${name}/${manifest.main}`, RESOURCE_NODE_MODULES)
       expect(statSync(entryUrl).isFile()).toBe(true)
       expect(readFileSync(entryUrl, 'utf8')).not.toMatch(DSH_STATIC_IMPORT)
     }

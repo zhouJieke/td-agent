@@ -33,11 +33,6 @@ pub(crate) const HMR_PATCH_FILENAME: &str = "cordis.hmr.patch.yml";
 const HMR_ENTRY_ID: &str = "hmr";
 const HMR_ENTRY_NAME: &str = "@deepseek-ai/dsh-hmr";
 
-/// picomatch 的「转义反斜杠」写法 `[/\]` 需要两个真实反斜杠字符：裸反斜杠在 Windows
-/// 上永不匹配（核心默认的 `**/node_modules` 在本机因此是失效的，这里连同 `cache` /
-/// `data` 一起显式给出，逐条实测过 16 组路径）。
-const BS: &str = "\\\\";
-
 /// 与核心默认值一致的 debounce（毫秒）；显式写出因为 `config` 是整体替换。
 const HMR_DEBOUNCE_MS: u64 = 100;
 
@@ -333,12 +328,18 @@ fn render_layer(roots: &[PathBuf]) -> Option<String> {
         "
     ignored:",
     );
-    for pattern in ignore_patterns() {
+    for pattern in [
+        "**/node_modules",
+        "**/node_modules/**",
+        "**/.*",
+        "cache",
+        "data",
+    ] {
         yaml.push_str(
             "
       - '",
         );
-        yaml.push_str(&pattern);
+        yaml.push_str(pattern);
         yaml.push('\'');
     }
     yaml.push_str(
@@ -357,17 +358,6 @@ fn root_value(base: &Path, root: &Path) -> String {
         root.to_string_lossy()
             .replace(std::path::MAIN_SEPARATOR, "/")
     }
-}
-
-fn ignore_patterns() -> Vec<String> {
-    vec![
-        format!("**[/{BS}]node_modules"),
-        format!("**[/{BS}]node_modules[/{BS}]**"),
-        format!("node_modules[/{BS}]**"),
-        format!("**[/{BS}].*"),
-        "cache".to_string(),
-        "data".to_string(),
-    ]
 }
 
 fn write_layer(path: &Path, rendered: &str) -> Result<(), String> {
@@ -435,27 +425,6 @@ mod tests {
             return;
         };
         std::fs::write(Path::new(&dir).join(name), yaml).unwrap();
-    }
-
-    #[test]
-    fn ignore_patterns_escape_the_backslash_twice() {
-        let patterns = ignore_patterns();
-        assert_eq!(
-            patterns,
-            vec![
-                "**[/\\\\]node_modules".to_string(),
-                "**[/\\\\]node_modules[/\\\\]**".to_string(),
-                "node_modules[/\\\\]**".to_string(),
-                "**[/\\\\].*".to_string(),
-                "cache".to_string(),
-                "data".to_string(),
-            ]
-        );
-        // 每个 `[/\]` 转义段都必须落成两个真实反斜杠：单个反斜杠在 picomatch 里
-        // 被当成转义符，模式永不匹配（这正是核心默认规则在本机失效的原因）。
-        for pattern in &patterns {
-            assert!(!pattern.contains("[/\\]"), "{pattern}");
-        }
     }
 
     #[test]
@@ -637,7 +606,7 @@ mod tests {
         assert_eq!(config["root"].as_sequence().unwrap().len(), 2, "{yaml}");
         assert_eq!(config["root"][0].as_str(), Some("mine"));
         assert_eq!(config["root"][1].as_str(), Some("other/sub"));
-        assert_eq!(config["ignored"].as_sequence().unwrap().len(), 6);
+        assert_eq!(config["ignored"].as_sequence().unwrap().len(), 5);
         assert_eq!(config["debounce"].as_u64(), Some(HMR_DEBOUNCE_MS));
 
         // 逐字固定整份补丁层：核心按 id 整块替换 config，任何字段写错或漏写都会被静默忽略。
@@ -651,10 +620,9 @@ mod tests {
             "      - mine",
             "      - other/sub",
             "    ignored:",
-            "      - '**[/\\\\]node_modules'",
-            "      - '**[/\\\\]node_modules[/\\\\]**'",
-            "      - 'node_modules[/\\\\]**'",
-            "      - '**[/\\\\].*'",
+            "      - '**/node_modules'",
+            "      - '**/node_modules/**'",
+            "      - '**/.*'",
             "      - 'cache'",
             "      - 'data'",
             "    debounce: 100",

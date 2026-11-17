@@ -1,3 +1,4 @@
+import process from 'node:process'
 import { defineService } from 'dsh-tauri'
 
 const DEFAULT_SKILL_BACKEND_BASE = 'http://127.0.0.1:8099'

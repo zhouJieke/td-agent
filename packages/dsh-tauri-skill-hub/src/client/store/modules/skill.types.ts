@@ -45,6 +45,7 @@ export interface SkillDetailState {
   content: string
   local: boolean
   contentLoading: boolean
+  latestVersion?: string
 }
 
 /** 面板可变状态：三份接口数据是唯一真值，页签与检索词是视图状态。 */

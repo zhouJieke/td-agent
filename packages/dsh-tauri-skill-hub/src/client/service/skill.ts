@@ -100,6 +100,7 @@ export function openSkillDetail(summary: SkillSummary): void {
     content: '',
     local: false,
     contentLoading: true,
+    latestVersion: summary.labels.latest,
   })
   void loadSkillDetail(summary)
 }
@@ -128,6 +129,7 @@ async function loadSkillDetail(summary: SkillSummary): Promise<void> {
       content: contentResult.content,
       local: true,
       contentLoading: false,
+      latestVersion: summary.labels.latest,
     })
   }
   catch {

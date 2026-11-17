@@ -66,8 +66,8 @@ afterEach(async () => {
 })
 
 describe('桌面钉钉扫码登录', () => {
-  it.each(['authenticated', 'local'])('退出 %s 工作台后清除个人信息并回到扫码页', async (mode) => {
-    let saved = mode === 'authenticated' ? session : null
+  it('退出企业工作台后清除个人信息并回到扫码页', async () => {
+    let saved: typeof session | null = session
     ipc.invoke.mockImplementation(async (command) => {
       if (command === 'desktop_auth_session')
         return saved
@@ -76,10 +76,6 @@ describe('桌面钉钉扫码登录', () => {
       return null
     })
     renderPage(<DesktopEntry />)
-    if (mode === 'local') {
-      await screen.findByRole('img', { name: 'login.qr_alt' })
-      fireEvent.click(screen.getByRole('button', { name: 'login.continue_local' }))
-    }
     await screen.findByTestId('running-harness')
     saved = null
     expect(ipc.loggedOut).toBeTypeOf('function')
@@ -224,7 +220,7 @@ describe('桌面钉钉扫码登录', () => {
     ipc.native = false
     renderPage()
     expect(screen.getByText('login.desktop_required')).not.toBeNull()
-    expect((screen.getByRole('button', { name: 'login.continue_local' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: 'login.continue_local' })).toBeNull()
     expect(ipc.invoke).not.toHaveBeenCalled()
   })
 
@@ -311,13 +307,13 @@ describe('桌面钉钉扫码登录', () => {
     expect(ipc.invoke.mock.calls.filter(([name]) => name === 'desktop_auth_begin')).toHaveLength(0)
   })
 
-  it('进入本地工作台时取消未完成的扫码票据', async () => {
+  it('未登录时显示扫码入口，不再提供分隔线和本地工作台按钮', async () => {
     renderPage(<DesktopEntry />)
     await screen.findByRole('img', { name: 'login.qr_alt' })
-    fireEvent.click(screen.getByRole('button', { name: 'login.continue_local' }))
-    await screen.findByTestId('running-harness')
-    expect(ipc.invoke).toHaveBeenCalledWith('desktop_auth_cancel')
-    expect(auth.ticket).toBeNull()
+    expect(screen.queryByText('login.or')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'login.continue_local' })).toBeNull()
+    expect(screen.queryByTestId('running-harness')).toBeNull()
+    expect(auth.ticket).toEqual(qr)
   })
   it('进入工作台后在 access token 到期前静默续期', async () => {
     vi.useFakeTimers()

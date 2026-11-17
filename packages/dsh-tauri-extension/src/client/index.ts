@@ -7,6 +7,7 @@ import {
 } from './constants'
 import { locale } from './locales'
 import { extensionPanelFeature } from './register/extension-panel'
+import { mcpPanelFeature } from './register/mcp-panel'
 import { skillCreatorPrefillFeature } from './register/skill-creator-prefill'
 
 export const name = PLUGIN_ID
@@ -17,4 +18,5 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(locale.registerLocale, LOCALE_EFFECT)
   ctx.effect(skillCreatorPrefillFeature, SKILL_CREATOR_PREFILL_EFFECT)
   ctx.effect(extensionPanelFeature, EXTENSION_PANEL_EFFECT)
+  ctx.effect(mcpPanelFeature, `${PLUGIN_ID}: mcp panel`)
 }

@@ -246,6 +246,7 @@ pub(super) fn prepare(
             patch::renderer::apply_at as fn(&Path) -> Result<(), String>,
         ),
         ("composer workspace-less patch", patch::composer::apply_at),
+        ("desktop branding patch", patch::branding::apply_at),
         (
             "conversation draft compatibility patch",
             patch::conversation_draft::apply_at,

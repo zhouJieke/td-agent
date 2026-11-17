@@ -26,7 +26,7 @@
     "lint": "eslint",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --project tsconfig.typecheck.json --noEmit",
-    "icons": "tauri icon public/deepseek-harness-desktop-tauri.svg --output src-tauri/icons && tauri icon public/deepseek-harness-desktop-tauri-nightly.svg --output src-tauri/icons/nightly --ios-color \"#000000\" && tsx scripts/rebuild-macos-icon.ts",
+    "icons": "tsx scripts/generate-icons.ts",
     "dev:native": "expo start --dev-client",
     "android": "expo run:android",
     "ios": "expo run:ios",

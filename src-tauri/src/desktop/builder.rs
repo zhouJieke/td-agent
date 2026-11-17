@@ -386,13 +386,6 @@ pub fn install_macos_menu(app: &tauri::AppHandle<Wry>) -> tauri::Result<()> {
         None::<&str>,
     )?;
     let about_separator = PredefinedMenuItem::separator(app)?;
-    let check_update = MenuItem::with_id(
-        app,
-        "desktop-check-update",
-        crate::config::i18n::t("menu.check_update"),
-        true,
-        None::<&str>,
-    )?;
     let settings_separator = PredefinedMenuItem::separator(app)?;
     let services =
         PredefinedMenuItem::services(app, Some(&crate::config::i18n::t("menu.services")))?;
@@ -416,7 +409,6 @@ pub fn install_macos_menu(app: &tauri::AppHandle<Wry>) -> tauri::Result<()> {
             &about,
             &about_separator,
             &config,
-            &check_update,
             &settings_separator,
             &services,
             &services_separator,
@@ -464,21 +456,6 @@ pub fn install_macos_menu(app: &tauri::AppHandle<Wry>) -> tauri::Result<()> {
         true,
         None::<&str>,
     )?;
-    let desktop_feedback = MenuItem::with_id(
-        app,
-        "desktop-feedback",
-        crate::config::i18n::t("menu.desktop_feedback"),
-        true,
-        None::<&str>,
-    )?;
-    let harness_feedback = MenuItem::with_id(
-        app,
-        "desktop-harness-feedback",
-        crate::config::i18n::t("menu.harness_feedback"),
-        true,
-        None::<&str>,
-    )?;
-    let feedback_separator = PredefinedMenuItem::separator(app)?;
     let help_menu = Submenu::with_id_and_items(
         app,
         "desktop-help-menu",
@@ -488,9 +465,6 @@ pub fn install_macos_menu(app: &tauri::AppHandle<Wry>) -> tauri::Result<()> {
             &documentation,
             &keyboard_shortcuts,
             &help_separator,
-            &desktop_feedback,
-            &harness_feedback,
-            &feedback_separator,
             &run_logs,
             &toggle_devtools,
             &task_manager,
@@ -1663,7 +1637,7 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
     }
 
     let builder = builder
-        .manage(crate::service::auth::AuthService::default())
+        .manage(std::sync::Arc::new(crate::service::auth::AuthService::default()))
         .setup(|app| {
             let app_handle = app.handle().clone();
             crate::desktop::autostart::init(&app_handle)?;
@@ -1700,7 +1674,7 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
                     }
                 }
             }
-            "desktop-documentation" | "desktop-feedback" | "desktop-harness-feedback" => {
+            "desktop-documentation" => {
                 let windows = app.webview_windows();
                 let target = help_menu_window_label(
                     windows
@@ -1736,7 +1710,6 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
             | "desktop-about"
             | "desktop-copy-run-logs"
             | "desktop-toggle-devtools"
-            | "desktop-check-update"
             | "desktop-restart"
             | "desktop-keyboard-shortcuts"
             | "desktop-new-window"
@@ -1825,7 +1798,7 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
                 let label = window.label().to_owned();
                 tauri::async_runtime::spawn(async move {
                     if let Err(error) = app
-                        .state::<crate::service::auth::AuthService>()
+                        .state::<std::sync::Arc<crate::service::auth::AuthService>>()
                         .cancel(&label)
                         .await
                     {

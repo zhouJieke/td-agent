@@ -90,6 +90,8 @@ describe('desktop updater operation coordination', () => {
   })
 
   it('refreshes native installer state when the release tag is unchanged', async () => {
+    const { setting } = await import('../setting')
+    setting.$patch({ auto_update: true })
     const download = deferred<DesktopUpdateInfo>()
     const refreshed = { ...UPDATE, path: 'C:/replacement-installer.exe', downloaded: false }
     desktopUpdater.updateInfo = { ...UPDATE, path: 'C:/removed-installer.exe' }

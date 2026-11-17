@@ -92,6 +92,8 @@ struct DevPluginPackageJson {
     repository: Option<serde_json::Value>,
     #[serde(default)]
     dsh: Option<serde_json::Value>,
+    #[serde(default)]
+    dependencies: std::collections::BTreeMap<String, String>,
 }
 
 #[cfg(debug_assertions)]
@@ -132,23 +134,44 @@ fn discover_dev_internal_plugins_at(root: &Path) -> Vec<DevPluginCandidate> {
     let Ok(entries) = std::fs::read_dir(root) else {
         return Vec::new();
     };
-    let mut entries: Vec<_> = entries
+    let mut directories: Vec<_> = entries
         .filter_map(Result::ok)
         .filter_map(|entry| {
             entry
                 .file_type()
                 .ok()
                 .filter(|file_type| file_type.is_dir())
-                .map(|_| entry)
+                .map(|_| entry.path())
         })
         .collect();
-    entries.sort_by_key(|entry| entry.file_name());
+    directories.sort();
+    let bundle = root.join("dsh-tauri-bundle");
+    if let Some(manifest) = std::fs::read_to_string(bundle.join("package.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_str::<DevPluginPackageJson>(&raw).ok())
+    {
+        directories.extend(
+            manifest
+                .dependencies
+                .iter()
+                .filter_map(|(name, specifier)| {
+                    let path = if let Some(path) = specifier.strip_prefix("workspace:") {
+                        if !path.starts_with("../") && !path.starts_with("./") {
+                            return None;
+                        }
+                        bundle.join(path)
+                    } else {
+                        bundle.join("node_modules").join(name)
+                    };
+                    std::fs::canonicalize(path).ok()
+                }),
+        );
+    }
 
     let mut seen = HashSet::new();
-    entries
+    directories
         .into_iter()
-        .filter_map(|entry| {
-            let directory = entry.path();
+        .filter_map(|directory| {
             let manifest_path = directory.join("package.json");
             let raw = std::fs::read_to_string(&manifest_path).ok()?;
             let manifest = match serde_json::from_str::<DevPluginPackageJson>(&raw) {
@@ -646,8 +669,6 @@ mod tests {
         }
     }
 
-    /// 内置条目默认不声明版本矩阵、对任何核心版本都兼容；通用矩阵机制仍在生效——
-    /// 显式声明后依旧走 unsupported 判定，只是当前没有任何内置条目使用它。
     #[test]
     fn internal_manifest_defaults_to_compatible_and_honours_declared_ceiling() {
         let internal = load_internal_for_test();
@@ -656,9 +677,17 @@ mod tests {
         assert!(
             internal
                 .iter()
+                .filter(|p| p.id.starts_with("dsh-tauri"))
                 .all(|p| p.version.is_none() && !p.unsupported_on(Some("9.9.9"))),
-            "no internal entry declares a core matrix, so every one stays compatible"
+            "desktop-owned plugins retain their unrestricted core compatibility"
         );
+
+        let im = internal.iter().find(|p| p.id == "@xmanrui/dsh-im").unwrap();
+        assert_eq!(im.version, Some(matrix(&[("5.10.0", "0.2.1-rc.2")])));
+        assert!(!im.unsupported_on(Some("0.2.1-rc.2")));
+        assert!(im.unsupported_on(Some("0.1.7-rc.1")));
+        assert!(im.unsupported_on(Some("0.2.0-rc.2")));
+        assert!(im.unsupported_on(Some("0.3.0")));
 
         let mut capped = internal[0].clone();
         capped.version = Some(matrix(&[("^1.0.0", "^0.1.5-rc.1")]));
@@ -669,6 +698,41 @@ mod tests {
         // 下界之下的预发布核心依旧不兼容
         assert!(capped.unsupported_on(Some("0.1.4-rc.1")));
         assert!(capped.unsupported_on(Some("0.2.0")));
+    }
+
+    #[test]
+    fn published_plugin_matrices_select_pinned_versions_for_the_recommended_core() {
+        let internal = load_internal_for_test();
+        for (id, pinned) in [
+            ("@changfenhuang/dsh-genui", "0.16.0"),
+            ("dsh-inner-browser-use", "0.47.98"),
+        ] {
+            let plugin = internal.iter().find(|p| p.id == id).unwrap();
+            assert!(!plugin.unsupported_on(Some("0.2.1-rc.2")), "{id}");
+            assert_eq!(
+                plugin
+                    .version
+                    .as_ref()
+                    .unwrap()
+                    .plugin_req_for_core(Some("0.2.1-rc.2")),
+                Some(pinned),
+                "{id}"
+            );
+        }
+    }
+
+    #[test]
+    fn published_plugin_matrices_reject_cores_outside_the_declared_ranges() {
+        let internal = load_internal_for_test();
+        for (id, cores) in [
+            ("@changfenhuang/dsh-genui", vec!["0.1.7-rc.1", "0.3.0"]),
+            ("dsh-inner-browser-use", vec!["0.1.7-rc.1"]),
+        ] {
+            let plugin = internal.iter().find(|p| p.id == id).unwrap();
+            for core in cores {
+                assert!(plugin.unsupported_on(Some(core)), "{id} {core}");
+            }
+        }
     }
 
     #[test]
@@ -791,6 +855,12 @@ mod tests {
         // 远程能力（局域网监听 / 公网隧道 / SSH 机器）整体移除，内置清单条目一并删掉：
         // 升级用户档案里的 link: 依赖与 bundle 引用只能靠弃用名单兜底卸载。
         assert!(shipped_deprecated_ids().contains("dsh-tauri-remote"));
+    }
+
+    #[test]
+    fn deprecated_manifest_lists_the_retired_token_stats() {
+        // Token 用量面板下线，内置清单条目删掉：档案里的 link: 依赖靠弃用名单兜底卸载。
+        assert!(shipped_deprecated_ids().contains("dsh-tauri-token-stats"));
     }
 
     #[test]
@@ -1087,6 +1157,75 @@ mod tests {
         assert!(found[0].info.internal);
         assert!(found[0].directory.ends_with("some-dir"));
         std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn dev_discovery_loads_relative_workspace_bundle_dependencies() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("desktop/packages");
+        let bundle = root.join("dsh-tauri-bundle");
+        let source = temp.path().join("dsh-im");
+        std::fs::create_dir_all(&bundle).unwrap();
+        write_dev_manifest(&source, "@xmanrui/dsh-im");
+        std::fs::write(
+            bundle.join("package.json"),
+            r#"{"private":true,"dependencies":{"@xmanrui/dsh-im":"workspace:../../../dsh-im","missing":"workspace:../../../missing","registry":"5.10.0"}}"#,
+        )
+        .unwrap();
+
+        let found = discover_dev_internal_plugins_at(&root);
+
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].info.id, "@xmanrui/dsh-im");
+        assert!(found[0].info.internal);
+        assert_eq!(found[0].directory, std::fs::canonicalize(source).unwrap());
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn dev_discovery_deduplicates_relative_workspace_dependencies() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("packages");
+        let bundle = root.join("dsh-tauri-bundle");
+        std::fs::create_dir_all(&bundle).unwrap();
+        write_dev_manifest(&root.join("plugin"), "@scope/plugin");
+        std::fs::write(
+            bundle.join("package.json"),
+            r#"{"private":true,"dependencies":{"@scope/plugin":"workspace:../plugin"}}"#,
+        )
+        .unwrap();
+
+        let found = discover_dev_internal_plugins_at(&root);
+
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].info.id, "@scope/plugin");
+        assert_eq!(found[0].directory, root.join("plugin"));
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn dev_discovery_loads_installed_registry_bundle_dependencies() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("packages");
+        let bundle = root.join("dsh-tauri-bundle");
+        let plugin = bundle.join("node_modules/@scope/plugin");
+        let unrelated = bundle.join("node_modules/unrelated");
+        std::fs::create_dir_all(&bundle).unwrap();
+        write_dev_manifest(&plugin, "@scope/plugin");
+        write_dev_manifest(&unrelated, "unrelated");
+        std::fs::write(
+            bundle.join("package.json"),
+            r#"{"private":true,"dependencies":{"@scope/plugin":"1.0.0","missing":"1.0.0"}}"#,
+        )
+        .unwrap();
+
+        let found = discover_dev_internal_plugins_at(&root);
+
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].info.id, "@scope/plugin");
+        assert!(found[0].info.internal);
+        assert_eq!(found[0].directory, std::fs::canonicalize(plugin).unwrap());
     }
 
     #[cfg(debug_assertions)]

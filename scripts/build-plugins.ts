@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import ts from 'typescript'
 
 const REPO_ROOT = resolve(import.meta.dirname, '..')
@@ -98,8 +98,12 @@ function verifyMaterialized(root: string): void {
  */
 const RUNTIME_PROVIDED_SCOPES = ['@deepseek-ai'] as const
 
-/** 确认为死枝的嵌套子树：插件只走 `unstorage` 主入口，`server` 子路径与它依赖的 h3 v1 无人引用。 */
-const DEAD_SUBTREES = [join('unstorage', 'node_modules', 'h3')] as const
+const DEAD_SUBTREES = [
+  join('unstorage', 'node_modules', 'h3'),
+  join('dingtalk-stream', 'vite-node.mjs'),
+  join('@nanmicoder', 'dsh-agent-teams', 'lib', 'client'),
+  join('puppeteer-core', 'lib', 'es5-iife'),
+] as const
 
 /** 部署工具自身的记账文件，不参与运行期解析。 */
 const DEPLOY_METADATA = ['.pnpm', '.bin', '.modules.yaml', '.pnpm-workspace-state-v1.json'] as const
@@ -108,10 +112,10 @@ const DEPLOY_METADATA = ['.pnpm', '.bin', '.modules.yaml', '.pnpm-workspace-stat
 const NON_RUNTIME_EXTENSIONS = [/\.map$/, /\.d\.(ts|cts|mts)$/] as const
 
 /** 版权与许可声明必须随包分发，不参与裁剪。 */
-const ATTRIBUTION_BASENAMES = /^(?:licen[cs]e|notice|copying)/i
+const ATTRIBUTION_BASENAMES = /^(?:licen[cs]e|notice|copying|third[\s_-]party[\s_-]notices)/i
 
 /** 说明性文档与变更记录，运行期不加载。 */
-const DOCUMENTATION_BASENAMES = /^(?:readme|changelog|changes|history|authors|contributors)/i
+const DOCUMENTATION_BASENAMES = /^(?:readme|changelog|changes|history|authors|contributors)(?:\.(?:txt|rst|markdown))?$/i
 const DOCUMENTATION_EXTENSIONS = /\.md$/i
 
 /**
@@ -141,24 +145,26 @@ export function relativeSpecifiers(source: string): string[] {
 function moduleSpecifiers(source: string): string[] {
   const specifiers: string[] = []
   const file = ts.createSourceFile('runtime.js', source, ts.ScriptTarget.Latest, false, ts.ScriptKind.JS)
-  ts.forEachChild(file, visit)
+  ts.forEachChild(file, node => visit(node, false))
   return specifiers
 
-  function visit(node: ts.Node): void {
+  function visit(node: ts.Node, requireShadowed: boolean): void {
+    const shadowed = requireShadowed || (ts.isFunctionLike(node)
+      && node.parameters.some(parameter => ts.isIdentifier(parameter.name) && parameter.name.text === 'require'))
     let target: ts.Node | undefined
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
       target = node.moduleSpecifier
     }
     else if (ts.isCallExpression(node) && (
       node.expression.kind === ts.SyntaxKind.ImportKeyword
-      || (ts.isIdentifier(node.expression) && node.expression.text === 'require')
+      || (!shadowed && ts.isIdentifier(node.expression) && node.expression.text === 'require')
     )) {
       target = node.arguments[0]
     }
     if (target && ts.isStringLiteralLike(target)) {
       specifiers.push(target.text)
     }
-    ts.forEachChild(node, visit)
+    ts.forEachChild(node, child => visit(child, shadowed))
   }
 }
 
@@ -277,10 +283,12 @@ function entryTargets(manifest: PackageManifest): string[] {
       walk(child)
     }
   }
-  for (const key of ['main', 'module'] as const) {
-    const value = manifest[key]
-    if (typeof value === 'string' && !value.includes('*')) {
-      targets.push(value.replace(/^\.\//, ''))
+  if (manifest.exports === undefined) {
+    for (const key of ['main', 'module'] as const) {
+      const value = manifest[key]
+      if (typeof value === 'string' && !value.includes('*')) {
+        targets.push(value.replace(/^\.\//, ''))
+      }
     }
   }
   walk(manifest.exports)
@@ -340,7 +348,7 @@ function removeEmptyDirectories(root: string): void {
 
 /** 相对说明符的落点：命中的文件本身，或作为目录落点时其整棵子树。 */
 function relativeTarget(fromDir: string, specifier: string): string | null {
-  const base = resolve(fromDir, specifier)
+  const base = fileURLToPath(new URL(specifier, pathToFileURL(`${resolve(fromDir)}${sep}`)))
   if (existsSync(base) && statSync(base).isDirectory()) {
     return base
   }
@@ -431,9 +439,7 @@ function pruneNonRuntimeFiles(root: string): number {
       if (inSkillDirectory(rel)) {
         continue
       }
-      // 非运行期文件无条件裁剪：即便紧邻被守护的代码（如 require('.') 命中的包根），
-      // Node 也不会去加载它们。
-      if (isNonRuntimeFile(rel)) {
+      if (isNonRuntimeFile(rel) && !entryFiles.has(rel)) {
         removable.push(file)
         continue
       }
@@ -613,6 +619,7 @@ function main(): void {
   run([
     '--filter',
     './packages/*',
+    ...names.flatMap(name => ['--filter', name]),
     '--filter',
     '!dsh-tauri-bundle',
     '--filter',

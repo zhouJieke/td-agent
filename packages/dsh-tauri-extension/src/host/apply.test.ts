@@ -24,6 +24,7 @@ describe('apply provider lifecycle', () => {
       marker: 'host',
       webServer: { register: vi.fn(() => () => {}) },
       credentials: { readRecord: async () => undefined },
+      systemPrompt: { section: vi.fn() },
     }
     const ctx = {
       inject: vi.fn((names: string[], callback: (context: unknown) => unknown) => {
@@ -43,6 +44,12 @@ describe('apply provider lifecycle', () => {
     }
     apply(ctx as unknown as HostContext, { profile: 'chosen' })
     expect(ctx.inject).toHaveBeenCalledWith(inject, expect.any(Function))
+    expect(inject).toContain('systemPrompt')
+    expect(host.systemPrompt.section).toHaveBeenCalledExactlyOnceWith({
+      name: 'plugin:dsh-tauri-extension:mcp-guidance',
+      order: 10110,
+      text: expect.stringContaining('MCP连接器 → 已安装'),
+    })
     expect([...effects.keys()]).toEqual(['dsh-tauri-extension: routes', 'dsh-tauri-extension: skill provider'])
     expect(provider.start).not.toHaveBeenCalled()
     expect(providerRuntime.disposed).toBe(false)
@@ -71,6 +78,7 @@ describe('apply provider lifecycle', () => {
       marker: 'host',
       webServer: { register: vi.fn(() => () => {}) },
       get: (name: string) => (name === 'hmr' ? { runExclusive: async () => {} } : undefined),
+      systemPrompt: { section: vi.fn() },
     }
     const ctx = {
       inject: vi.fn((_names: string[], callback: (context: unknown) => unknown) => callback(host)),

@@ -42,11 +42,21 @@ pub fn patch_core_file(
     rel_path: &str,
     patch: impl FnOnce(&str) -> PatchOutcome,
 ) -> Result<(), String> {
-    let target = core_dir.join(rel_path);
-    if !target.exists() {
-        log::info!("dsh patch target not found, skip: {}", target.display());
+    let target = [
+        core_dir
+            .join("node_modules/@deepseek-ai/dsh")
+            .join(rel_path),
+        core_dir.join(rel_path),
+    ]
+    .into_iter()
+    .find(|path| path.is_file());
+    let Some(target) = target else {
+        log::info!(
+            "dsh patch target not found, skip: {}",
+            core_dir.join(rel_path).display()
+        );
         return Ok(());
-    }
+    };
     let source = std::fs::read_to_string(&target)
         .map_err(|e| format!("DSH_PATCH_READ: {} failed: {e}", target.display()))?;
     match patch(&source) {
@@ -286,6 +296,39 @@ mod tests {
     use super::decode_process_line;
     #[cfg(windows)]
     use super::{decode_multibyte, encode_multibyte, short_path};
+
+    #[test]
+    fn core_patches_follow_the_nested_runtime_dependency_before_the_root_copy() {
+        let root = std::env::temp_dir().join(format!(
+            "core-patch-layout-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let relative = "node_modules/@deepseek-ai/test/lib/client.js";
+        let flat = root.join(relative);
+        let nested = root.join("node_modules/@deepseek-ai/dsh").join(relative);
+        for path in [&flat, &nested] {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, "original").unwrap();
+        }
+        super::patch_core_file(&root, relative, |source| {
+            assert_eq!(source, "original");
+            super::PatchOutcome::Patched("nested patched".into())
+        })
+        .unwrap();
+        assert_eq!(std::fs::read_to_string(&flat).unwrap(), "original");
+        assert_eq!(std::fs::read_to_string(&nested).unwrap(), "nested patched");
+        std::fs::remove_file(&nested).unwrap();
+        super::patch_core_file(&root, relative, |_| {
+            super::PatchOutcome::Patched("flat patched".into())
+        })
+        .unwrap();
+        assert_eq!(std::fs::read_to_string(&flat).unwrap(), "flat patched");
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[tokio::test]
     async fn operation_window_never_falls_back_to_another_profile() {

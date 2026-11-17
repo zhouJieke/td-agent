@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'pathe'
 import { PLUGIN_ID } from '../shared/constants'
 import { disposeProviderRuntime, resetProviderRuntime } from './config/runtime'
+import { mcpSection } from './prompts/mcp-section'
 import { server } from './server'
 import { profile } from './service/profile'
 import { provider } from './service/provider'
@@ -14,7 +15,7 @@ export type { Config } from './apply.types'
 
 export const name = PLUGIN_ID
 
-export const inject = ['webServer', 'skills', 'connection', 'credentials']
+export const inject = ['webServer', 'skills', 'connection', 'credentials', 'systemPrompt']
 
 export { loadFilesystemSkillPlugin } from './service/provider.utils'
 
@@ -24,6 +25,7 @@ export function packagedSkillsDir(): string {
 
 export function apply(ctx: HostContext, config?: Config): void {
   ctx.inject(inject, (hostCtx) => {
+    hostCtx.systemPrompt.section(mcpSection)
     resetProviderRuntime()
     const remountProvider = (): Promise<void> => provider.start(packagedSkillsDir())
     const hotReload = (): boolean => {

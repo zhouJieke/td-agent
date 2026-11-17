@@ -9,9 +9,7 @@ use tauri_plugin_store::StoreExt;
 pub struct Setting {
     #[serde(default)]
     pub proxy_url: String,
-    /// 模型后台域名：插件宿主据此拉取该设备被授权的模型并下放进核心配置。
-    /// 留空表示不使用后台，模型仍由用户在设置页自行配置。
-    #[serde(default)]
+    #[serde(default = "default_model_backend_url")]
     pub model_backend_url: String,
     #[serde(default)]
     pub appearance: super::Appearance,
@@ -20,10 +18,6 @@ pub struct Setting {
     #[serde(default)]
     pub harness_max_heap_mb: Option<u32>,
     pub auto_start: bool,
-    /// 是否自动更新桌面应用：开启时启动后轮询检查、发现新版本即静默下载，并在
-    /// 退出时自动打开安装器。关闭后只剩「帮助 → 检查更新」这类用户显式发起的
-    /// 更新链路，不再静默下载或强制安装（第三方打包与自行管理版本的用户需要，
-    /// issue #1132）。
     #[serde(default = "default_auto_update")]
     pub auto_update: bool,
     pub language: String,
@@ -104,6 +98,10 @@ pub const HARNESS_HEAP_MAX_MB: u32 = 32768;
 pub const CLOSE_ACTION_TRAY: &str = "tray";
 pub const CLOSE_ACTION_QUIT: &str = "quit";
 
+fn default_model_backend_url() -> String {
+    "http://bcw-test.jinmit.com".to_string()
+}
+
 pub fn normalize_harness_max_heap_mb(value: Option<u32>) -> Option<u32> {
     value.filter(|mb| (HARNESS_HEAP_MIN_MB..=HARNESS_HEAP_MAX_MB).contains(mb))
 }
@@ -118,10 +116,8 @@ fn default_cli_link_enabled() -> bool {
     true
 }
 
-/// 自动更新默认开启：与沿袭下来的「静默下载 + 退出时自动安装」行为一致，
-/// 老 store 缺字段时不会被静默关掉。
 fn default_auto_update() -> bool {
-    true
+    false
 }
 
 /// 界面默认缩放为 100%。
@@ -178,8 +174,13 @@ pub fn normalize_backup_retention(retention_count: u32) -> u32 {
 fn normalize_setting(setting: &mut Setting) {
     setting.proxy_url = super::proxy::normalize_proxy_url(&setting.proxy_url).unwrap_or_default();
     setting.model_backend_url =
-        super::model_backend::normalize_model_backend_url(&setting.model_backend_url)
-            .unwrap_or_default();
+        match super::model_backend::normalize_model_backend_url(&setting.model_backend_url) {
+            Ok(url) if url.is_empty() || url == "http://192.168.0.225:8099" => {
+                default_model_backend_url()
+            }
+            Ok(url) => url,
+            Err(_) => String::new(),
+        };
     setting.appearance.normalize();
     setting.zoom_factor = normalize_zoom_factor(setting.zoom_factor);
     setting.harness_max_heap_mb = normalize_harness_max_heap_mb(setting.harness_max_heap_mb);
@@ -200,7 +201,7 @@ impl Default for Setting {
     fn default() -> Self {
         Self {
             proxy_url: String::new(),
-            model_backend_url: String::new(),
+            model_backend_url: default_model_backend_url(),
             appearance: super::Appearance::default(),
             installed: false,
             port: default_port(),
@@ -458,6 +459,86 @@ mod tests {
         setting_from_value, unwrap_json_value, Setting, STORE_DAT_DEV_FILE, STORE_DAT_FILE,
         STORE_DAT_TEST_FILE, STORE_SETTING_KEY, ZOOM_FACTOR_MAX, ZOOM_FACTOR_MIN,
     };
+
+    #[test]
+    fn model_backend_defaults_to_the_configured_server() {
+        assert_eq!(
+            Setting::default().model_backend_url,
+            "http://bcw-test.jinmit.com"
+        );
+    }
+
+    #[test]
+    fn model_backend_missing_in_legacy_settings_uses_the_configured_server() {
+        let value = serde_json::json!({
+            "installed": true,
+            "port": 4099,
+            "auto_start": false,
+            "language": "en-US"
+        });
+        let setting = setting_from_value(Some(&value));
+        assert_eq!(setting.model_backend_url, "http://bcw-test.jinmit.com");
+        assert_eq!(setting.port, 4099);
+        assert_eq!(setting.language, "en-US");
+    }
+
+    #[test]
+    fn model_backend_empty_in_saved_settings_uses_the_configured_server() {
+        for backend in ["", "  "] {
+            let value = serde_json::json!({
+                "installed": true,
+                "port": 4099,
+                "auto_start": false,
+                "language": "en-US",
+                "model_backend_url": backend
+            });
+            for saved in [value.clone(), serde_json::Value::String(value.to_string())] {
+                let setting = setting_from_value(Some(&saved));
+                assert_eq!(setting.model_backend_url, "http://bcw-test.jinmit.com");
+                assert_eq!(setting.port, 4099);
+            }
+        }
+    }
+
+    #[test]
+    fn model_backend_migrates_the_previous_default_server() {
+        for backend in ["http://192.168.0.225:8099", " http://192.168.0.225:8099/ "] {
+            let value = serde_json::json!({
+                "installed": true,
+                "port": 4099,
+                "auto_start": false,
+                "language": "en-US",
+                "model_backend_url": backend
+            });
+            for saved in [value.clone(), serde_json::Value::String(value.to_string())] {
+                let setting = setting_from_value(Some(&saved));
+                assert_eq!(setting.model_backend_url, "http://bcw-test.jinmit.com");
+                assert_eq!(setting.port, 4099);
+                assert_eq!(setting.language, "en-US");
+            }
+        }
+    }
+
+    #[test]
+    fn model_backend_preserves_a_valid_custom_server() {
+        let mut setting = Setting {
+            model_backend_url: " https://models.example.com/base/ ".to_string(),
+            ..Setting::default()
+        };
+        normalize_setting(&mut setting);
+        assert_eq!(setting.model_backend_url, "https://models.example.com/base");
+    }
+
+    #[test]
+    fn model_backend_default_reaches_the_child_as_a_base_url() {
+        let setting = setting_from_value(None);
+        let env = crate::config::model_backend::model_backend_child_env(&setting.model_backend_url);
+        assert_eq!(env.len(), 1);
+        assert_eq!(
+            env.get("DSH_MODEL_BACKEND_URL").map(String::as_str),
+            Some("http://bcw-test.jinmit.com")
+        );
+    }
 
     /// 启动前读取跑在 `logger::init()` 之前，任何损坏输入都只能静默回落到关闭。
     #[test]
@@ -765,7 +846,8 @@ mod tests {
     }
 
     #[test]
-    fn auto_update_defaults_on_and_survives_full_setting_writes() {
+    fn auto_update_defaults_off_for_new_and_legacy_settings() {
+        assert!(!Setting::default().auto_update);
         let legacy: Setting = serde_json::from_value(serde_json::json!({
             "installed": true,
             "port": 3080,
@@ -774,21 +856,23 @@ mod tests {
         }))
         .expect("legacy setting should deserialize");
         assert!(
-            legacy.auto_update,
-            "旧配置缺失 auto_update 时应回落默认开启，不能静默关掉老用户的自更新"
+            !legacy.auto_update,
+            "旧配置缺失 auto_update 时应回落默认关闭"
         );
+    }
 
-        let merged = preserve_persisted_fields(
-            Setting::default(),
-            &Setting {
-                auto_update: false,
+    #[test]
+    fn auto_update_preserves_saved_choices_on_full_setting_writes() {
+        for enabled in [false, true] {
+            let current = Setting {
+                auto_update: enabled,
                 ..Default::default()
-            },
-        );
-        assert!(
-            !merged.auto_update,
-            "整对象写入不得把用户显式关闭的自动更新翻回开启"
-        );
+            };
+            let saved = serde_json::to_value(&current).unwrap();
+            assert_eq!(setting_from_value(Some(&saved)).auto_update, enabled);
+            let merged = preserve_persisted_fields(Setting::default(), &current);
+            assert_eq!(merged.auto_update, enabled);
+        }
     }
 
     #[test]
@@ -822,6 +906,7 @@ mod tests {
             harness_max_heap_mb: Some(4096),
             zoom_factor: 1.6,
             close_action: "tray".to_string(),
+            auto_update: true,
             force_xwayland: true,
             local_plugin_hmr: true,
             ..Default::default()

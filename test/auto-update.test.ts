@@ -16,8 +16,7 @@ describe('automatic update opt-out contract', () => {
     expect(source).toContain('pub auto_update: bool')
     expect(source).toContain('#[serde(default = "default_auto_update")]')
     expect(source).toContain('fn default_auto_update() -> bool {')
-    // 默认必须是开启：老 store 缺字段时不能被静默关掉既有的自更新行为
-    expect(source).toMatch(/fn default_auto_update\(\) -> bool \{\s*true\s*\}/)
+    expect(source).toMatch(/fn default_auto_update\(\) -> bool \{\s*false\s*\}/)
     // 整对象写入（旧调用方）不得覆盖精确设置路径写下的开关
     expect(source).toContain('replacement.auto_update = current.auto_update;')
   })

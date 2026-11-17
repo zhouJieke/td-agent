@@ -28,6 +28,7 @@ pub struct AuthService {
     invalidated: AtomicBool,
     endpoint: Option<String>,
     vault: Arc<dyn CredentialVault>,
+    model_backend: Mutex<Option<super::model_backend::ModelBackendProxy>>,
 }
 
 impl Default for AuthService {
@@ -49,6 +50,7 @@ impl Default for AuthService {
             next_id: AtomicU64::new(0),
             invalidated: AtomicBool::new(false),
             endpoint: Some(endpoint),
+            model_backend: Mutex::new(None),
             vault: Arc::new(SystemVault {
                 service: format!(
                     "{}.desktop-auth.{environment}.{}",
@@ -623,6 +625,34 @@ impl AuthService {
             .ok_or_else(|| "DESKTOP_AUTH_SESSION_MISSING".into())
     }
 
+    pub async fn model_backend_url(self: &Arc<Self>, backend: &str) -> Result<String, String> {
+        let backend = crate::config::model_backend::normalize_model_backend_url(backend)?;
+        if backend != self.api_base()? {
+            return Ok(backend);
+        }
+        let mut current = self.model_backend.lock().await;
+        if let Some(proxy) = current.as_ref().filter(|proxy| proxy.backend == backend) {
+            return Ok(proxy.url.clone());
+        }
+        let auth = Arc::downgrade(self);
+        let proxy = tauri::async_runtime::spawn(async move {
+            super::model_backend::ModelBackendProxy::start(backend, move || {
+                let auth = auth.upgrade();
+                async move {
+                    auth.ok_or("DESKTOP_AUTH_SESSION_MISSING")?
+                        .request("GET", "/api/model-provider/config", Value::Null)
+                        .await
+                }
+            })
+            .await
+        })
+        .await
+        .map_err(|_| "MODEL_BACKEND_PROXY_START_FAILED")??;
+        let url = proxy.url.clone();
+        *current = Some(proxy);
+        Ok(url)
+    }
+
     pub fn api_base(&self) -> Result<String, String> {
         Ok(self
             .endpoint()?
@@ -1066,6 +1096,190 @@ mod tests {
 
     fn token(access: &str, refresh: &str) -> Value {
         json!({"access_token":access, "refresh_token":refresh, "token_type":"Bearer", "expires_in":7200, "refresh_expires_in":2592000, "scope":"mcp", "employee_number":"TD000001", "employee_name":"张三"})
+    }
+
+    async fn model_url(server: &Backend) -> String {
+        server
+            .auth
+            .model_backend_url(&server.auth.api_base().unwrap())
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn model_backend_uses_the_login_bearer_without_exporting_the_token() {
+        let grant = json!({"code":0,"data":[{"route":"company","models":[{"id":"model-a"}]}]});
+        let server = backend(
+            vec![
+                (200, ticket()),
+                (200, token("access-one", "refresh-one")),
+                (200, grant),
+            ],
+            None,
+        )
+        .await;
+        authenticated(&server).await;
+        let url = model_url(&server).await;
+        assert_eq!(model_url(&server).await, url);
+        assert!(url.starts_with("http://127.0.0.1:"));
+        let env = crate::config::model_backend::model_backend_child_env(&url);
+        assert_eq!(env.get("DSH_MODEL_BACKEND_URL"), Some(&url));
+        assert!(!format!("{env:?}").contains("access-one"));
+        assert!(!format!("{env:?}").contains("refresh-one"));
+        let response = Client::builder()
+            .no_proxy()
+            .build()
+            .unwrap()
+            .get(format!("{url}/api/model-provider/config"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers().get("cache-control").unwrap(), "no-store");
+        let body: Value = response.json().await.unwrap();
+        assert_eq!(body["data"][0]["models"], json!([{"id":"model-a"}]));
+        assert_eq!(
+            body["data"][0]["baseURL"],
+            format!("{}/api/v1", server.auth.api_base().unwrap())
+        );
+        assert_eq!(
+            server.requests.lock().await[2].0,
+            "GET /api/model-provider/config HTTP/1.1"
+        );
+        assert!(server.headers.lock().await[2]
+            .to_lowercase()
+            .contains("authorization: bearer access-one"));
+    }
+
+    #[tokio::test]
+    async fn model_backend_refreshes_a_rejected_login_token_before_retrying() {
+        let server = backend(
+            vec![
+                (200, ticket()),
+                (200, token("access-one", "refresh-one")),
+                (401, json!({})),
+                (200, token("access-two", "refresh-two")),
+                (
+                    200,
+                    json!({"models":[{"id":"model-b"}],"baseURL":"https://llm.example/v1"}),
+                ),
+            ],
+            None,
+        )
+        .await;
+        authenticated(&server).await;
+        let url = model_url(&server).await;
+        let response = Client::builder()
+            .no_proxy()
+            .build()
+            .unwrap()
+            .get(format!("{url}/api/model-provider/config"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.json::<Value>().await.unwrap()["baseURL"],
+            "https://llm.example/v1"
+        );
+        let requests = server.requests.lock().await;
+        assert_eq!(requests.len(), 5);
+        assert_eq!(
+            requests[3],
+            (
+                "POST /desktop/api/refresh HTTP/1.1".into(),
+                json!({"refreshToken":"refresh-one"})
+            )
+        );
+        assert_eq!(requests[4].0, "GET /api/model-provider/config HTTP/1.1");
+        let headers = server.headers.lock().await;
+        assert!(headers[2]
+            .to_lowercase()
+            .contains("authorization: bearer access-one"));
+        assert!(headers[4]
+            .to_lowercase()
+            .contains("authorization: bearer access-two"));
+    }
+
+    #[tokio::test]
+    async fn model_backend_stops_authorizing_after_logout() {
+        let server = backend(
+            vec![
+                (200, ticket()),
+                (200, token("access-one", "refresh-one")),
+                (200, json!({"models":[{"id":"model-a"}]})),
+            ],
+            None,
+        )
+        .await;
+        authenticated(&server).await;
+        let url = model_url(&server).await;
+        let client = Client::builder().no_proxy().build().unwrap();
+        let endpoint = format!("{url}/api/model-provider/config");
+        assert_eq!(
+            client.get(&endpoint).send().await.unwrap().status(),
+            StatusCode::OK
+        );
+        server.auth.logout().await.unwrap();
+        let response = client.get(&endpoint).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.text().await.unwrap(), "");
+        assert_eq!(server.requests.lock().await.len(), 3);
+        assert!(server.vault.values.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn model_backend_rejects_unknown_clients_and_paths_before_authentication() {
+        let server = backend(Vec::new(), None).await;
+        let url = model_url(&server).await;
+        let client = Client::builder().no_proxy().build().unwrap();
+        let endpoint = format!("{url}/api/model-provider/config");
+        let response = client
+            .get(&endpoint)
+            .header("Origin", "http://untrusted.test")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let response = client
+            .get(&endpoint)
+            .header("Host", "untrusted.test")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let origin = Url::parse(&url).unwrap().origin().ascii_serialization();
+        assert_eq!(
+            client
+                .get(format!("{origin}/api/model-provider/config"))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            client.post(&endpoint).send().await.unwrap().status(),
+            StatusCode::METHOD_NOT_ALLOWED
+        );
+        assert_eq!(
+            client.get(&endpoint).send().await.unwrap().status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert!(server.requests.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn model_backend_does_not_forward_login_tokens_to_a_different_backend() {
+        let server = backend(Vec::new(), None).await;
+        let auth = &server.auth;
+        let url = auth
+            .model_backend_url("https://other.example/")
+            .await
+            .unwrap();
+        assert_eq!(url, "https://other.example");
+        assert!(auth.model_backend.lock().await.is_none());
+        assert!(server.requests.lock().await.is_empty());
     }
 
     fn skill_archive(payload: &[u8]) -> Vec<u8> {
@@ -2243,6 +2457,7 @@ mod tests {
         let auth = AuthService::for_test();
         for path in [
             "https://example.com/api/private",
+            "http://192.168.0.225:8099/api/employee-mcps?pageNo=1&pageSize=20",
             "//example.com/api/private",
             "/api/../desktop/api/refresh",
             "/api/private#fragment",

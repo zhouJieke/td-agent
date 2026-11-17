@@ -118,6 +118,17 @@ describe('企业技能只读详情', () => {
     expect(within(dialog).queryByRole('button', { name: 'Save' })).toBeNull()
   })
 
+  it('详情弹窗展示本地安装状态提示', async () => {
+    store.skill.finishInstalledLoad(store.skill.startInstalledLoad(), ['alpha'], {}, ['alpha'])
+    vi.mocked(getSkill).mockResolvedValue({ name: 'alpha', content: '# Alpha guide' })
+    const view = catalog([summary('alpha')])
+
+    fireEvent.click(view.getByText('alpha'))
+
+    const dialog = await view.findByRole('dialog', { name: 'View skill' })
+    expect((await within(dialog).findByText('Installed version unknown')).textContent).toBe('Installed version unknown')
+  })
+
   it('关闭按钮收起详情', async () => {
     vi.mocked(getSkill).mockResolvedValue({ name: 'alpha', content: '# Alpha guide' })
     const view = catalog([summary('alpha')])

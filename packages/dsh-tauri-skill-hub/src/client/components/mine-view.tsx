@@ -4,7 +4,7 @@ import type { UserSkillDetails } from '../types'
 import { Icon, Text, TriangleExclamation } from 'dsh-tauri-ui/client'
 import { isEmpty } from 'dsh-tauri/client'
 import { openSkillDetail } from '../service/skill'
-import { SkillDownload } from './skill-download'
+import { SkillDownloadAction } from './skill-download'
 import { SkillList } from './skill-list'
 
 interface MineViewProps {
@@ -25,7 +25,7 @@ export function MineView({ t, mine, hint, emptyText }: MineViewProps): ReactElem
               t={t}
               skills={mine.skills.map(detail => detail.summary)}
               emptyText={emptyText}
-              actions={skill => <SkillDownload t={t} name={skill.name} latestVersion={skill.labels.latest} />}
+              actions={skill => <SkillDownloadAction t={t} name={skill.name} latestVersion={skill.labels.latest} />}
               onSelect={openSkillDetail}
             />
           )
@@ -46,7 +46,7 @@ export function MineView({ t, mine, hint, emptyText }: MineViewProps): ReactElem
                     <span className="font-mono text-secondary">{item.name}</span>
                     {isEmpty(item.reason) ? null : ` · ${item.reason}`}
                   </span>
-                  <SkillDownload t={t} name={item.name} />
+                  <SkillDownloadAction t={t} name={item.name} />
                 </div>
               ))}
             </div>

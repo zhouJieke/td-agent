@@ -251,3 +251,52 @@ shown in the desktop plugin dialog is read from the plugin's own
 the workspace package in debug builds), so it stays in sync with what the package
 publishes instead of being maintained twice. Every built-in plugin package must
 declare a `description`.
+
+### Published third-party plugins
+
+GenUI, Chinese Thinking, NanmiCoder Agent Teams, Inner Browser Use, and Univer
+Office are installed from npm through the `plugins` catalog in
+`pnpm-workspace.yaml`, referenced by `packages/dsh-tauri-bundle/package.json`.
+Commit `pnpm-lock.yaml` with dependency changes. Their `plugins.built-in` entries
+use the same startup installation and
+repair path as workspace plugins; GenUI is no longer an optional preset.
+
+Debug discovery reads installed npm dependencies from the bundle package's
+`node_modules`, so `pnpm install` prepares their published entry points without
+rebuilding them. Release deployment includes their production dependency closure,
+native bindings, viewer assets, and skills. Exported resources such as GenUI's
+root `SKILL.md` are retained during pruning.
+
+Third-party peer imports of `@deepseek-ai/*` are resolved by the active Harness
+core's profile resolver. Those core packages remain excluded from deployed
+resources; the workspace host rule requiring `loader.import()` still applies to
+our own plugins.
+
+Agent Teams declares a React 18 peer while this desktop uses React 19. Keep the
+upstream declaration unchanged and verify its client panel on a desktop build.
+
+Univer Office's Puppeteer dependency is pinned to its declared minimum `25.7.0`
+by a package-scoped workspace override. The newer Puppeteer release selected a
+Chromium BiDi package rejected by `trustPolicy: no-downgrade`; the override keeps
+that policy intact. Office rendering and Inner Browser Use require a locally
+installed compatible browser; its executable is not included with these plugins.
+Chromium BiDi's declared Zod dependency remains in the production closure.
+
+### Local DSH IM source
+
+`@xmanrui/dsh-im` is bundled from the sibling `../dsh-im` checkout. Keep both
+repositories beside each other on development and CI machines, and install their
+dependencies from the desktop root with `pnpm install`. The source checkout must
+provide DSH IM `5.10.0`, compatible with the recommended core `0.2.1-rc.2`.
+
+The bundle package declares the relative `workspace:` dependency. Debug discovery
+reads that declaration to load the same source directory. Release packaging runs
+the dependency's build script, refreshes injected workspace dependencies, then
+deploys its production dependencies into `resources/node_modules` together with
+the other built-in plugins. The installed application does not need either source
+checkout or a separate IM process. Plugin credentials remain in the user's DSH
+home and are configured through Settings → IM bots.
+
+The optional `integrations/desktop-panel` adapter is not bundled. DSH IM has no
+source watcher, so `pnpm dev:desktop` does not regenerate its `lib` files when IM
+source changes. Repository build restrictions still apply during plugin editing.

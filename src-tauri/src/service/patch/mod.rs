@@ -9,6 +9,7 @@
 //! `workspace_view` 等），挂点统一为 `service::workflow::launch`，均为最佳努力、
 //! 失败仅告警。
 
+pub(crate) mod branding;
 pub(crate) mod chat_follow_anchor;
 pub(crate) mod composer;
 pub(crate) mod conversation_draft;
@@ -37,7 +38,8 @@ use std::path::Path;
 /// 让编排层能看见哪一条出了问题。
 pub(crate) fn apply_all_at(core_dir: &Path) -> Result<(), String> {
     #[allow(clippy::type_complexity)]
-    let patches: [(&str, fn(&Path) -> Result<(), String>); 15] = [
+    let patches: [(&str, fn(&Path) -> Result<(), String>); 16] = [
+        ("branding", branding::apply_at),
         ("renderer", renderer::apply_at),
         ("mcp_startup", mcp_startup::apply_at),
         ("composer", composer::apply_at),

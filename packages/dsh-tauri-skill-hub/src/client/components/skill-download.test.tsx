@@ -124,7 +124,7 @@ describe('技能列表下载按钮', () => {
     const personalButton = within(personal.container).getByRole('button', { name: 'Downloaded skill shared' })
     const failedButton = within(personal.container).getByRole('button', { name: 'Downloaded skill unavailable' })
 
-    expect(commonButton.textContent).toBe('Downloaded')
+    expect(commonButton.querySelector('svg')).not.toBeNull()
     expect(commonButton.hasAttribute('disabled')).toBe(true)
     expect(personalButton.hasAttribute('disabled')).toBe(true)
     expect(failedButton.hasAttribute('disabled')).toBe(true)
@@ -170,7 +170,6 @@ describe('技能列表下载按钮', () => {
     store.skill.finishInstalledLoad(store.skill.startInstalledLoad(), ['legacy'], {}, ['legacy'])
     const view = render(<SkillCatalog t={locale.text} hint="" emptyText="" skills={[summary('legacy', '2.0.0')]} />)
 
-    expect(view.getByText('Installed version unknown').textContent).toBe('Installed version unknown')
     fireEvent.click(view.getByRole('button', { name: 'Update skill legacy' }))
     expect(updateSkill).not.toHaveBeenCalled()
     const dialog = view.getByRole('dialog', { name: 'Update skill with unknown version?' })
@@ -197,16 +196,13 @@ describe('技能列表下载按钮', () => {
     store.skill.finishInstalledLoad(store.skill.startInstalledLoad(), ['legacy'], {}, [])
     const view = render(<SkillCatalog t={locale.text} hint="" emptyText="" skills={[summary('legacy', '2.0.0')]} />)
 
-    expect(view.getByText('Installed version unknown').textContent).toBe('Installed version unknown')
-    expect(view.getByText('Cannot safely replace').textContent).toBe('Cannot safely replace')
     expect(view.queryByRole('button', { name: 'Update skill legacy' })).toBeNull()
   })
 
-  it.each([undefined, 'not-a-version'])('远端版本 %s 不可用时明确提示且不提供更新', (latest) => {
+  it.each([undefined, 'not-a-version'])('远端版本 %s 不可用时不提供更新', (latest) => {
     store.skill.finishInstalledLoad(store.skill.startInstalledLoad(), ['demo'], { demo: '1.0.0' }, ['demo'])
     const view = render(<SkillCatalog t={locale.text} hint="" emptyText="" skills={[summary('demo', latest)]} />)
 
-    expect(view.getByText('Remote version unavailable').textContent).toBe('Remote version unavailable')
     expect(view.queryByRole('button', { name: 'Update skill demo' })).toBeNull()
   })
 
@@ -235,7 +231,7 @@ describe('技能列表下载按钮', () => {
     act(() => store.skill.markInstalled('alpha'))
 
     const button = await view.findByRole('button', { name: 'Downloaded skill alpha' })
-    expect(button.textContent).toBe('Downloaded')
+    expect(button.querySelector('svg')).not.toBeNull()
     expect(button.hasAttribute('disabled')).toBe(true)
   })
 

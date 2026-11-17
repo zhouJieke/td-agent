@@ -6,7 +6,7 @@ import { isEmpty, useStore } from 'dsh-tauri/client'
 import { openSkillDetail } from '../service/skill'
 import { store } from '../store'
 import { filterSummaries } from '../store/modules/skill.utils'
-import { SkillDownload } from './skill-download'
+import { SkillDownloadAction } from './skill-download'
 import { SkillList } from './skill-list'
 
 interface SkillCatalogProps {
@@ -40,7 +40,7 @@ export function SkillCatalog({ t, hint, skills, emptyText }: SkillCatalogProps):
         t={t}
         skills={matched}
         emptyText={isEmpty(keyword) ? emptyText : t('list.emptyMatch')}
-        actions={skill => <SkillDownload t={t} name={skill.name} latestVersion={skill.labels.latest} />}
+        actions={skill => <SkillDownloadAction t={t} name={skill.name} latestVersion={skill.labels.latest} />}
         onSelect={openSkillDetail}
       />
     </div>

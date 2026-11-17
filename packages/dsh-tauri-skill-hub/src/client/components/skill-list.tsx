@@ -2,6 +2,7 @@ import type { ReactElement, ReactNode } from 'react'
 import type { Translate } from '../locales/index.types'
 import type { SkillSummary } from '../types'
 import { Card } from 'dsh-tauri-ui/client'
+import { sortSummaries } from '../store/modules/skill.utils'
 import { SkillCard } from './skill-card'
 
 interface SkillListProps {
@@ -20,8 +21,8 @@ export function SkillList({ t, skills, emptyText, actions, onSelect }: SkillList
     return <div className="text-tertiary text-[12px]">{emptyText}</div>
 
   return (
-    <Card.List>
-      {skills.map(skill => (
+    <Card.List className="grid grid-cols-[repeat(2,minmax(0,1fr))] items-stretch gap-[12px]">
+      {sortSummaries(skills).map(skill => (
         <SkillCard
           key={`${skill.namespaceId}/${skill.name}`}
           t={t}

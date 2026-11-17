@@ -79,7 +79,8 @@ export interface AdapterMigrationFailure {
 }
 
 export type AdapterCapability
-  = | 'sessions.list'
+  = | 'branding.desktop'
+    | 'sessions.list'
     | 'sessions.provideInfo'
     | 'sessions.create'
     | 'sessions.refresh'

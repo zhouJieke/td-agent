@@ -103,54 +103,6 @@ afterEach(async () => {
 })
 
 describe('navbar build channel', () => {
-  it.each(['dsh-tauri', 'dsh-tauri-nightly'])('waits for a pending identifier before checking updates for %s', async (identifier) => {
-    const pending = Promise.withResolvers<string>()
-    getAppIdentifier.mockReturnValue(pending.promise)
-    const check = checkDesktopUpdate
-    renderNavbar()
-    fireEvent.click(await screen.findByTestId('dsh-navbar-menu-help'))
-    fireEvent.click(await screen.findByTestId('dsh-navbar-item-check-update'))
-    expect(check).not.toHaveBeenCalled()
-    expect(openExternalUrl).not.toHaveBeenCalled()
-
-    await act(async () => pending.resolve(identifier))
-    if (identifier === 'dsh-tauri-nightly') {
-      await waitFor(() => expect(openExternalUrl).toHaveBeenCalledOnce())
-      expect(check).not.toHaveBeenCalled()
-    }
-    else {
-      await waitFor(() => expect(check).toHaveBeenCalledOnce())
-      expect(openExternalUrl).not.toHaveBeenCalled()
-    }
-    expect(getAppIdentifier).toHaveBeenCalledOnce()
-  })
-
-  it('does not guess the update channel when a pending identifier lookup fails', async () => {
-    const pending = Promise.withResolvers<string>()
-    getAppIdentifier.mockReturnValue(pending.promise)
-    const check = checkDesktopUpdate
-    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    renderNavbar()
-    fireEvent.click(await screen.findByTestId('dsh-navbar-menu-help'))
-    fireEvent.click(await screen.findByTestId('dsh-navbar-item-check-update'))
-    await act(async () => pending.reject(new Error('IDENTIFIER_FAILED')))
-    await waitFor(() => expect(warning).toHaveBeenCalledWith('[Navbar] check update failed:', expect.any(Error)))
-    expect(check).not.toHaveBeenCalled()
-    expect(openExternalUrl).not.toHaveBeenCalled()
-  })
-
-  it('opens the nightly release page instead of checking for a stable installer', async () => {
-    getAppIdentifier.mockResolvedValue('dsh-tauri-nightly')
-    const check = checkDesktopUpdate
-    await client.prefetchQuery({ queryKey: queryKeys.appIdentifier, queryFn: getIdentifier })
-    renderNavbar()
-    fireEvent.click(await screen.findByTestId('dsh-navbar-menu-help'))
-    fireEvent.click(await screen.findByTestId('dsh-navbar-item-check-update'))
-    await waitFor(() => expect(openExternalUrl).toHaveBeenCalledExactlyOnceWith({ url: 'https://github.com/dsh-tauri/deepseek-harness-desktop/releases/tag/nightly' }))
-    expect(check).not.toHaveBeenCalled()
-    expect(screen.queryByTestId('navbar-test-update-dialog')).toBeNull()
-  })
-
   it.each([
     { language: 'zh-CN', label: '夜间构建版本', updateLabel: '更新可用', updateInfo: null },
     { language: 'zh-CN', label: '夜间构建版本', updateLabel: '更新可用', updateInfo: UPDATE_INFO },
@@ -171,18 +123,22 @@ describe('navbar build channel', () => {
     expect(screen.queryByTestId('navbar-test-update-dialog')).toBeNull()
   })
 
-  it('stable keeps its success update chip and opens the update dialog on click', async () => {
+  it.each(['dsh-tauri', 'dsh-tauri-nightly'])('hides manual update actions from the Help menu for %s', async (identifier) => {
     desktopUpdater.updateInfo = UPDATE_INFO
+    getAppIdentifier.mockResolvedValue(identifier)
+    await client.prefetchQuery({ queryKey: queryKeys.appIdentifier, queryFn: getIdentifier })
     renderNavbar()
 
-    const chip = (await screen.findByText('更新可用')).closest('[data-slot="chip"]')!
-    expect(chip.classList.contains('chip--success')).toBe(true)
-    expect(screen.queryByText('夜间构建版本')).toBeNull()
-    fireEvent.click(chip)
-    await screen.findByTestId('navbar-test-update-dialog')
+    fireEvent.click(await screen.findByTestId('dsh-navbar-menu-help'))
+    await screen.findByTestId('dsh-navbar-item-about')
+    expect(screen.queryByTestId('dsh-navbar-item-check-update')).toBeNull()
+    expect(screen.queryByText('检查更新')).toBeNull()
+    expect(screen.queryByText('更新可用')).toBeNull()
+    expect(checkDesktopUpdate).not.toHaveBeenCalled()
+    expect(openExternalUrl).not.toHaveBeenCalled()
   })
 
-  it('stable adds and removes the update chip when updateInfo changes', async () => {
+  it('stable keeps the update chip hidden when updateInfo changes', async () => {
     renderNavbar()
     await waitFor(() => expect(client.getQueryState(queryKeys.appIdentifier)?.status).toBe('success'))
     expect(screen.queryByText('更新可用')).toBeNull()
@@ -191,7 +147,7 @@ describe('navbar build channel', () => {
     act(() => {
       desktopUpdater.updateInfo = UPDATE_INFO
     })
-    await screen.findByText('更新可用')
+    expect(screen.queryByText('更新可用')).toBeNull()
     act(() => {
       desktopUpdater.updateInfo = null
     })
@@ -199,7 +155,7 @@ describe('navbar build channel', () => {
   })
 
   it.each([
-    { identifier: 'dsh-tauri', label: '更新可用', absent: '夜间构建版本' },
+    { identifier: 'dsh-tauri', label: null, absent: '夜间构建版本' },
     { identifier: 'dsh-tauri-nightly', label: '夜间构建版本', absent: '更新可用' },
   ])('pending identifier hides both chips until $identifier is known', async ({ identifier, label, absent }) => {
     const pending = Promise.withResolvers<string>()
@@ -213,7 +169,10 @@ describe('navbar build channel', () => {
     await act(async () => {
       pending.resolve(identifier)
     })
-    await screen.findByText(label)
+    await waitFor(() => expect(client.getQueryState(queryKeys.appIdentifier)?.status).toBe('success'))
+    if (label !== null)
+      await screen.findByText(label)
+    expect(screen.queryByText('更新可用')).toBeNull()
     expect(screen.queryByText(absent)).toBeNull()
   })
 

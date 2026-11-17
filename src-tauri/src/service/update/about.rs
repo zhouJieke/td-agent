@@ -2,7 +2,7 @@
 
 use super::meta::fetch_tag_published_at;
 use super::version::{current_version, parse_version};
-use super::{COPYRIGHT, POWERED_BY, REPO_URL};
+use super::{COPYRIGHT, REPO_URL};
 
 /// 关于对话框信息。
 #[derive(Debug, Clone, serde::Serialize)]
@@ -53,7 +53,7 @@ pub async fn about(app_handle: &tauri::AppHandle) -> DesktopAboutInfo {
         published_at,
         copyright: COPYRIGHT.to_string(),
         repo: REPO_URL.to_string(),
-        powered_by: POWERED_BY.to_string(),
+        powered_by: crate::desktop::product_name(app_handle).to_string(),
     }
 }
 

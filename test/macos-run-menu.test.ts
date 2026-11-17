@@ -12,14 +12,18 @@ function submenuItems(id: string) {
 }
 
 describe('macOS native menu', () => {
+  it('does not install or dispatch the manual update command', () => {
+    expect(builderSource).not.toContain('"desktop-check-update"')
+    expect(builderSource).not.toContain('&check_update')
+    expect(navbarSource).not.toContain('desktop-check-update')
+  })
+
   it('routes every Help link to a single shell window instead of broadcasting it', () => {
     const handler = builderSource.slice(builderSource.indexOf('.on_menu_event(|app, event|'))
     const helpActions = handler.slice(handler.indexOf('"desktop-documentation"'), handler.indexOf('#[cfg(target_os = "macos")]'))
     const broadcastActions = handler.slice(handler.indexOf('"desktop-config"'), handler.indexOf('_ => {}'))
-    for (const action of ['desktop-documentation', 'desktop-feedback', 'desktop-harness-feedback']) {
-      expect(helpActions).toContain(`"${action}"`)
-      expect(broadcastActions).not.toContain(`"${action}"`)
-    }
+    expect(helpActions).toContain('"desktop-documentation"')
+    expect(broadcastActions).not.toContain('"desktop-documentation"')
     expect(helpActions).toContain('help_menu_window_label(')
     expect(helpActions).toContain('app.emit_to(label, "macos-menu-action", event.id().as_ref())')
   })
@@ -98,14 +102,11 @@ describe('macOS native menu', () => {
     expect(i18nSource).toContain(`"${key}" => ("${zh}", "${en}")`)
   })
 
-  it('groups feedback links before run logs, developer tools and the task manager in Help', () => {
+  it('groups documentation and shortcuts before diagnostics in Help', () => {
     expect(submenuItems('desktop-help-menu')).toEqual([
       '&documentation',
       '&keyboard_shortcuts',
       '&help_separator',
-      '&desktop_feedback',
-      '&harness_feedback',
-      '&feedback_separator',
       '&run_logs',
       '&toggle_devtools',
       '&task_manager',
@@ -162,7 +163,6 @@ describe('macOS native menu', () => {
       'desktop-harness',
       'desktop-about',
       'desktop-copy-run-logs',
-      'desktop-check-update',
       'desktop-restart',
       'desktop-keyboard-shortcuts',
       'desktop-new-window',

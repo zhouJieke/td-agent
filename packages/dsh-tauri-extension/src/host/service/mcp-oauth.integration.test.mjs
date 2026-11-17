@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { createServer } from 'node:http'
+import { isDeepStrictEqual } from 'node:util'
 import * as sdk from '@modelcontextprotocol/client'
 import { afterEach, expect, it } from 'vitest'
 import { desktopMcpOAuth } from '../../../../../src-tauri/src/service/patch/mcp_oauth.mjs'
@@ -39,8 +40,11 @@ function credentials() {
     modifyRecord(key, update) {
       const run = (locks.get(key) ?? Promise.resolve()).then(async () => {
         const next = await update(structuredClone(records.get(key)))
-        if (next !== undefined)
+        if (next !== undefined) {
+          if (!isDeepStrictEqual(JSON.parse(JSON.stringify(next.payload)), next.payload))
+            throw new TypeError('Credential payload must survive a JSON round trip')
           records.set(key, structuredClone(next))
+        }
         return structuredClone(records.get(key))
       })
       locks.set(key, run.catch(() => {}))
@@ -104,16 +108,18 @@ async function fixture(options = {}) {
         const params = new URLSearchParams(raw)
         const verifier = params.get('code_verifier')
         const actual = createHash('sha256').update(verifier ?? '').digest('base64url')
-        if (params.get('grant_type') !== 'authorization_code' || params.get('code') !== 'valid-local-code' || params.get('client_id') !== 'local-desktop' || params.get('redirect_uri') !== registration.redirect_uris[0] || !challenge || actual !== challenge) {
+        const validRefresh = options.refresh && params.get('grant_type') === 'refresh_token' && params.get('refresh_token') === 'local-refresh'
+        const validCode = params.get('grant_type') === 'authorization_code' && params.get('code') === 'valid-local-code' && params.get('redirect_uri') === registration.redirect_uris[0] && challenge && actual === challenge
+        if (params.get('client_id') !== 'local-desktop' || (!validRefresh && !validCode)) {
           reply(res, 400, { error: 'invalid_grant' })
           return
         }
-        reply(res, options.tokenStatus ?? 200, options.tokenStatus ? { error: 'server_error', error_description: secret } : { access_token: 'local-access', refresh_token: 'local-refresh', token_type: 'Bearer', expires_in: 3600, scope: 'tools:read' })
+        reply(res, options.tokenStatus ?? 200, options.tokenStatus ? { error: 'server_error', error_description: secret } : { access_token: 'local-access', refresh_token: 'local-refresh', token_type: 'Bearer', ...(options.tokenExpiry === false ? {} : { expires_in: 3600 }), scope: 'tools:read' })
         return
       }
       if (url.pathname === '/mcp') {
         if (req.headers.authorization !== 'Bearer local-access') {
-          reply(res, 401, { error: 'authorization_required' }, { 'WWW-Authenticate': `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource", scope="tools:read"` })
+          reply(res, 401, { error: 'authorization_required' }, { 'WWW-Authenticate': options.resourceMetadataHint === false ? 'Bearer error="invalid_token"' : `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource", scope="tools:read"` })
           return
         }
         if (req.method !== 'POST') {
@@ -270,6 +276,54 @@ it('rejects wrong and duplicate callback state without consuming the real SDK au
   expect((await fetch(started.authorizationUrl)).status).toBe(200)
   expect(api.lookup(started.attemptId)).toEqual({ status: 'authorized' })
   expect(local.requests.filter(request => request.path === '/token')).toHaveLength(1)
+})
+
+it('persists OAuth grants discovered without a resource metadata hint before completing the callback', async () => {
+  const local = await fixture({ resourceMetadataHint: false })
+  const { api, started, store } = await start(local)
+  const response = await fetch(started.authorizationUrl)
+  expect(await response.text()).toBe('MCP authorized. You can close this window.')
+  expect(response.status).toBe(200)
+  expect(api.lookup(started.attemptId)).toEqual({ status: 'authorized' })
+  const record = [...store.records.values()][0].payload
+  expect(record.discovery.authorizationServerMetadata.issuer).toBe(local.origin)
+  expect(record.discovery).not.toHaveProperty('resourceMetadataUrl')
+  expect(record.tokens.access_token).toBe('local-access')
+  expect(await api.check(local.row)).toEqual({ ok: true })
+})
+
+it('persists OAuth tokens without an optional expiry before completing the callback', async () => {
+  const local = await fixture({ tokenExpiry: false })
+  const { api, started, store } = await start(local)
+  const response = await fetch(started.authorizationUrl)
+  expect(await response.text()).toBe('MCP authorized. You can close this window.')
+  expect(response.status).toBe(200)
+  expect(api.lookup(started.attemptId)).toEqual({ status: 'authorized' })
+  const record = [...store.records.values()][0].payload
+  expect(record.tokens.access_token).toBe('local-access')
+  expect(record).not.toHaveProperty('expiresAt')
+})
+
+it.each(['expiry', 'unauthorized'])('persists optional OAuth fields during a refresh triggered by %s', async (trigger) => {
+  const local = await fixture({ resourceMetadataHint: false, tokenExpiry: false, refresh: true })
+  const { api, started, store } = await start(local)
+  expect((await fetch(started.authorizationUrl)).status).toBe(200)
+  const key = [...store.records.keys()][0]
+  const provider = api.provider(local.row)
+  if (trigger === 'expiry') {
+    await store.modifyRecord(key, async current => ({ ...current, payload: { ...current.payload, expiresAt: 0 } }))
+    expect(await provider.token()).toBe('local-access')
+  }
+  else {
+    expect(await provider.token()).toBe('local-access')
+    await provider.onUnauthorized({ response: new Response(null, { status: 401 }) })
+  }
+  const record = (await store.readRecord(key)).payload
+  expect(record.tokens.refresh_token).toBe('local-refresh')
+  expect(record).not.toHaveProperty('expiresAt')
+  expect(record.discovery).not.toHaveProperty('resourceMetadataUrl')
+  expect(local.requests.filter(request => request.path === '/token').map(request => new URLSearchParams(request.body).get('grant_type'))).toEqual(['authorization_code', 'refresh_token'])
+  expect(await api.check(local.row)).toEqual({ ok: true })
 })
 
 it('never reports authorized when real SDK token exchange succeeds but MCP initialization fails', async () => {
