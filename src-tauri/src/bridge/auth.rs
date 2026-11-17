@@ -111,14 +111,14 @@ pub async fn desktop_install_employee_skill<R: tauri::Runtime>(
 #[tauri::command]
 pub async fn desktop_update_employee_skill<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
-    auth: tauri::State<'_, AuthService>,
+    auth: tauri::State<'_, Arc<AuthService>>,
     skill_name: String,
     expected_version: String,
     installed_version: Option<String>,
 ) -> Result<String, String> {
     let home = crate::config::get_dsh_data_path(&app);
     crate::service::skill::download_update(
-        &auth,
+        &**auth,
         home,
         skill_name,
         expected_version,
