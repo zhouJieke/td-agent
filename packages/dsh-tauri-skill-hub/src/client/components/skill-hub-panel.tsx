@@ -79,6 +79,8 @@ export function SkillHubPanel({ t, createSkill }: { t: Translate, createSkill: (
   const activeTab = state.tab === 'mine' || state.tab === 'local' ? state.tab : 'enterprise'
   const warning = state.feedback?.kind === 'failed'
     || ((state.feedback?.kind === 'downloaded' || state.feedback?.kind === 'updated') && state.feedback.status !== 'ready')
+  const listReady = state.loadedTabs.includes(state.tab)
+    || (activeTab === 'mine' ? state.mine !== null : state.common.length > 0)
   useWatchImmediate([state.tab], () => {
     void loadSkillHub()
   })
@@ -136,25 +138,25 @@ export function SkillHubPanel({ t, createSkill }: { t: Translate, createSkill: (
                   <div id={`${TABS_ID}-${activeTab}-panel`} role="tabpanel" className="min-w-0">
                     {activeTab === 'local'
                       ? <LocalSkills t={t} createSkill={createSkill} showDirectoryAndImport={SHOW_LOCAL_SKILL_DIRECTORY_AND_IMPORT} />
-                      : state.loading && state.common.length === 0
-                        ? <Text tone="tertiary" size="sm">{t('loading')}</Text>
-                        : activeTab === 'mine'
-                          ? (
-                              <MineView
-                                t={t}
-                                mine={state.mine}
-                                hint={t('mine.hint', { name: displayName })}
-                                emptyText={t('mine.empty')}
-                              />
-                            )
-                          : (
-                              <SkillCatalog
-                                t={t}
-                                hint={t('enterprise.hint')}
-                                skills={state.common}
-                                emptyText={t('enterprise.empty')}
-                              />
-                            )}
+                      : !listReady
+                          ? <Text tone="tertiary" size="sm">{t('loading')}</Text>
+                          : activeTab === 'mine'
+                            ? (
+                                <MineView
+                                  t={t}
+                                  mine={state.mine}
+                                  hint={t('mine.hint', { name: displayName })}
+                                  emptyText={t('mine.empty')}
+                                />
+                              )
+                            : (
+                                <SkillCatalog
+                                  t={t}
+                                  hint={t('enterprise.hint')}
+                                  skills={state.common}
+                                  emptyText={t('enterprise.empty')}
+                                />
+                              )}
                   </div>
                 </>
               )}

@@ -37,18 +37,4 @@ describe('技能中心登录态探测', () => {
     expect(store.skill.employee).toBeNull()
     expect(store.skill.authChecked).toBe(true)
   })
-
-  it('切换页签后丢弃此前尚未完成的登录态探测', async () => {
-    let resolveOld!: (value: EmployeeInfo) => void
-    vi.mocked(invoke).mockReturnValueOnce(new Promise<EmployeeInfo>((resolve) => {
-      resolveOld = resolve
-    }))
-    const pending = fetchAuth()
-
-    store.skill.setTab('local')
-    resolveOld(employee)
-
-    await expect(pending).resolves.toBe(false)
-    expect(store.skill.authChecked).toBe(false)
-  })
 })

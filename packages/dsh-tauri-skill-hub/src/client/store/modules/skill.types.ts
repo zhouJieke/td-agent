@@ -73,7 +73,8 @@ export interface SkillHubState {
   manageLoading: boolean
   tab: SkillTab
   keyword: string
-  loading: boolean
+  /** 已完成首次拉取的页签；切回已加载页签不再请求，列表保持稳定。 */
+  loadedTabs: readonly SkillTab[]
   downloading: readonly string[]
   installedNames: readonly string[]
   installedVersions: Readonly<Record<string, string>>

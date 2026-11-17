@@ -18,7 +18,7 @@ export const skill = defineStore({
     manageLoading: false,
     tab: 'enterprise',
     keyword: '',
-    loading: false,
+    loadedTabs: [],
     downloading: [],
     installedNames: [],
     installedVersions: {},
@@ -75,18 +75,18 @@ export const skill = defineStore({
       this.manageLoading = loading
     },
     setTab(tab: SkillTab) {
-      if (this.tab !== tab) {
-        this.authRequestId += 1
-        this.authChecked = false
-      }
       this.tab = tab
       this.keyword = ''
     },
     setKeyword(keyword: string) {
       this.keyword = keyword
     },
-    setLoading(loading: boolean) {
-      this.loading = loading
+    markTabLoaded(tab: SkillTab) {
+      if (!this.loadedTabs.includes(tab))
+        this.loadedTabs = [...this.loadedTabs, tab]
+    },
+    resetLoadedTabs() {
+      this.loadedTabs = []
     },
     startDownload(name: string) {
       this.downloading = [...this.downloading, name]
@@ -128,7 +128,6 @@ export const skill = defineStore({
     },
     setError(error: string) {
       this.error = error
-      this.loading = false
     },
     notifySaved(name: string, count: number) {
       this.feedbackSeq += 1

@@ -125,7 +125,7 @@ beforeEach(() => {
   store.skill.setMine(null)
   store.skill.setManageUser('')
   store.skill.setManageMine(null)
-  store.skill.setLoading(false)
+  store.skill.resetLoadedTabs()
   store.skill.setError('')
   store.skill.setKeyword('')
   store.skill.setDetail(null)
@@ -147,7 +147,10 @@ beforeEach(() => {
   vi.mocked(getInstalledSkills).mockReset()
   vi.mocked(getInstalledSkills).mockResolvedValue(installed([]))
   vi.mocked(loadSkillHub).mockReset()
-  vi.mocked(loadSkillHub).mockImplementation(async () => store.skill.setEmployee(store.skill.employee))
+  vi.mocked(loadSkillHub).mockImplementation(async () => {
+    store.skill.setEmployee(store.skill.employee)
+    store.skill.markTabLoaded(store.skill.tab)
+  })
   createSkill.mockReset()
   createSkill.mockResolvedValue(undefined)
 })
@@ -240,21 +243,16 @@ describe('技能中心独立本地技能页', () => {
       .toBe('Skills configured for Employee.')
   })
 
-  it('切换本地页时等待登录态重新确认，失效后不展示或请求技能', async () => {
-    vi.mocked(loadSkillHub).mockImplementation(() => new Promise<void>(() => {}))
+  it('切换页签不重新确认登录态，本地页立即可用', async () => {
     vi.mocked(getSkills).mockResolvedValue({ skills: [localSkill('private-skill', 'user-dsh')] })
     const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
 
     fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))
-    await waitFor(() => expect(view.queryByText('No enterprise skills yet.')).toBeNull())
 
-    expect(view.queryByText('private-skill')).toBeNull()
-    expect(getSkills).not.toHaveBeenCalled()
-    expect(postSkillsRefresh).not.toHaveBeenCalled()
-    act(() => store.skill.setEmployee(null))
-    expect((await view.findByText('Sign in required')).textContent).toBe('Sign in required')
-    expect(getSkills).not.toHaveBeenCalled()
-    expect(postSkillsRefresh).not.toHaveBeenCalled()
+    expect((await view.findByText('private-skill')).textContent).toBe('private-skill')
+    expect(store.skill.authChecked).toBe(true)
+    expect(view.queryByText('Sign in required')).toBeNull()
+    expect(view.queryByText('No enterprise skills yet.')).toBeNull()
   })
 
   it('不加载扩展面板也能展示内核技能与下载的技能', async () => {
@@ -689,7 +687,6 @@ describe('技能中心独立本地技能页', () => {
   it('企业技能加载中或失败时不阻塞本地页', async () => {
     vi.mocked(getSkills).mockResolvedValue({ skills: [localSkill('builtin-skill', 'bundled')] })
     store.skill.setError('Enterprise API unavailable')
-    store.skill.setLoading(true)
     const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
 
     fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))

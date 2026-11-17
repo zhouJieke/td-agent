@@ -1,5 +1,5 @@
 import type { SkillInstallStatus } from '../store/modules/skill.types'
-import type { ActionResult, SkillSummary } from '../types'
+import type { ActionResult, SkillSummary, SkillTab } from '../types'
 import { invoke } from 'dsh-tauri/client'
 import { getInstalledSkills, getLocalSkill, getSkill, getSkills, postSkillsRefresh } from '../apis'
 import { store } from '../store'
@@ -20,16 +20,19 @@ function fail(error: unknown): ActionResult {
 }
 
 /**
- * Query：面板装配总入口。先探测登录态，未登录止步（面板渲染登录提示）；
- * 已登录再并发拉取技能数据、当前用户档案与全量员工列表。
+ * Query：面板装配总入口。已登录时不再重复探测登录态，只按当前页签拉取该页所需的接口，
+ * 已加载过的页签直接复用 store 中的数据，切换页签时列表不会重新刷新。
  */
 export async function loadSkillHub(): Promise<void> {
-  if (!await fetchAuth())
-    return
+  if (store.skill.employee === null || !store.skill.authChecked) {
+    if (!await fetchAuth())
+      return
+    store.skill.resetLoadedTabs()
+  }
   const employee = store.skill.employee
   if (employee === null || store.skill.tab === 'local')
     return
-  await Promise.all([fetchSkillHub(employee.employeeNumber), fetchInstalledSkills()])
+  await Promise.all([fetchSkillTab(employee.employeeNumber, store.skill.tab), fetchInstalledSkills()])
 }
 
 export async function fetchInstalledSkills(): Promise<void> {
@@ -53,37 +56,64 @@ export async function fetchInstalledSkills(): Promise<void> {
 }
 
 /**
- * Query：并发拉取企业公用技能、全量技能、当前用户已配置技能、用户档案与员工列表。
- * 员工列表失败不阻断其余数据（管理页下拉退化为仅当前用户）。
- * 传输层错误落 `store.skill.error` 由面板内联渲染。
+ * Query：按页签拉取该页所需的最小接口集合。
+ * 企业页只要公用技能，我的技能页只要个人名单与档案，管理页才需要全量目录与员工列表。
+ * 传输层错误落 `store.skill.error` 由面板内联渲染；员工与档案失败降级为空值不阻断。
  */
-export async function fetchSkillHub(userId: string): Promise<void> {
+export async function fetchSkillTab(userId: string, tab: SkillTab, force = false): Promise<void> {
+  if (!force && store.skill.loadedTabs.includes(tab))
+    return
   const authRequestId = store.skill.authRequestId
-  store.skill.setLoading(true)
   try {
-    const [common, catalog, mine, profile, employees] = await Promise.all([
-      fetchCommonSkills(),
-      fetchCatalogSkills(),
-      fetchUserSkills(userId),
-      fetchUserProfile(userId).catch(() => null),
-      fetchEmployees().catch(() => []),
-    ])
-    if (store.skill.authRequestId !== authRequestId || store.skill.employee?.employeeNumber !== userId)
+    if (tab === 'enterprise') {
+      const common = await fetchCommonSkills()
+      if (isStale(authRequestId, userId))
+        return
+      store.skill.setCommon(common.items)
+    }
+    else if (tab === 'mine') {
+      const [mine, profile] = await Promise.all([
+        fetchUserSkills(userId),
+        fetchUserProfile(userId).catch(() => null),
+      ])
+      if (isStale(authRequestId, userId))
+        return
+      store.skill.setMine(mine)
+      store.skill.setProfile(profile)
+      if (store.skill.manageUserId === userId)
+        store.skill.setManageMine(mine)
+    }
+    else if (tab === 'manage') {
+      const [catalog, employees, mine, profile] = await Promise.all([
+        fetchCatalogSkills(),
+        fetchEmployees().catch(() => []),
+        fetchUserSkills(userId),
+        fetchUserProfile(userId).catch(() => null),
+      ])
+      if (isStale(authRequestId, userId))
+        return
+      store.skill.setCatalog(catalog.items)
+      store.skill.setEmployees(employees)
+      store.skill.setMine(mine)
+      store.skill.setProfile(profile)
+      store.skill.setManageUser(userId)
+      store.skill.setManageMine(mine)
+    }
+    else {
       return
-    store.skill.setCommon(common.items)
-    store.skill.setCatalog(catalog.items)
-    store.skill.setMine(mine)
-    store.skill.setProfile(profile)
-    store.skill.setEmployees(employees)
-    store.skill.setManageUser(userId)
-    store.skill.setManageMine(mine)
+    }
     store.skill.setError('')
+    store.skill.markTabLoaded(tab)
   }
   catch (error) {
-    if (store.skill.authRequestId !== authRequestId || store.skill.employee?.employeeNumber !== userId)
+    if (isStale(authRequestId, userId))
       return
     store.skill.setError(messageOf(error))
   }
+}
+
+function isStale(authRequestId: number, userId: string): boolean {
+  return store.skill.authRequestId !== authRequestId || store.skill.employee?.employeeNumber !== userId
 }
 
 /**
@@ -286,7 +316,7 @@ export async function updateSkill({ name, latestVersion, installedVersion }: {
     if (messageOf(error).split(':', 1)[0] === 'SKILL_REMOTE_VERSION_CHANGED') {
       const userId = store.skill.employee?.employeeNumber
       if (typeof userId === 'string' && userId.trim() !== '')
-        await fetchSkillHub(userId)
+        await fetchSkillTab(userId, store.skill.tab, true)
     }
     const result = fail(error)
     await fetchInstalledSkills()
