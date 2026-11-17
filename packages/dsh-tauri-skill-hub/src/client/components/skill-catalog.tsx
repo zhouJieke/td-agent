@@ -3,6 +3,7 @@ import type { Translate } from '../locales/index.types'
 import type { SkillSummary } from '../types'
 import { Icon, Input, Magnifier, Text } from 'dsh-tauri-ui/client'
 import { isEmpty, useStore } from 'dsh-tauri/client'
+import { openSkillDetail } from '../service/skill'
 import { store } from '../store'
 import { filterSummaries } from '../store/modules/skill.utils'
 import { SkillDownload } from './skill-download'
@@ -40,6 +41,7 @@ export function SkillCatalog({ t, hint, skills, emptyText }: SkillCatalogProps):
         skills={matched}
         emptyText={isEmpty(keyword) ? emptyText : t('list.emptyMatch')}
         actions={skill => <SkillDownload t={t} name={skill.name} latestVersion={skill.labels.latest} />}
+        onSelect={openSkillDetail}
       />
     </div>
   )

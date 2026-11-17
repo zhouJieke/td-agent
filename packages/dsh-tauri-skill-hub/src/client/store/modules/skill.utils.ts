@@ -3,8 +3,6 @@ import { filter, find, includes, isEmpty, lowerCase, orderBy } from 'dsh-tauri/c
 import { gt, parse } from 'semver'
 import { SKILL_TABS } from '../../constants'
 
-const DAY_MS = 86_400_000
-
 export function isSkillVersion(value: unknown): value is string {
   return typeof value === 'string' && /^\d/.test(value) && parse(value) !== null
 }
@@ -71,11 +69,6 @@ export function employeeLabel(employee: EmployeeDeptVO | undefined, fallback: st
   if (!isEmpty(department))
     return department
   return fallback
-}
-
-/** 距今整天数；同一天返回 0。 */
-export function daysSince(timestamp: number, now: number): number {
-  return Math.max(0, Math.floor((now - timestamp) / DAY_MS))
 }
 
 /** `SegmentedControl` 的字符串值收敛回页签联合类型。 */

@@ -128,6 +128,7 @@ beforeEach(() => {
   store.skill.setLoading(false)
   store.skill.setError('')
   store.skill.setKeyword('')
+  store.skill.setDetail(null)
   store.skill.dismissFeedback()
   store.skill.finishInstalledLoad(store.skill.startInstalledLoad(), [])
   for (const name of store.skill.downloading)
@@ -193,7 +194,7 @@ describe('技能中心独立本地技能页', () => {
     const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
 
     fireEvent.click(view.getByRole('tab', { name: 'My skills' }))
-    await view.findByText('Skills configured for Employee, with all their versions.')
+    await view.findByText('Skills configured for Employee.')
     expect(view.queryByRole('button', { name: 'Upload skill' })).toBeNull()
     fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))
     await view.findByText('No skills discovered yet')
@@ -235,8 +236,8 @@ describe('技能中心独立本地技能页', () => {
 
     fireEvent.click(view.getByRole('tab', { name: 'My skills' }))
 
-    expect((await view.findByText('Skills configured for Employee, with all their versions.')).textContent)
-      .toBe('Skills configured for Employee, with all their versions.')
+    expect((await view.findByText('Skills configured for Employee.')).textContent)
+      .toBe('Skills configured for Employee.')
   })
 
   it('切换本地页时等待登录态重新确认，失效后不展示或请求技能', async () => {

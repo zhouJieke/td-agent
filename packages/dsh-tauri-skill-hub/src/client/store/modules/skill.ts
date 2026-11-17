@@ -1,6 +1,6 @@
 import type { EmployeeInfo } from 'dsh-tauri/client'
 import type { EmployeeDeptVO, EmployeeProfile, SkillSummary, SkillTab, UserSkillDetails } from '../../types'
-import type { SkillHubState, SkillInstallStatus } from './skill.types'
+import type { SkillDetailState, SkillHubState, SkillInstallStatus } from './skill.types'
 import { defineStore } from 'dsh-tauri/client'
 
 export const skill = defineStore({
@@ -30,6 +30,7 @@ export const skill = defineStore({
     error: '',
     feedback: null,
     feedbackSeq: 0,
+    detail: null,
   }),
   actions: {
     setEmployee(employee: EmployeeInfo | null) {
@@ -178,6 +179,9 @@ export const skill = defineStore({
     dismissFeedback(seq?: number) {
       if (seq === undefined || this.feedback?.seq === seq)
         this.feedback = null
+    },
+    setDetail(detail: SkillDetailState | null) {
+      this.detail = detail
     },
   },
 })

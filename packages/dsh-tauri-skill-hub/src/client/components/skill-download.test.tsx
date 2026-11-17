@@ -10,9 +10,13 @@ import { SkillCatalog } from './skill-catalog'
 import { SkillHubPanel } from './skill-hub-panel'
 
 vi.mock('../service/skill', () => ({
+  closeSkillDetail: vi.fn(),
   downloadSkill: vi.fn(),
   fetchInstalledSkills: vi.fn(),
   loadSkillHub: vi.fn(),
+  openSkillDetail: vi.fn(),
+  saveUserSkillNames: vi.fn(),
+  selectManageUser: vi.fn(),
   updateSkill: vi.fn(),
   uploadMySkill: vi.fn(),
 }))

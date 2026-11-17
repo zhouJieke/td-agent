@@ -1,7 +1,7 @@
 import type { SkillInstallStatus } from '../store/modules/skill.types'
-import type { ActionResult } from '../types'
+import type { ActionResult, SkillSummary } from '../types'
 import { invoke } from 'dsh-tauri/client'
-import { getInstalledSkills, getLocalSkill, postSkillsRefresh } from '../apis'
+import { getInstalledSkills, getLocalSkill, getSkill, getSkills, postSkillsRefresh } from '../apis'
 import { store } from '../store'
 import { employeeLabel, findEmployee, installedSkillVersion, isNewerSkillVersion, isSkillVersion } from '../store/modules/skill.utils'
 import { fetchAuth } from './auth'
@@ -84,6 +84,64 @@ export async function fetchSkillHub(userId: string): Promise<void> {
       return
     store.skill.setError(messageOf(error))
   }
+}
+
+/**
+ * Query：点击企业/我的技能卡片打开只读详情。
+ * 先以远端摘要上屏，再异步补齐本地已安装的正文与元数据；本地未安装则只展示摘要。
+ */
+export function openSkillDetail(summary: SkillSummary): void {
+  store.skill.setDetail({
+    name: summary.name,
+    description: summary.description ?? '',
+    whenToUse: '',
+    modelInvocable: false,
+    userInvocable: false,
+    content: '',
+    local: false,
+    contentLoading: true,
+  })
+  void loadSkillDetail(summary)
+}
+
+export function closeSkillDetail(): void {
+  store.skill.setDetail(null)
+}
+
+async function loadSkillDetail(summary: SkillSummary): Promise<void> {
+  try {
+    const [contentResult, skillsResult] = await Promise.all([
+      getSkill({ name: summary.name }),
+      getSkills(),
+    ])
+    if (!isDetailLoading(summary.name))
+      return
+    if ('error' in contentResult)
+      throw new Error(contentResult.error)
+    const row = 'skills' in skillsResult ? skillsResult.skills.find(item => item.name === summary.name) : undefined
+    store.skill.setDetail({
+      name: summary.name,
+      description: summary.description ?? row?.description ?? '',
+      whenToUse: row?.whenToUse ?? '',
+      modelInvocable: row?.invocation.modelInvocable ?? false,
+      userInvocable: row?.invocation.userInvocable ?? false,
+      content: contentResult.content,
+      local: true,
+      contentLoading: false,
+    })
+  }
+  catch {
+    if (!isDetailLoading(summary.name))
+      return
+    const current = store.skill.detail
+    if (current !== null)
+      store.skill.setDetail({ ...current, contentLoading: false })
+  }
+}
+
+function isDetailLoading(name: string): boolean {
+  const detail = store.skill.detail
+  return detail !== null && detail.name === name && detail.contentLoading
 }
 
 /** Query：切换管理页的配置对象，拉取该员工已配置的技能名单。 */

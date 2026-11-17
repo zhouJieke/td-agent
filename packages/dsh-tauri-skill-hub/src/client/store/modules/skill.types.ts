@@ -35,6 +35,18 @@ export interface SkillFailedFeedback {
 /** 一次用户可感知的操作结果，由 Toast 呈现（kind → 文案在面板里查词典）。 */
 export type SkillFeedback = SkillSavedFeedback | SkillUploadedFeedback | SkillDownloadedFeedback | SkillFailedFeedback
 
+/** 只读详情弹窗数据：远端摘要先行展示，本地正文加载完成后补齐。 */
+export interface SkillDetailState {
+  name: string
+  description: string
+  whenToUse: string
+  modelInvocable: boolean
+  userInvocable: boolean
+  content: string
+  local: boolean
+  contentLoading: boolean
+}
+
 /** 面板可变状态：三份接口数据是唯一真值，页签与检索词是视图状态。 */
 export interface SkillHubState {
   /** 登录态探测结果；`null` 表示未登录（或尚未探测完成）。 */
@@ -72,4 +84,6 @@ export interface SkillHubState {
   error: string
   feedback: SkillFeedback | null
   feedbackSeq: number
+  /** 企业/我的技能只读详情；`null` 表示弹窗关闭。 */
+  detail: SkillDetailState | null
 }

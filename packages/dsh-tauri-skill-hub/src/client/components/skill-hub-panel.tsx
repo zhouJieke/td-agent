@@ -10,6 +10,7 @@ import { toTab } from '../store/modules/skill.utils'
 import { LocalSkills } from './local-skills'
 import { MineView } from './mine-view'
 import { SkillCatalog } from './skill-catalog'
+import { SkillDetailModal } from './skill-detail-modal'
 
 const TABS_ID = `${PLUGIN_ID}.tabs`
 const SHOW_LOCAL_SKILL_DIRECTORY_AND_IMPORT = false
@@ -169,6 +170,8 @@ export function SkillHubPanel({ t, createSkill }: { t: Translate, createSkill: (
                 onDone={() => store.skill.dismissFeedback(state.feedback?.seq)}
               />
             )}
+
+        <SkillDetailModal t={t} />
       </div>
     </Panel>
   )

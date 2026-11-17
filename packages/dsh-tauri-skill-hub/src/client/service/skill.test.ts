@@ -1,12 +1,12 @@
 import type { EmployeeDeptVO, EmployeeProfile, SkillPage, UserSkillDetails } from '../types'
 import { invoke } from 'dsh-tauri/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { deleteSkill, getInstalledSkills, getLocalSkill, getSkills, postSkillsRefresh } from '../apis'
+import { deleteSkill, getInstalledSkills, getLocalSkill, getSkill, getSkills, postSkillsRefresh } from '../apis'
 import { store } from '../store'
 import { fetchAuth } from './auth'
 import { deleteLocalSkill } from './local-skills'
 import { fetchCatalogSkills, fetchCommonSkills, fetchEmployees, fetchUserProfile, fetchUserSkills, saveUserSkills, uploadSkillZip } from './remote'
-import { downloadSkill, fetchInstalledSkills, fetchSkillHub, loadSkillHub, saveUserSkillNames, selectManageUser, updateSkill, uploadMySkill } from './skill'
+import { closeSkillDetail, downloadSkill, fetchInstalledSkills, fetchSkillHub, loadSkillHub, openSkillDetail, saveUserSkillNames, selectManageUser, updateSkill, uploadMySkill } from './skill'
 
 vi.mock('dsh-tauri/client', async importOriginal => ({
   ...await importOriginal<typeof import('dsh-tauri/client')>(),
@@ -32,6 +32,7 @@ vi.mock('../apis', async importOriginal => ({
   deleteSkill: vi.fn(),
   getInstalledSkills: vi.fn(),
   getLocalSkill: vi.fn(),
+  getSkill: vi.fn(),
   getSkills: vi.fn(),
   postSkillsRefresh: vi.fn(),
 }))
@@ -86,6 +87,7 @@ beforeEach(() => {
   store.skill.setManageMine(null)
   store.skill.setManageLoading(false)
   store.skill.setError('')
+  store.skill.setDetail(null)
   store.skill.finishInstalledLoad(store.skill.startInstalledLoad(), [])
   store.localSkills.reset()
   for (const name of store.skill.downloading)
@@ -104,6 +106,7 @@ beforeEach(() => {
   vi.mocked(getLocalSkill).mockResolvedValue({ status: 'ready' })
   vi.mocked(getInstalledSkills).mockReset()
   vi.mocked(getInstalledSkills).mockResolvedValue(installed([]))
+  vi.mocked(getSkill).mockReset()
   vi.mocked(getSkills).mockReset()
   vi.mocked(deleteSkill).mockReset()
   vi.mocked(postSkillsRefresh).mockReset()
@@ -715,5 +718,64 @@ describe('本地安装状态同步', () => {
 
     expect(store.localSkills.formError).toBe('provider refresh failed')
     expect(store.skill.installedNames).toEqual([])
+  })
+})
+
+describe('只读技能详情', () => {
+  const SUMMARY = page(['demo']).items[0]
+  const LOCAL_ROW = {
+    name: 'demo',
+    description: '本地描述',
+    whenToUse: '需要时',
+    invocation: { modelInvocable: true, userInvocable: false },
+    source: 'user',
+    provider: 'built-in',
+    editable: true,
+    removable: true,
+    policyEditable: true,
+  }
+  const flushPromises = () => new Promise(resolve => setTimeout(resolve, 0))
+
+  it('先展示摘要，本地正文与元数据加载完成后补齐', async () => {
+    vi.mocked(getSkill).mockResolvedValue({ name: 'demo', content: '# demo' })
+    vi.mocked(getSkills).mockResolvedValue({ skills: [LOCAL_ROW] })
+
+    openSkillDetail(SUMMARY)
+    expect(store.skill.detail).toMatchObject({ name: 'demo', local: false, contentLoading: true })
+
+    await flushPromises()
+    expect(store.skill.detail).toMatchObject({
+      name: 'demo',
+      description: 'demo description',
+      whenToUse: '需要时',
+      modelInvocable: true,
+      userInvocable: false,
+      content: '# demo',
+      local: true,
+      contentLoading: false,
+    })
+  })
+
+  it('本地未安装时仅保留摘要并结束加载', async () => {
+    vi.mocked(getSkill).mockResolvedValue({ error: 'SKILL_NOT_FOUND: demo' })
+    vi.mocked(getSkills).mockResolvedValue({ skills: [] })
+
+    openSkillDetail(SUMMARY)
+    await flushPromises()
+
+    expect(store.skill.detail).toMatchObject({ name: 'demo', description: 'demo description', local: false, content: '', contentLoading: false })
+  })
+
+  it('详情已关闭时迟到的响应不再写回', async () => {
+    let finish!: (value: { name: string, content: string }) => void
+    vi.mocked(getSkill).mockReturnValue(new Promise(resolve => (finish = resolve)))
+    vi.mocked(getSkills).mockResolvedValue({ skills: [LOCAL_ROW] })
+
+    openSkillDetail(SUMMARY)
+    closeSkillDetail()
+    finish({ name: 'demo', content: '# demo' })
+    await flushPromises()
+
+    expect(store.skill.detail).toBeNull()
   })
 })

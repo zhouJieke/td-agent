@@ -1,6 +1,6 @@
 import type { EmployeeDeptVO, SkillSummary } from '../../types'
 import { describe, expect, it } from 'vitest'
-import { daysSince, employeeLabel, filterSummaries, findEmployee, parseBizTags, skillTitle, sortSummaries, toTab } from './skill.utils'
+import { employeeLabel, filterSummaries, findEmployee, parseBizTags, skillTitle, sortSummaries, toTab } from './skill.utils'
 
 const DAY_MS = 86_400_000
 const NOW = Date.parse('2026-10-20T12:00:00Z')
@@ -77,14 +77,6 @@ describe('展示名与页签取值', () => {
     expect(toTab('manage')).toBe('manage')
     expect(toTab('local')).toBe('local')
     expect(toTab('unknown')).toBe('enterprise')
-  })
-
-  it('距今整天数向下取整，同日为零，未来时间不为负', () => {
-    expect(daysSince(NOW, NOW)).toBe(0)
-    expect(daysSince(NOW - 3 * 3_600_000, NOW)).toBe(0)
-    expect(daysSince(NOW - DAY_MS, NOW)).toBe(1)
-    expect(daysSince(NOW - 2.9 * DAY_MS, NOW)).toBe(2)
-    expect(daysSince(NOW + DAY_MS, NOW)).toBe(0)
   })
 })
 
