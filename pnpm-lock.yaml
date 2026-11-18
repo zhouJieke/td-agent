@@ -301,22 +301,22 @@ catalogs:
       version: 1.12.1
   plugins:
     '@changfenhuang/dsh-genui':
-      specifier: 0.16.0
+      specifier: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/changfenhuang-dsh-genui-0.16.0.tgz
       version: 0.16.0
     '@max-null/dsh-chinese-thinking':
-      specifier: 0.3.1
+      specifier: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/max-null-dsh-chinese-thinking-0.3.1.tgz
       version: 0.3.1
     '@nanmicoder/dsh-agent-teams':
-      specifier: 0.1.30
+      specifier: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/nanmicoder-dsh-agent-teams-0.1.30.tgz
       version: 0.1.30
     '@xmanrui/dsh-im':
-      specifier: https://ethan-zmj.oss-cn-beijing.aliyuncs.com/xmanrui-dsh-im-5.10.0.tgz
+      specifier: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/xmanrui-dsh-im-5.10.0.tgz
       version: 5.10.0
     dsh-inner-browser-use:
-      specifier: 0.47.98
+      specifier: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/dsh-inner-browser-use-0.47.98.tgz
       version: 0.47.98
     dsh-univer-office:
-      specifier: 0.4.0
+      specifier: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/dsh-univer-office-0.4.0.tgz
       version: 0.4.0
   release:
     bumpp:
@@ -1017,19 +1017,19 @@ importers:
     dependencies:
       '@changfenhuang/dsh-genui':
         specifier: catalog:plugins
-        version: 0.16.0(d19b0a5ab8169e9f297e9a20b8e0ff92)
+        version: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/changfenhuang-dsh-genui-0.16.0.tgz(d19b0a5ab8169e9f297e9a20b8e0ff92)
       '@max-null/dsh-chinese-thinking':
         specifier: catalog:plugins
-        version: 0.3.1(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-system-prompt@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-llm@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-scope@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5)))
+        version: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/max-null-dsh-chinese-thinking-0.3.1.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-system-prompt@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-llm@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-scope@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5)))
       '@nanmicoder/dsh-agent-teams':
         specifier: catalog:plugins
-        version: 0.1.30(64c968cdac6c7fdd31d0c5b9bd0f0130)
+        version: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/nanmicoder-dsh-agent-teams-0.1.30.tgz(64c968cdac6c7fdd31d0c5b9bd0f0130)
       '@xmanrui/dsh-im':
         specifier: catalog:plugins
-        version: https://ethan-zmj.oss-cn-beijing.aliyuncs.com/xmanrui-dsh-im-5.10.0.tgz(@types/node@22.20.1)
+        version: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/xmanrui-dsh-im-5.10.0.tgz(@types/node@22.20.1)
       dsh-inner-browser-use:
         specifier: catalog:plugins
-        version: 0.47.98
+        version: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/dsh-inner-browser-use-0.47.98.tgz
       dsh-tauri:
         specifier: workspace:*
         version: link:../dsh-tauri
@@ -1068,7 +1068,7 @@ importers:
         version: link:../dsh-tauri-worktree
       dsh-univer-office:
         specifier: catalog:plugins
-        version: 0.4.0(0a24acc57c28a19267019329e5bdddcd)
+        version: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/dsh-univer-office-0.4.0.tgz(0a24acc57c28a19267019329e5bdddcd)
 
   packages/dsh-tauri-experimental:
     dependencies:
@@ -1942,8 +1942,9 @@ packages:
     resolution: {integrity: sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA==}
     engines: {node: '>=18'}
 
-  '@changfenhuang/dsh-genui@0.16.0':
-    resolution: {integrity: sha512-UyBFwCQ+byFRlEn8RCP9XD9Qm8dPHV2dqBJLsuUbEGvy51KUkcKjDdMoq8/N4rtGJy+qKg2L2iaSEWVbu0qrbg==}
+  '@changfenhuang/dsh-genui@https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/changfenhuang-dsh-genui-0.16.0.tgz':
+    resolution: {integrity: sha512-UyBFwCQ+byFRlEn8RCP9XD9Qm8dPHV2dqBJLsuUbEGvy51KUkcKjDdMoq8/N4rtGJy+qKg2L2iaSEWVbu0qrbg==, tarball: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/changfenhuang-dsh-genui-0.16.0.tgz}
+    version: 0.16.0
     engines: {dsh: ^0.2.0-rc.1 || ^0.2.1-rc.1 || ^0.2.2-alpha.2, node: ^22.19.0 || >=24.0.0, pnpm: '>=11.7.0 <12'}
     peerDependencies:
       '@deepseek-ai/cordis': ^4.0.1 || ^4.0.6-alpha.1
@@ -3552,8 +3553,9 @@ packages:
   '@matrix-org/olm@3.2.15':
     resolution: {integrity: sha512-S7lOrndAK9/8qOtaTq/WhttJC/o4GAzdfK0MUPpo8ApzsJEC0QjtwrkC3KBXdFP1cD1MXi/mlKR7aaoVMKgs6Q==}
 
-  '@max-null/dsh-chinese-thinking@0.3.1':
-    resolution: {integrity: sha512-SGrAov0GKNNWLXyknyBYDFJRg1Ca/wpHz3vZkkoYhaIRA4T06OA1Cd2ef6veiOtWiPWPL3f536ZkA2RJin3qGA==}
+  '@max-null/dsh-chinese-thinking@https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/max-null-dsh-chinese-thinking-0.3.1.tgz':
+    resolution: {integrity: sha512-SGrAov0GKNNWLXyknyBYDFJRg1Ca/wpHz3vZkkoYhaIRA4T06OA1Cd2ef6veiOtWiPWPL3f536ZkA2RJin3qGA==, tarball: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/max-null-dsh-chinese-thinking-0.3.1.tgz}
+    version: 0.3.1
     peerDependencies:
       '@deepseek-ai/cordis': ^4.0.1
       '@deepseek-ai/dsh-system-prompt': '>=0.1.1-rc.1 <0.3.0'
@@ -3566,8 +3568,9 @@ packages:
     resolution: {integrity: sha512-iLhmprRmWI8EcosOA3wVvww22z02NkgqhV4fBH6f/odQBsi7xnJc0HGmi21yWO+/iKw2yzqVE127Zhna5/+JXw==}
     engines: {node: '>=20'}
 
-  '@nanmicoder/dsh-agent-teams@0.1.30':
-    resolution: {integrity: sha512-oaFjaIVjSsyU83QuHhsGuVxrNIWxerTL3sP8r1hrey2c7bqimK8PnSPJDPGUHcgjpWDSx/tbRuXuts0E7EONGA==}
+  '@nanmicoder/dsh-agent-teams@https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/nanmicoder-dsh-agent-teams-0.1.30.tgz':
+    resolution: {integrity: sha512-oaFjaIVjSsyU83QuHhsGuVxrNIWxerTL3sP8r1hrey2c7bqimK8PnSPJDPGUHcgjpWDSx/tbRuXuts0E7EONGA==, tarball: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/nanmicoder-dsh-agent-teams-0.1.30.tgz}
+    version: 0.1.30
     engines: {dsh: '>=0.1.2-alpha.2', node: ^22.19.0 || >=24}
     hasBin: true
     peerDependencies:
@@ -5446,8 +5449,8 @@ packages:
   '@wecom/aibot-node-sdk@1.0.7':
     resolution: {integrity: sha512-51w+sTqunry6GD3HFvmuh0gArMSJDFE418vyvR1wMJHj1N6DaFuGD3HuaY2fazZs3mb9FWeQFX3+vU5t0Qhwmw==}
 
-  '@xmanrui/dsh-im@https://ethan-zmj.oss-cn-beijing.aliyuncs.com/xmanrui-dsh-im-5.10.0.tgz':
-    resolution: {integrity: sha512-1RZ92PlPbeJSwoit8HTX22uPwi6qbfZ9M8dovYFW+A2yl03JWRBxarEncn+k7B8ppsS9STK62hv9LCV3BoZxQQ==, tarball: https://ethan-zmj.oss-cn-beijing.aliyuncs.com/xmanrui-dsh-im-5.10.0.tgz}
+  '@xmanrui/dsh-im@https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/xmanrui-dsh-im-5.10.0.tgz':
+    resolution: {integrity: sha512-1RZ92PlPbeJSwoit8HTX22uPwi6qbfZ9M8dovYFW+A2yl03JWRBxarEncn+k7B8ppsS9STK62hv9LCV3BoZxQQ==, tarball: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/xmanrui-dsh-im-5.10.0.tgz}
     version: 5.10.0
     engines: {node: '>=22.19'}
     hasBin: true
@@ -6355,12 +6358,14 @@ packages:
       typescript:
         optional: true
 
-  dsh-inner-browser-use@0.47.98:
-    resolution: {integrity: sha512-Zaa4JCzq69UL4jFm+py1QgNp0Rw/NDP9ukvVXADbfzPpmFxAGubEwVaMOW0SkWLB/vhAG1sfVrLDq5Vkkte6CA==}
+  dsh-inner-browser-use@https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/dsh-inner-browser-use-0.47.98.tgz:
+    resolution: {integrity: sha512-Zaa4JCzq69UL4jFm+py1QgNp0Rw/NDP9ukvVXADbfzPpmFxAGubEwVaMOW0SkWLB/vhAG1sfVrLDq5Vkkte6CA==, tarball: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/dsh-inner-browser-use-0.47.98.tgz}
+    version: 0.47.98
     engines: {dsh: '>=0.2.0', node: '>=20'}
 
-  dsh-univer-office@0.4.0:
-    resolution: {integrity: sha512-VSKiVZvHvlON27KWxamP5EWNty/aGJQNMaLWTJb2R4S2pERloJCm2r3KwuDPMrSChKMX0QQhX8EUcHGx9jmgnA==}
+  dsh-univer-office@https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/dsh-univer-office-0.4.0.tgz:
+    resolution: {integrity: sha512-VSKiVZvHvlON27KWxamP5EWNty/aGJQNMaLWTJb2R4S2pERloJCm2r3KwuDPMrSChKMX0QQhX8EUcHGx9jmgnA==, tarball: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/dsh-univer-office-0.4.0.tgz}
+    version: 0.4.0
     engines: {node: '>=22.19.0'}
     peerDependencies:
       '@deepseek-ai/cordis': ^4.0.2
@@ -11103,7 +11108,7 @@ snapshots:
 
   '@bcoe/v8-coverage@1.0.2': {}
 
-  '@changfenhuang/dsh-genui@0.16.0(d19b0a5ab8169e9f297e9a20b8e0ff92)':
+  '@changfenhuang/dsh-genui@https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/changfenhuang-dsh-genui-0.16.0.tgz(d19b0a5ab8169e9f297e9a20b8e0ff92)':
     dependencies:
       '@deepseek-ai/dsh-agent': 0.2.1-rc.2(ba922ad4037e40def714bb7e19d35103)
       '@deepseek-ai/dsh-agent-loop': 0.2.1-rc.2(8cf89676465c33384f243a4325f23416)
@@ -12912,7 +12917,7 @@ snapshots:
 
   '@matrix-org/olm@3.2.15': {}
 
-  '@max-null/dsh-chinese-thinking@0.3.1(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-system-prompt@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-llm@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-scope@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5)))':
+  '@max-null/dsh-chinese-thinking@https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/max-null-dsh-chinese-thinking-0.3.1.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-system-prompt@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-llm@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-scope@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5)))':
     dependencies:
       '@deepseek-ai/cordis': 4.0.5(@deepseek-ai/cordis-plugin-include@1.0.10)(@deepseek-ai/cordis-plugin-loader@1.0.6)
       '@deepseek-ai/dsh-system-prompt': 0.2.1-rc.2(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-llm@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-scope@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5))
@@ -12931,7 +12936,7 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  '@nanmicoder/dsh-agent-teams@0.1.30(64c968cdac6c7fdd31d0c5b9bd0f0130)':
+  '@nanmicoder/dsh-agent-teams@https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/nanmicoder-dsh-agent-teams-0.1.30.tgz(64c968cdac6c7fdd31d0c5b9bd0f0130)':
     optionalDependencies:
       '@deepseek-ai/cordis': 4.0.5(@deepseek-ai/cordis-plugin-include@1.0.10)(@deepseek-ai/cordis-plugin-loader@1.0.6)
       '@deepseek-ai/dsh-agent': 0.2.1-rc.2(ba922ad4037e40def714bb7e19d35103)
@@ -14655,7 +14660,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@xmanrui/dsh-im@https://ethan-zmj.oss-cn-beijing.aliyuncs.com/xmanrui-dsh-im-5.10.0.tgz(@types/node@22.20.1)':
+  '@xmanrui/dsh-im@https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/xmanrui-dsh-im-5.10.0.tgz(@types/node@22.20.1)':
     dependencies:
       '@matrix-org/olm': 3.2.15
       '@tencent-connect/qqbot-connector': 1.2.0
@@ -15610,9 +15615,9 @@ snapshots:
       - crossws
       - ocache
 
-  dsh-inner-browser-use@0.47.98: {}
+  dsh-inner-browser-use@https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/dsh-inner-browser-use-0.47.98.tgz: {}
 
-  dsh-univer-office@0.4.0(0a24acc57c28a19267019329e5bdddcd):
+  dsh-univer-office@https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/dsh-univer-office-0.4.0.tgz(0a24acc57c28a19267019329e5bdddcd):
     dependencies:
       '@deepseek-ai/cordis': 4.0.5(@deepseek-ai/cordis-plugin-include@1.0.10)(@deepseek-ai/cordis-plugin-loader@1.0.6)
       '@deepseek-ai/dsh-attachment': 0.2.1-rc.2(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-brand@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5))

@@ -44,16 +44,25 @@ For portable desktop/plugin development, use separate terminals for the plugin w
 
 **Build protection:** [AGENTS.md](<../AGENTS.md>) forbids builds during plugin changes. `pnpm build:plugins`, `pnpm build`, `pnpm build:debug`, and `pnpm tauri build` are deliberate artifact-preparation/release actions; `pnpm build` also invokes the plugin prebuild.
 
-## DSH IM packages and upgrades
+## Third-party plugin packages and upgrades
 
-`@xmanrui/dsh-im` is installed from a precompiled OSS npm tarball through
-`catalogs.plugins` in `pnpm-workspace.yaml`; no sibling source checkout is needed.
-The installer includes IM and its production dependencies. Windows, macOS, and
-Linux use the same tarball and install native optional dependencies for their own
-platform; the tarball must not contain a development machine's `node_modules`.
+GenUI, Chinese Thinking, NanmiCoder Agent Teams, DSH IM, Inner Browser Use, and
+Univer Office use precompiled npm tarballs from
+`https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/`. Their URLs are declared in
+`catalogs.plugins` in `pnpm-workspace.yaml`. The installer includes these plugins
+and their production dependencies; no plugin source checkout or rebuild is needed.
+Windows, macOS, and Linux use the same tarballs and install native optional
+dependencies for their own platform. Do not include a development machine's
+`node_modules` in the tarballs.
+
+Better Sidebar remains an optional npm preset. Its package name and core-specific
+version rules are declared in `src-tauri/resources/manifest.jsonc`: `^0.21.1` for
+core `^0.1.7-rc.1`, and `latest` for core `^0.2.0-rc.1`. It downloads from npm when
+selected for installation and retains normal registry update detection. Fixed
+OSS tarball sources do not probe npm for updates.
 
 To upgrade, upload a new versioned, immutable tarball URL and keep old objects.
-Update the catalog URL and IM's version and verified core compatibility in
+Update the relevant catalog URL and the plugin's version and core compatibility in
 `src-tauri/resources/manifest.jsonc`, then run:
 
 ```bash
@@ -62,7 +71,7 @@ pnpm install --no-frozen-lockfile --ignore-scripts
 
 Commit both configurations and `pnpm-lock.yaml`, which pins SHA-512 integrity.
 CI uses `--frozen-lockfile`; packaging rejects version drift or missing
-compatibility with the recommended core. Users receive the new IM with the next
+compatibility with the recommended core. Built-in plugin updates ship with the next
 desktop release; uploading to OSS alone does not update installed applications.
 Restore all three files together to roll back. See the
 [resource guide](<../src-tauri/resources/README.md#dsh-im-from-oss>) for package contents.

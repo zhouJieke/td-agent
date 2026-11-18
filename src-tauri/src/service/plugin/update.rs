@@ -525,6 +525,18 @@ async fn compute_update(
         };
     }
 
+    if reqwest::Url::parse(spec).ok().is_some_and(|url| {
+        matches!(url.scheme(), "http" | "https")
+            && [".tgz", ".tar.gz"]
+                .iter()
+                .any(|suffix| url.path().ends_with(suffix))
+    }) {
+        return UpdateInfo {
+            update_available: false,
+            latest: None,
+        };
+    }
+
     let latest = fetch_npm_latest(client, id).await;
     let update_available = match (installed_version, latest.as_deref()) {
         (Some(i), Some(l)) => is_upgrade(i, l),
@@ -645,6 +657,32 @@ pub async fn refresh(app_handle: &AppHandle) -> Result<Vec<DshPlugin>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn oss_tarballs_never_probe_npm_for_updates() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let proxy =
+            reqwest::Proxy::all(format!("http://{}", listener.local_addr().unwrap())).unwrap();
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .proxy(proxy)
+            .timeout(Duration::from_secs(2))
+            .build()
+            .unwrap();
+        let locked = HashMap::new();
+        for spec in [
+            "https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/xmanrui-dsh-im-5.10.0.tgz",
+            "https://example.com/plugin.tgz?version=1#release",
+            "http://example.com/plugin.tar.gz",
+        ] {
+            let info = tokio::select! {
+                info = compute_update(&client, "@xmanrui/dsh-im", spec, Some("5.10.0"), &locked) => info,
+                request = listener.accept() => panic!("pinned tarball triggered a registry request: {request:?}"),
+            };
+            assert!(!info.update_available);
+            assert!(info.latest.is_none());
+        }
+    }
 
     #[test]
     fn failed_update_cache_is_not_reused_after_proxy_changes() {

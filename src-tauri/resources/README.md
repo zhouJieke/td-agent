@@ -254,18 +254,27 @@ declare a `description`.
 
 ### Published third-party plugins
 
-GenUI, Chinese Thinking, NanmiCoder Agent Teams, Inner Browser Use, and Univer
-Office are installed from npm through the `plugins` catalog in
-`pnpm-workspace.yaml`, referenced by `packages/dsh-tauri-bundle/package.json`.
+GenUI, Chinese Thinking, NanmiCoder Agent Teams, DSH IM, Inner Browser Use, and
+Univer Office use precompiled npm tarballs hosted under
+`https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/`. Their URLs are declared in
+the `plugins` catalog in `pnpm-workspace.yaml`, referenced by
+`packages/dsh-tauri-bundle/package.json`.
 Commit `pnpm-lock.yaml` with dependency changes. Their `plugins.built-in` entries
 use the same startup installation and
 repair path as workspace plugins; GenUI is no longer an optional preset.
 
-Debug discovery reads installed npm dependencies from the bundle package's
+Debug discovery reads installed dependencies from the bundle package's
 `node_modules`, so `pnpm install` prepares their published entry points without
 rebuilding them. Release deployment includes their production dependency closure,
 native bindings, viewer assets, and skills. Exported resources such as GenUI's
 root `SKILL.md` are retained during pruning.
+
+Better Sidebar remains an optional npm `plugins.preset` entry. Its `spec` is
+`dsh-better-sidebar`, with the original version matrix: `^0.21.1` for core
+`^0.1.7-rc.1`, and `latest` for core `^0.2.0-rc.1`. Installation and update
+detection continue to use npm. Fixed OSS tarball dependencies do not query npm
+for updates. Uploading a new OSS object alone does not change an existing
+installation's pinned URL.
 
 Third-party peer imports of `@deepseek-ai/*` are resolved by the active Harness
 core's profile resolver. Those core packages remain excluded from deployed
