@@ -282,21 +282,37 @@ that policy intact. Office rendering and Inner Browser Use require a locally
 installed compatible browser; its executable is not included with these plugins.
 Chromium BiDi's declared Zod dependency remains in the production closure.
 
-### Local DSH IM source
+### DSH IM from OSS
 
-`@xmanrui/dsh-im` is bundled from the sibling `../dsh-im` checkout. Keep both
-repositories beside each other on development and CI machines, and install their
-dependencies from the desktop root with `pnpm install`. The source checkout must
-provide DSH IM `5.10.0`, compatible with the recommended core `0.2.1-rc.2`.
+`@xmanrui/dsh-im` uses a precompiled npm tarball from OSS. Its versioned HTTPS URL
+is declared in the `plugins` catalog in `pnpm-workspace.yaml`; the bundle package
+references `catalog:plugins`. Neither development nor CI requires a sibling source
+checkout. `pnpm install` downloads the package, and debug discovery loads its
+published entry points from the bundle package's `node_modules`.
 
-The bundle package declares the relative `workspace:` dependency. Debug discovery
-reads that declaration to load the same source directory. Release packaging runs
-the dependency's build script, refreshes injected workspace dependencies, then
-deploys its production dependencies into `resources/node_modules` together with
-the other built-in plugins. The installed application does not need either source
-checkout or a separate IM process. Plugin credentials remain in the user's DSH
-home and are configured through Settings → IM bots.
+Release packaging builds only workspace plugins, then deploys DSH IM and its
+production dependencies into `resources/node_modules` with the other built-in
+plugins. The same tarball is used on Windows, macOS, and Linux; each platform
+installs its own native optional dependencies. Do not include a development
+machine's `node_modules` in the tarball. Users receive IM with the installer and
+do not download it from OSS at runtime. Credentials remain in the user's DSH home.
 
-The optional `integrations/desktop-panel` adapter is not bundled. DSH IM has no
-source watcher, so `pnpm dev:desktop` does not regenerate its `lib` files when IM
-source changes. Repository build restrictions still apply during plugin editing.
+To upgrade, upload a new tarball containing compiled `lib/index.js`,
+`lib/client.js`, `cordis.patch.yml`, and its production dependency declarations.
+Keep each published URL immutable, including older versions needed to reproduce
+previous desktop releases. Change the catalog URL and update DSH IM's version and
+verified core compatibility in `manifest.jsonc` together, then run:
+
+```bash
+pnpm install --no-frozen-lockfile --ignore-scripts
+```
+
+Commit both declarations and `pnpm-lock.yaml`. The lockfile pins the tarball's
+SHA-512 integrity; CI installs with `--frozen-lockfile`. Overwriting an existing
+object causes integrity failures on fresh downloads and can leave cached builds
+using old contents. Build-time version checks reject a package that differs from
+the startup manifest or lacks a version declaration for the recommended core.
+The next desktop release distributes the new IM version; changing OSS alone does
+not update installed applications. Roll back by restoring the previous catalog,
+manifest, and lockfile together. Repository build restrictions still apply during
+plugin editing.

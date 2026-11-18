@@ -3,7 +3,9 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpat
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { satisfies } from 'semver'
 import ts from 'typescript'
+import { readManifest } from './bundle-metadata.mjs'
 
 const REPO_ROOT = resolve(import.meta.dirname, '..')
 const PACKAGES_ROOT = join(REPO_ROOT, 'packages')
@@ -39,6 +41,29 @@ function bundledPackageNames(): string[] {
     throw new Error('PLUGIN_BUNDLE_EMPTY: dsh-tauri-bundle must depend on plugins')
   }
   return names
+}
+
+interface BundledPluginEntry {
+  id: string
+  version?: string | { version: string, dsh: string }[]
+}
+
+export function verifyBundledPluginVersions(root: string, plugins: readonly BundledPluginEntry[], coreVersion: string): void {
+  for (const plugin of plugins) {
+    if (!plugin.version) {
+      continue
+    }
+    const ranges = typeof plugin.version === 'string'
+      ? [plugin.version]
+      : plugin.version.filter(pair => satisfies(coreVersion, pair.dsh, { includePrerelease: true })).map(pair => pair.version)
+    if (ranges.length === 0) {
+      throw new Error(`PLUGIN_DEPLOY_CORE_UNSUPPORTED: ${plugin.id} has no version for core ${coreVersion}`)
+    }
+    const { version } = JSON.parse(readFileSync(join(root, plugin.id, 'package.json'), 'utf8')) as { version?: string }
+    if (!version || !ranges.some(range => satisfies(version, range, { includePrerelease: true }))) {
+      throw new Error(`PLUGIN_DEPLOY_VERSION_MISMATCH: ${plugin.id}@${version ?? 'missing'} expected ${ranges.join(' || ')} for core ${coreVersion}`)
+    }
+  }
 }
 
 /**
@@ -613,13 +638,17 @@ export function pruneDeployment(root: string, pluginNames: readonly string[]): v
 
 function main(): void {
   const names = bundledPackageNames()
+  const manifest = readManifest(REPO_ROOT) as {
+    engines: { dsh: { recommend: string } }
+    plugins: { 'built-in': BundledPluginEntry[] }
+  }
+  verifyBundledPluginVersions(join(PACKAGES_ROOT, 'dsh-tauri-bundle', 'node_modules'), manifest.plugins['built-in'], manifest.engines.dsh.recommend)
   // 先生成最新 dist，再打包 production 闭包。部署到独立临时目录并校验通过后，
   // 才把自包含的 node_modules 落到 `resources/node_modules`：任一环节失败即中止，
   // 绝不留下半成品资源。
   run([
     '--filter',
     './packages/*',
-    ...names.flatMap(name => ['--filter', name]),
     '--filter',
     '!dsh-tauri-bundle',
     '--filter',
@@ -659,6 +688,7 @@ function main(): void {
       throw new Error(`PLUGIN_DEPLOY_EMPTY: pnpm deploy did not produce node_modules at ${deployed}`)
     }
     materializeTree(deployed, DEPLOYED_NODE_MODULES)
+    verifyBundledPluginVersions(DEPLOYED_NODE_MODULES, manifest.plugins['built-in'], manifest.engines.dsh.recommend)
     pruneDeployment(DEPLOYED_NODE_MODULES, names)
     verifyMaterialized(DEPLOYED_NODE_MODULES)
     console.log(`[build:plugins] deployed ${names.length} plugins to ${RESOURCE_ROOT}`)

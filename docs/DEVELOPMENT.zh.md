@@ -44,6 +44,18 @@ macOS 运行时最低版本为 12+，Web 界面需要 Safari 17.4+ 能力。Linu
 
 **构建保护：** [AGENTS.md](<../AGENTS.md>) 禁止在插件改动期间执行构建。`pnpm build:plugins`、`pnpm build`、`pnpm build:debug`、`pnpm tauri build` 仅用于明确的产物准备 / 发布；`pnpm build` 还会触发插件 prebuild。
 
+## DSH IM 成品包与升级
+
+`@xmanrui/dsh-im` 从 OSS 下载已编译的 npm `.tgz`，地址统一配置在 `pnpm-workspace.yaml` 的 `catalogs.plugins`，不再需要旁边的源码仓库。依赖安装时下载，桌面打包时将 IM 和生产依赖一起放进安装包，用户运行时不再下载。Windows、macOS、Linux 使用同一份 `.tgz`，原生可选依赖由各平台自行安装，成品包不要夹带开发机器的 `node_modules`。
+
+升级时先上传包含编译产物的新版本包，使用带版本号的新地址，保留旧文件且不覆盖同名对象；同时修改 catalog 地址，以及 `src-tauri/resources/manifest.jsonc` 中 IM 的版本和已经验证的内核兼容声明，然后执行：
+
+```bash
+pnpm install --no-frozen-lockfile --ignore-scripts
+```
+
+提交这两份配置及更新后的 `pnpm-lock.yaml`。锁文件记录包的 SHA-512 校验值，CI 使用 `--frozen-lockfile`；打包前后会核对实际包版本与清单，版本不一致或未声明支持推荐内核时直接失败。新 IM 随下一版桌面安装包交付，单独上传 OSS 不会更新已安装应用；回退时一起还原上述三份文件。成品包内容与升级约定详见[资源指南](<../src-tauri/resources/README.md#dsh-im-from-oss>)。
+
 ## 验证
 
 [package.json](<../package.json>) 中的测试脚本对应以下显式非 watch 命令（[测试规范](<./specs/testing.md>)）：

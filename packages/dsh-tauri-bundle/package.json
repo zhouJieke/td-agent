@@ -6,7 +6,7 @@
     "@changfenhuang/dsh-genui": "catalog:plugins",
     "@max-null/dsh-chinese-thinking": "catalog:plugins",
     "@nanmicoder/dsh-agent-teams": "catalog:plugins",
-    "@xmanrui/dsh-im": "workspace:../../../dsh-im",
+    "@xmanrui/dsh-im": "catalog:plugins",
     "dsh-inner-browser-use": "catalog:plugins",
     "dsh-tauri": "workspace:*",
     "dsh-tauri-archive": "workspace:*",

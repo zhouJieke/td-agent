@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { isNonRuntimeFile, pruneDeployment, relativeSpecifiers } from '../scripts/build-plugins'
+import { isNonRuntimeFile, pruneDeployment, relativeSpecifiers, verifyBundledPluginVersions } from '../scripts/build-plugins'
 
 const scratchRoot = resolve('.temp', 'build-plugins-test')
 const scratch: string[] = []
@@ -50,6 +50,45 @@ function deploymentFixture(): string {
   writeFileSync(join(root, 'plugin', 'index.js'), 'import "dsh-h3"; import "dsh-h3/utils"')
   return root
 }
+
+describe('bundled plugin version verification', () => {
+  it('accepts an installed plugin matching its declared version', () => {
+    const root = deploymentFixture()
+    writeFileSync(join(root, 'plugin', 'package.json'), JSON.stringify({ version: '5.10.0' }))
+    expect(() => verifyBundledPluginVersions(root, [{ id: 'plugin', version: '5.10.0' }], '0.2.1-rc.2')).not.toThrow()
+  })
+
+  it('rejects a downloaded plugin when the startup manifest still declares the previous version', () => {
+    const root = deploymentFixture()
+    writeFileSync(join(root, 'plugin', 'package.json'), JSON.stringify({ version: '5.11.0' }))
+    expect(() => verifyBundledPluginVersions(root, [{ id: 'plugin', version: '5.10.0' }], '0.2.1-rc.2'))
+      .toThrow('PLUGIN_DEPLOY_VERSION_MISMATCH: plugin@5.11.0 expected 5.10.0 for core 0.2.1-rc.2')
+  })
+
+  it('selects the plugin version paired with the recommended prerelease core', () => {
+    const root = deploymentFixture()
+    writeFileSync(join(root, 'plugin', 'package.json'), JSON.stringify({ version: '5.10.0' }))
+    const plugins = [{ id: 'plugin', version: [
+      { version: '4.0.0', dsh: '^0.1.7-rc.1' },
+      { version: '5.10.0', dsh: '^0.2.0-rc.1' },
+    ] }]
+    expect(() => verifyBundledPluginVersions(root, plugins, '0.2.1-rc.2')).not.toThrow()
+    expect(() => verifyBundledPluginVersions(root, plugins, '0.1.7-rc.1'))
+      .toThrow('PLUGIN_DEPLOY_VERSION_MISMATCH: plugin@5.10.0 expected 4.0.0 for core 0.1.7-rc.1')
+  })
+
+  it('rejects a core upgrade without a matching plugin compatibility declaration', () => {
+    const root = deploymentFixture()
+    expect(() => verifyBundledPluginVersions(root, [{ id: 'plugin', version: [{ version: '5.10.0', dsh: '0.2.1-rc.2' }] }], '0.2.2-rc.1'))
+      .toThrow('PLUGIN_DEPLOY_CORE_UNSUPPORTED: plugin has no version for core 0.2.2-rc.1')
+  })
+
+  it('rejects an installed package without a version', () => {
+    const root = deploymentFixture()
+    expect(() => verifyBundledPluginVersions(root, [{ id: 'plugin', version: '5.10.0' }], '0.2.1-rc.2'))
+      .toThrow('PLUGIN_DEPLOY_VERSION_MISMATCH: plugin@missing expected 5.10.0 for core 0.2.1-rc.2')
+  })
+})
 
 describe('plugin deployment build-tool pruning', () => {
   it('removes only the generator export and orphan peers while retaining runtime entries and licenses', async () => {

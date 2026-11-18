@@ -44,6 +44,29 @@ For portable desktop/plugin development, use separate terminals for the plugin w
 
 **Build protection:** [AGENTS.md](<../AGENTS.md>) forbids builds during plugin changes. `pnpm build:plugins`, `pnpm build`, `pnpm build:debug`, and `pnpm tauri build` are deliberate artifact-preparation/release actions; `pnpm build` also invokes the plugin prebuild.
 
+## DSH IM packages and upgrades
+
+`@xmanrui/dsh-im` is installed from a precompiled OSS npm tarball through
+`catalogs.plugins` in `pnpm-workspace.yaml`; no sibling source checkout is needed.
+The installer includes IM and its production dependencies. Windows, macOS, and
+Linux use the same tarball and install native optional dependencies for their own
+platform; the tarball must not contain a development machine's `node_modules`.
+
+To upgrade, upload a new versioned, immutable tarball URL and keep old objects.
+Update the catalog URL and IM's version and verified core compatibility in
+`src-tauri/resources/manifest.jsonc`, then run:
+
+```bash
+pnpm install --no-frozen-lockfile --ignore-scripts
+```
+
+Commit both configurations and `pnpm-lock.yaml`, which pins SHA-512 integrity.
+CI uses `--frozen-lockfile`; packaging rejects version drift or missing
+compatibility with the recommended core. Users receive the new IM with the next
+desktop release; uploading to OSS alone does not update installed applications.
+Restore all three files together to roll back. See the
+[resource guide](<../src-tauri/resources/README.md#dsh-im-from-oss>) for package contents.
+
 ## Validation
 
 The scripts in [package.json](<../package.json>) map to these explicit, non-watch commands ([testing standard](<./specs/testing.md>)):

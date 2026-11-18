@@ -112,7 +112,6 @@ shellEmulator: true
 trustPolicy: no-downgrade
 packages:
   - packages/*
-  - ../dsh-im
 
 overrides:
   dsh-univer-office@0.4.0>puppeteer-core: 25.7.0
@@ -229,6 +228,7 @@ catalogs:
     '@changfenhuang/dsh-genui': 0.16.0
     '@max-null/dsh-chinese-thinking': 0.3.1
     '@nanmicoder/dsh-agent-teams': 0.1.30
+    '@xmanrui/dsh-im': https://ethan-zmj.oss-cn-beijing.aliyuncs.com/xmanrui-dsh-im-5.10.0.tgz
     dsh-inner-browser-use: 0.47.98
     dsh-univer-office: 0.4.0
   release:
