@@ -69,7 +69,7 @@ export const skills = defineService({
 
   async getCatalog(): Promise<SkillRow[]> {
     const [hostSkills, sources] = await Promise.all([registry().list(), readSources()])
-    const rows = hostSkills.map(skill => toSkillRow(skill, sources))
+    const rows = await Promise.all(hostSkills.map(async skill => toSkillRow(skill, sources, await isEnterpriseSkill(skill))))
     return orderBy(rows, [row => row.repository === undefined], ['asc'])
   },
 
@@ -254,7 +254,11 @@ function repositoryForSkill(skill: HostSkill, entries: SkillSourceEntry[]): Skil
   }
 }
 
-function toSkillRow(skill: HostSkill, entries: SkillSourceEntry[]): SkillRow {
+async function isEnterpriseSkill(skill: HostSkill): Promise<boolean> {
+  return skill.source === 'user-dsh' && await installedVersion(skill.name) !== undefined
+}
+
+function toSkillRow(skill: HostSkill, entries: SkillSourceEntry[], enterprise: boolean): SkillRow {
   const dir = skill.resourceBase?.kind === 'directory' ? skill.resourceBase.path : undefined
   const repository = repositoryForSkill(skill, entries)
   const editable = dir !== undefined && (
@@ -265,6 +269,7 @@ function toSkillRow(skill: HostSkill, entries: SkillSourceEntry[]): SkillRow {
   )
   return {
     ...skill,
+    ...(enterprise ? { source: 'enterprise' } : {}),
     editable,
     removable: skill.source === 'user-dsh' && dir !== undefined && existsSync(dir),
     ...(dir !== undefined ? { dir } : {}),

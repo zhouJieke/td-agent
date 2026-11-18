@@ -299,6 +299,21 @@ describe('技能中心独立本地技能后台', () => {
     expect(isUserInvocable(await registry!.get('skill-creator'))).toBe(true)
   })
 
+  it('nacos 版本元数据将已下载技能的来源标记为企业技能', async () => {
+    writeSkill(join(fixture.home, 'skills'), 'downloaded-skill')
+    writeFileSync(join(fixture.home, 'skills', 'downloaded-skill', '.dsh-tauri-skill-version.json'), JSON.stringify({ source: 'nacos', version: '1.0.0' }))
+    writeSkill(join(fixture.home, 'skills'), 'local-skill')
+    const { base } = await start()
+
+    const result = await json(base, '/skills')
+
+    expect(result.status).toBe(200)
+    expect(result.body.skills).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'downloaded-skill', source: 'enterprise', editable: true, removable: true }),
+      expect.objectContaining({ name: 'local-skill', source: 'user-dsh' }),
+    ]))
+  })
+
   it('提供者卸载与重新激活交错时保留新注册的技能', async () => {
     let release!: (plugin: typeof filesystem) => void
     const pending = new Promise<typeof filesystem>((resolve) => {

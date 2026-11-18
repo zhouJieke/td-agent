@@ -53,7 +53,7 @@ function summary(name: string): SkillSummary {
   }
 }
 
-function localSkill(name: string, source: 'bundled' | 'user-dsh'): SkillRowView {
+function localSkill(name: string, source: 'bundled' | 'user-dsh' | 'enterprise'): SkillRowView {
   const userSkill = source === 'user-dsh'
   return {
     name,
@@ -180,6 +180,15 @@ describe('技能中心独立本地技能页', () => {
     expect(view.queryByRole('button', { name: 'Open skills folder' })).toBeNull()
     expect(view.queryByRole('button', { name: 'Import repository' })).toBeNull()
     expect(view.getByRole('button', { name: 'New skill' }).textContent).toBe('New skill')
+  })
+
+  it('企业来源的技能卡片展示 enterprise 标签', async () => {
+    vi.mocked(getSkills).mockResolvedValue({ skills: [localSkill('downloaded-skill', 'enterprise')] })
+    const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
+    fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))
+    await view.findByText('downloaded-skill')
+
+    expect(view.getByText('enterprise')).toBeTruthy()
   })
 
   it('隐藏顶部操作时不显示之前打开的仓库导入窗口', async () => {

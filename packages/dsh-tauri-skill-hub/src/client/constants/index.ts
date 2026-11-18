@@ -20,6 +20,7 @@ export const SOURCE_LOCALE_KEYS: Readonly<Record<string, LocaleKey>> = {
   'runtime': 'sourceRuntime',
   'bundled': 'sourceBundled',
   'custom': 'sourceCustom',
+  'enterprise': 'sourceEnterprise',
 }
 
 /** 列表接口一次拉取的最大条数（不做分页控件）。 */
