@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import shlex
 import subprocess
 import tempfile
 
@@ -60,6 +61,7 @@ def main(resources=Path('src-tauri/resources')):
         certificate.write_bytes(base64.b64decode(''.join(os.environ['APPLE_CERTIFICATE'].split()), validate=True))
         keychain = str(root / 'signing.keychain-db')
         password = secrets.token_urlsafe(32)
+        original_keychains = shlex.split(run('security', 'list-keychains', '-d', 'user').stdout)
         try:
             run('security', 'create-keychain', '-p', password, keychain)
             run('security', 'set-keychain-settings', '-lut', '3600', keychain)
@@ -67,12 +69,14 @@ def main(resources=Path('src-tauri/resources')):
             run('security', 'import', str(certificate), '-k', keychain,
                 '-P', os.environ['APPLE_CERTIFICATE_PASSWORD'], '-T', '/usr/bin/codesign')
             run('security', 'set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:', '-s', '-k', password, keychain)
+            run('security', 'list-keychains', '-d', 'user', '-s', keychain, *original_keychains)
             identities = run('security', 'find-identity', '-v', '-p', 'codesigning', keychain).stdout
             matches = re.findall(r'^\s*\d+\)\s+([\dA-Fa-f]{40})\s+"Developer ID Application:[^"]+"', identities, re.MULTILINE)
             if len(matches) != 1:
                 raise RuntimeError('Expected exactly one valid Developer ID Application certificate in APPLE_CERTIFICATE')
             sign_resources(resources, matches[0], keychain)
         finally:
+            run('security', 'list-keychains', '-d', 'user', '-s', *original_keychains, check=False)
             run('security', 'delete-keychain', keychain, check=False)
 
 

@@ -58,6 +58,7 @@ class ResourceSigningTests(unittest.TestCase):
         self.entitlements = {}
         self.verify_exit = 0
         self.sign_exit = 0
+        self.search_keychains = ['fixture-keychain', 'keychain']
         self.identities = '  1) ' + 'A' * 40 + ' "Developer ID Application: Fixture (TEAMID1234)"\n'
         self.original_run = self.helper.run
         self.runner = patch.object(self.helper, 'run', side_effect=self.command)
@@ -77,6 +78,11 @@ class ResourceSigningTests(unittest.TestCase):
         stderr = ''
         if args[:2] == ('security', 'find-identity'):
             stdout = self.identities
+        elif args[:2] == ('security', 'list-keychains'):
+            if '-s' in args:
+                self.search_keychains = list(args[args.index('-s') + 1:])
+            else:
+                stdout = '\n'.join(f'"{keychain}"' for keychain in self.search_keychains)
         elif args[:2] == ('codesign', '-dv'):
             stderr = self.details.get(Path(args[-1]).name, 'Signature=adhoc\n')
         elif args[:2] == ('codesign', '-d'):
@@ -84,6 +90,8 @@ class ResourceSigningTests(unittest.TestCase):
         elif args[:2] == ('codesign', '--verify'):
             code = self.verify_exit
         elif args[:2] == ('codesign', '--force'):
+            if args[args.index('--keychain') + 1] not in self.search_keychains:
+                raise RuntimeError('codesign failed: no identity found')
             code = self.sign_exit
         if check and code:
             raise RuntimeError('fixture codesign failure')
@@ -155,6 +163,7 @@ class ResourceSigningTests(unittest.TestCase):
                 self.helper.main(self.resources)
         self.assertEqual([path.name for path in Path(self.temporary.name).iterdir()], ['resources'])
         self.assertEqual(len([call for call in self.calls if call[:2] == ('security', 'delete-keychain')]), 1)
+        self.assertEqual(self.search_keychains, ['fixture-keychain', 'keychain'])
 
     def test_non_developer_id_certificate_is_rejected_before_signing(self):
         self.identities = '  1) ' + 'A' * 40 + ' "Apple Development: Fixture"\n'
@@ -171,6 +180,14 @@ class ResourceSigningTests(unittest.TestCase):
         self.assertEqual(self.signing_calls()[0][self.signing_calls()[0].index('--sign') + 1], 'A' * 40)
         self.assertEqual([path.name for path in Path(self.temporary.name).iterdir()], ['resources'])
         self.assertEqual(self.calls[-1][:2], ('security', 'delete-keychain'))
+
+    def test_temporary_keychain_search_scope_is_restored_after_signing(self):
+        self.native('valid.node')
+        original = ['/Users/runner/Library/Keychains/login.keychain-db', '/Library/Keychains/fixture with spaces.keychain-db']
+        self.search_keychains = original.copy()
+        with patch.dict(os.environ, {'RUNNER_TEMP': self.temporary.name, 'APPLE_CERTIFICATE': base64.b64encode(b'fixture').decode(), 'APPLE_CERTIFICATE_PASSWORD': 'fixture-password'}):
+            self.helper.main(self.resources)
+        self.assertEqual(self.search_keychains, original)
 
     def test_missing_credentials_are_rejected_before_keychain_access(self):
         with patch.dict(os.environ, {'APPLE_CERTIFICATE': '', 'APPLE_CERTIFICATE_PASSWORD': ''}):
