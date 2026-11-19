@@ -90,6 +90,9 @@ jobs:
       - name: Test iOS signing and Beta review guards without credentials
         run: python3 -m unittest discover -s .github/scripts -p 'test_ios_*.py' -v
 
+      - name: Test macOS resource signing without credentials
+        run: python3 -m unittest discover -s .github/scripts -p 'test_macos_signing.py' -v
+
       - name: Install rc.2 core for desktop admission regression
         run: npm install --prefix "$RUNNER_TEMP/dsh-cli-admission" --no-audit --no-fund @deepseek-ai/dsh@0.2.1-rc.2
 

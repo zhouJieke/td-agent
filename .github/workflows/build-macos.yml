@@ -112,7 +112,18 @@ jobs:
             exit 1
           fi
 
-      - name: Build package
+      - name: Build application without bundling
+        if: steps.check.outputs.should_run == 'true'
+        run: pnpm tauri build ${{ inputs.version != '' && '--config src-tauri/tauri.nightly.conf.json' || '' }} --target ${{ matrix.target }} --no-bundle
+
+      - name: Sign resource Mach-O binaries
+        if: steps.check.outputs.should_run == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: python3 .github/scripts/sign-macos-resources.py
+
+      - name: Bundle and notarize application
         if: steps.check.outputs.should_run == 'true'
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -122,7 +133,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: pnpm tauri build ${{ inputs.version != '' && '--config src-tauri/tauri.nightly.conf.json' || '' }} --target ${{ matrix.target }}
+        run: pnpm tauri bundle ${{ inputs.version != '' && '--config src-tauri/tauri.nightly.conf.json' || '' }} --target ${{ matrix.target }} --bundles app,dmg
 
       - name: Verify signature and notarization
         if: steps.check.outputs.should_run == 'true'
