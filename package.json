@@ -10,7 +10,7 @@
     "dev": "vite",
     "dev:desktop": "pnpm dev:plugins & tauri dev",
     "dev:plugins": "pnpm --filter \"./packages/*\" -r --parallel run dev",
-    "prebuild": "pnpm build:plugins",
+    "prebuild": "node scripts/prepare-pnpm.mjs && pnpm build:plugins",
     "build": "tsc && vite build",
     "build:plugins": "tsx scripts/build-plugins.ts",
     "build:taiwindcss": "tsx packages/dsh-tauri-ui/scripts/taiwindcss.ts",
