@@ -35,6 +35,10 @@ jobs:
       - name: Setup Node.js and pnpm
         uses: ./.github/actions/setup-node-pnpm
 
+      - name: Use official Cargo registry
+        shell: bash
+        run: rm .cargo/config.toml
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:

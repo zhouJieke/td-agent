@@ -72,6 +72,10 @@ jobs:
         if: steps.check.outputs.should_run == 'true'
         uses: ./.github/actions/setup-xcode
 
+      - name: Use official Cargo registry
+        if: steps.check.outputs.should_run == 'true'
+        run: rm .cargo/config.toml
+
       - name: Setup Node.js and pnpm
         if: steps.check.outputs.should_run == 'true'
         uses: ./.github/actions/setup-node-pnpm
