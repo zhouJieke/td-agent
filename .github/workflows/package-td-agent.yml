@@ -3,8 +3,16 @@ name: Package Td-Agent
 on:
   push:
     branches:
-      - 'codex/td-agent-package-*'
+      - 'codex/td-agent-package-all-*'
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Platforms to package
+        type: choice
+        options:
+          - all
+          - windows
+        default: all
 
 permissions:
   contents: read
@@ -16,6 +24,7 @@ concurrency:
 jobs:
   macos:
     name: Package macOS
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all'
     uses: ./.github/workflows/build-macos.yml
     with:
       source_ref: ${{ github.sha }}
