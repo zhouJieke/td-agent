@@ -25,7 +25,7 @@
       "icons/nightly/icon.ico",
       "icons/nightly/icon.png"
     ],
-    "resources": ["resources/**/*", "icons/nightly/32x32.png"],
+    "resources": ["resources/**/*", "icons/nightly/32x32.png", "licenses/INSTALLER-LICENSE.txt"],
     "linux": {
       "deb": {
         "conflicts": [],

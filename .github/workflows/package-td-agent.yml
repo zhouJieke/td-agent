@@ -11,6 +11,7 @@ on:
         type: choice
         options:
           - all
+          - macos
           - windows
         default: all
 
@@ -24,7 +25,7 @@ concurrency:
 jobs:
   macos:
     name: Package macOS
-    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all'
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'macos'
     uses: ./.github/workflows/build-macos.yml
     with:
       source_ref: ${{ github.sha }}
@@ -37,6 +38,7 @@ jobs:
 
   windows:
     name: Package Windows
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'windows'
     uses: ./.github/workflows/build-windows.yml
     with:
       source_ref: ${{ github.sha }}

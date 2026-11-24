@@ -41,7 +41,7 @@
       "icons/icon.ico",
       "icons/icon.png"
     ],
-    "resources": ["resources/**/*", "icons/32x32.png"],
+    "resources": ["resources/**/*", "icons/32x32.png", "licenses/INSTALLER-LICENSE.txt"],
     "licenseFile": "licenses/INSTALLER-LICENSE.txt",
     "category": "DeveloperTool",
     "copyright": "Copyright © 2026 Deepseek Harness Desktop contributors",
