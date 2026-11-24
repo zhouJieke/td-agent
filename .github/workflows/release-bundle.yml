@@ -287,9 +287,6 @@ jobs:
           pattern: release-bundle-*
           path: release-assets
 
-      # 统一命名为 Deepseek.Harness.Desktop_Bundle_<version>.<ext>：与普通安装包
-      # （Tauri 默认名）区分，且同一 release 内不会重名。macOS 两个架构的产物
-      # 扩展名相同，必须带架构后缀才不会互相覆盖。
       - name: Rename offline installers
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
@@ -308,7 +305,7 @@ jobs:
               [ -f "$file" ] || continue
               base="$(basename "$file")"
               ext="${base##*.}"
-              cp "$file" "upload/Deepseek.Harness.Desktop_Bundle_${VERSION}${suffix}.${ext}"
+              cp "$file" "upload/Td-Agent_Bundle_${VERSION}${suffix}.${ext}"
             done
           done
           find upload -type f -print | sort

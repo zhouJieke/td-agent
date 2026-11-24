@@ -4,7 +4,6 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Key } from 'webdriverio'
 import { startDesktopApp } from '../support/desktop'
-import { completePreinstall } from '../support/preinstall'
 import { SETUP_ERROR, SHELL_IFRAME, SHELL_ROOT } from '../support/selectors'
 
 /** 全局 Window 类型扩展，用于解决浏览器环境上下文注入报错 */
@@ -74,8 +73,6 @@ describe('桌面端启动冒烟', () => {
 
     // 尽早装壳层收集器：装配失败、iframe 加载失败都会在壳层留下痕迹
     await browser.execute(collectPageErrors)
-    // 首次装配要先过「安装推荐插件」引导，服务才会被拉起
-    await completePreinstall(browser, ASSEMBLY_TIMEOUT_MS)
 
     const iframeEl = await browser.$(SHELL_IFRAME)
     await iframeEl.waitForDisplayed({ timeout: ASSEMBLY_TIMEOUT_MS })

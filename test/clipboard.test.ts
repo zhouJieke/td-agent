@@ -11,7 +11,6 @@ const CLIPBOARD_CALL_SITES = [
   // debug.tsx 已不带剪贴板动作：日志复制随「服务日志」区块移除，复制服务地址走
   // `copy_service_url` 原生命令而非前端 helper。
   '../src/layout/components/navbar.tsx',
-  '../src/layout/components/setup-preinstall.tsx',
   '../src/layout/components/setup.tsx',
 ]
 

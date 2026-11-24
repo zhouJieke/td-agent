@@ -1,12 +1,12 @@
 //! 已安装插件检测：强类型解析 profile 下 package.json 的 `dependencies` 键与
 //! `dsh.profile.bundles` 列表，得到已安装插件 id 集合，并组装前端渲染列表。
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use tauri::AppHandle;
 
-use super::preset::{load_deprecated_ids, load_presets, PreinstallPluginInfo};
+use super::preset::PreinstallPluginInfo;
 
 /// 用于强类型解析 profile 下 package.json 的辅助结构
 /// （字段 pub(crate)：供 watch 模块解析已安装插件清单复用）
@@ -78,67 +78,10 @@ pub(crate) fn is_installed(app_handle: &AppHandle, id: &str) -> bool {
     list_installed(app_handle).contains(id)
 }
 
-/// 预装插件列表项（含已安装检测结果），序列化给前端
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PreinstallPlugin {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub repo_url: String,
-    pub recommended: bool,
-    /// 是否为「修复」类项（前端渲染黄色 chip，默认勾选）
-    pub fix: bool,
-    /// 无 chip 但默认勾选（首次引导直接勾上，不标「推荐」）
-    pub default_checked: bool,
-    /// 显式声明首次引导不默认勾选（仍可标「推荐」chip，但不预选）
-    pub default_unchecked: bool,
-    pub installed: bool,
-    pub unsupported: bool,
-}
-
 /// 用于“已安装”检测的包名：预设显式声明 `package` 时用它（scoped 包名与预设
 /// id 不一致），未声明则回落到 `id`。供内部（`internal.rs` 内置插件自愈）复用。
 pub(crate) fn installed_name(p: &PreinstallPluginInfo) -> &str {
     p.package.as_deref().unwrap_or(p.id.as_str())
-}
-
-/// 预装插件列表（含 installed 状态），前端渲染用
-pub fn list(app_handle: &AppHandle) -> Vec<PreinstallPlugin> {
-    let installed = list_installed(app_handle);
-    let is_windows = cfg!(windows);
-    let deprecated_ids = load_deprecated_ids(app_handle);
-    // 当前活动核心版本：按预设声明的（插件版本 ↔ 核心版本）矩阵判定兼容性。
-    let core_version = crate::service::core::active_version(app_handle);
-
-    load_presets(app_handle)
-        .into_iter()
-        .filter(|p| !p.win_only || is_windows)
-        // 内置插件（internal:true）由启动自愈强制安装，不进入首次引导清单：
-        // 对用户而言它们“必装”，给出可取消的勾选框反而造成歧义。
-        .filter(|p| !p.internal)
-        .filter(|p| !deprecated_ids.contains(&p.id))
-        .map(|p| {
-            // 已安装检测以实际 npm 包名为准：预设可显式声明 package（scoped 包
-            // 名与预设 id 不一致时），未声明则回落到 id。
-            let is_installed = installed.contains(installed_name(&p));
-            // 超出支持上限的预设仍留在清单里：界面置灰并给出「不支持当前核心」，
-            // 而不是静默消失，用户才能理解插件为何不再可选。
-            let unsupported = p.unsupported_on(core_version.as_deref());
-            PreinstallPlugin {
-                id: p.id,
-                name: p.name,
-                description: p.description,
-                repo_url: p.repo_url,
-                recommended: p.recommended,
-                fix: p.fix,
-                default_checked: p.default_checked,
-                default_unchecked: p.default_unchecked,
-                installed: is_installed,
-                unsupported,
-            }
-        })
-        .collect()
 }
 
 const NPMRC_KEY: &str = "confirmModulesPurge=false";
@@ -280,10 +223,7 @@ mod tests {
             repo_url: String::new(),
             recommended: false,
             fix: false,
-            default_checked: true,
-            default_unchecked: false,
             version: None,
-            win_only: false,
             internal: false,
         };
         // scoped 包名与预设 id 不同：以 package 为准

@@ -1430,9 +1430,6 @@ mod tests {
             repo_url: String::new(),
             recommended: false,
             fix: false,
-            default_checked: false,
-            default_unchecked: false,
-            win_only: false,
         };
 
         assert_eq!(
@@ -1466,9 +1463,6 @@ mod tests {
             repo_url: String::new(),
             recommended: false,
             fix: false,
-            default_checked: false,
-            default_unchecked: false,
-            win_only: false,
         };
         let presets = vec![preset("builtin", true), preset("community", false)];
         let path = profile.join("package.json");

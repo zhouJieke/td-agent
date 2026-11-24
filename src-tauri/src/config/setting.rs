@@ -30,14 +30,6 @@ pub struct Setting {
     /// 命令行集成开关：安装后在用户 PATH 中注册 `dsh` 命令
     #[serde(default = "default_cli_link_enabled")]
     pub cli_link_enabled: bool,
-    /// 预装插件引导是否已完成（确认安装或跳过都算完成，之后不再弹出）
-    #[serde(default)]
-    pub preinstall_done: bool,
-    /// 上次引导结束时的清单 `plugins` 节内容指纹。资源清单每次安装都会被
-    /// 强制覆盖、旧文件不复存在，只能把「上次看到的内容」记在这里，每次启动再比对：
-    /// 内容有变更 → 重新进入预设引导。`None` = 老用户升级（无基线）→ 弹一次建立基线。
-    #[serde(default)]
-    pub preset_hash: Option<String>,
     /// 当前使用的档案 id（`$DSH_HOME/profiles/<id>`，默认 web）。
     /// 桌面端启动服务与插件管理都以它为准（见 service::profile）。
     /// 老用户 store 里可能仍是旧引导档案名 `desktop`：启动迁移
@@ -212,8 +204,6 @@ impl Default for Setting {
             dsh_pkg_commit: None,
             dsh_pkg_tag: None,
             cli_link_enabled: default_cli_link_enabled(),
-            preinstall_done: false,
-            preset_hash: None,
             active_profile: default_active_profile(),
             desktop_profile_ready: false,
             active_core: None,
@@ -712,7 +702,6 @@ mod tests {
                 "active_core": "app",
                 "dsh_pkg_commit": "saved-core",
                 "dsh_pkg_tag": "saved-release",
-                "preinstall_done": true,
                 "desktop_profile_ready": true,
                 "cli_link_enabled": false,
                 "harness_max_heap_mb": 2048,
@@ -748,7 +737,9 @@ mod tests {
             "zoom_factor": 1.16,
             "harness_max_heap_mb": 32769,
             "close_action": "QUIT",
-            "backup_retention_count": 51
+            "backup_retention_count": 51,
+            "preinstall_done": false,
+            "preset_hash": "previous-preset"
         });
         let wrapped = serde_json::Value::String(object.to_string());
         for value in [&object, &wrapped] {
@@ -762,6 +753,9 @@ mod tests {
             assert_eq!(setting.close_action, "tray");
             assert_eq!(setting.backup_retention_count, 10);
             assert_eq!(setting.active_profile, "web");
+            let saved = serde_json::to_value(setting).unwrap();
+            assert!(saved.get("preinstall_done").is_none());
+            assert!(saved.get("preset_hash").is_none());
         }
     }
 
@@ -816,7 +810,7 @@ mod tests {
                     close_action: "quit".to_string(),
                     backup_retention_count: retention,
                     backup_include_credentials: true,
-                    preset_hash: Some("hash-before-normalize".to_string()),
+                    dsh_pkg_tag: Some("release-before-normalize".to_string()),
                     ..Default::default()
                 };
                 normalize_setting(&mut setting);
@@ -828,8 +822,8 @@ mod tests {
                 assert_eq!(setting.port, 4099);
                 assert!(setting.backup_include_credentials);
                 assert_eq!(
-                    setting.preset_hash.as_deref(),
-                    Some("hash-before-normalize")
+                    setting.dsh_pkg_tag.as_deref(),
+                    Some("release-before-normalize")
                 );
             }
         }

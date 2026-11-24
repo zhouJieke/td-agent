@@ -22,7 +22,6 @@ vi.mock('i18next', () => ({
 }))
 
 const { harness } = await import('../src/store/modules/harness')
-const { preinstall } = await import('../src/store/modules/preinstall')
 const { PLUGIN_INACTIVITY_TIMEOUT } = await import('../src/store/modules/harness/constants')
 const POLICY = [{ name: '@scope/transitive', version: '1.2.3' }]
 const REFUSAL = `INTERNAL_PLUGIN_INSTALL_FAILED: PLUGIN_POLICY_BLOCKED: ${JSON.stringify(POLICY)}`
@@ -30,6 +29,7 @@ let ensureFailure: unknown
 let grantFailure: unknown
 let launchFailure: unknown
 let activeProfile: string
+let appInstalled: boolean
 let preinstallPending: boolean
 let ensureTask: Promise<void> | undefined
 
@@ -56,21 +56,19 @@ beforeEach(() => {
   launchFailure = undefined
   ensureTask = undefined
   activeProfile = 'web'
+  appInstalled = true
   preinstallPending = false
   harness.status = 'ready'
   harness.serviceHealthy = false
   harness.serviceRunning = false
   harness.busyAction = null
-  preinstall.error = ''
-  preinstall.installing = false
-  preinstall.policyBlocked = []
   invoke.mockImplementation(async (command: string, args?: { id: string }) => {
     switch (command) {
       case 'set_active_profile':
         activeProfile = args!.id
         return { id: activeProfile, active: true }
       case 'get_runtime_info': return { service_url: activeProfile === 'other' ? 'http://127.0.0.1:3082' : 'http://127.0.0.1:3081' }
-      case 'get_app_config': return { installed: true }
+      case 'get_app_config': return { installed: appInstalled }
       case 'enter_safe_mode': return { quarantined: [], failures: [] }
       case 'runtime_ready': return true
       case 'get_profiles': return [{ id: activeProfile, active: true }]
@@ -103,6 +101,25 @@ afterEach(() => {
   vi.clearAllTimers()
   vi.useRealTimers()
   vi.restoreAllMocks()
+})
+
+describe('harness startup without recommended plugins', () => {
+  it.each([false, true])('starts directly with installed=%s and pending recommendations', async (installed) => {
+    appInstalled = installed
+    preinstallPending = true
+    ensureFailure = undefined
+
+    await harness.boot()
+
+    expect(harness.status).toBe('ready')
+    expect(harness.serviceHealthy).toBe(true)
+    expect(invoke).toHaveBeenCalledWith('ensure_internal_plugins')
+    expect(invoke).toHaveBeenCalledWith('launch_harness')
+    expect(invoke).not.toHaveBeenCalledWith('get_preinstall_pending')
+    expect(invoke).not.toHaveBeenCalledWith('get_preinstall_plugins')
+    expect(invoke).not.toHaveBeenCalledWith('install_preinstall_plugins', expect.anything())
+    expect(invoke.mock.calls.filter(([command]) => command === 'install_dependencies')).toHaveLength(installed ? 0 : 1)
+  })
 })
 
 describe('window profile connection', () => {
@@ -191,16 +208,16 @@ describe('harness boot policy refusal recovery', () => {
     expect(invoke).not.toHaveBeenCalledWith('allow_plugin_policy_versions', expect.anything())
   })
 
-  it('preserves the pending preinstall recovery path after policy refusal', async () => {
+  it('starts the core without the retired recommendation wizard after policy refusal', async () => {
     preinstallPending = true
     await harness.boot()
 
-    expect(harness.status).toBe('preinstall')
-    expect(invoke).toHaveBeenCalledWith('get_preinstall_plugins')
-    expect(invoke).not.toHaveBeenCalledWith('launch_harness')
-    expect(approvalOptions().description).toContain('@scope/transitive@1.2.3')
-    await preinstall.skip()
+    expect(harness.status).toBe('ready')
+    expect(invoke).toHaveBeenCalledWith('launch_harness')
+    expect(invoke).not.toHaveBeenCalledWith('get_preinstall_pending')
+    expect(invoke).not.toHaveBeenCalledWith('get_preinstall_plugins')
     expect(harness.serviceHealthy).toBe(true)
+    expect(approvalOptions().description).toContain('@scope/transitive@1.2.3')
   })
 
   it('keeps failed authorization visible and retryable without restarting', async () => {

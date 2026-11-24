@@ -1,48 +1,6 @@
-//! 预装与已安装插件的增删改查、管理。
-
 use crate::config;
 use crate::service::{plugin, workflow::instances};
 use tauri::{AppHandle, WebviewWindow};
-use tauri_plugin_opener::OpenerExt;
-
-fn mark_preinstall_done(app_handle: &AppHandle) {
-    let mut setting = config::get_store_dat_setting(app_handle);
-    setting.preinstall_done = true;
-    if let Some(hash) = plugin::current_preset_hash(app_handle) {
-        setting.preset_hash = Some(hash);
-    }
-    config::set_store_dat_setting(app_handle, setting);
-}
-
-#[tauri::command]
-pub async fn get_preinstall_plugins(
-    app_handle: AppHandle,
-    window: WebviewWindow,
-) -> Result<Vec<plugin::PreinstallPlugin>, String> {
-    let profile = instances::window_profile(&app_handle, window.label());
-    instances::scope(profile, async { Ok(plugin::list(&app_handle)) }).await
-}
-
-#[tauri::command]
-pub async fn install_preinstall_plugins(
-    app_handle: AppHandle,
-    window: WebviewWindow,
-    install_ids: Vec<String>,
-    uninstall_ids: Vec<String>,
-) -> Result<(), String> {
-    let profile = instances::window_profile(&app_handle, window.label());
-    instances::scope(profile, async {
-        if !uninstall_ids.is_empty() {
-            plugin::remove_many(&app_handle, &uninstall_ids).await?;
-        }
-        if !install_ids.is_empty() {
-            plugin::install(&app_handle, &install_ids).await?;
-        }
-        mark_preinstall_done(&app_handle);
-        Ok(())
-    })
-    .await
-}
 
 #[tauri::command]
 pub async fn cancel_plugin_processes(app_handle: AppHandle) {
@@ -137,19 +95,6 @@ pub async fn allow_plugin_policy_versions(
 }
 
 #[tauri::command]
-pub async fn skip_preinstall_plugins(
-    app_handle: AppHandle,
-    window: WebviewWindow,
-) -> Result<(), String> {
-    let profile = instances::window_profile(&app_handle, window.label());
-    instances::scope(profile, async {
-        mark_preinstall_done(&app_handle);
-        Ok(())
-    })
-    .await
-}
-
-#[tauri::command]
 pub async fn ensure_internal_plugins(
     app_handle: AppHandle,
     window: WebviewWindow,
@@ -165,25 +110,6 @@ pub async fn cancel_internal_plugins(
 ) -> Result<(), String> {
     let profile = instances::window_profile(&app_handle, window.label());
     instances::scope(profile, plugin::cancel_internal_plugins()).await
-}
-
-#[tauri::command]
-pub fn get_preinstall_pending(
-    app_handle: AppHandle,
-    window: WebviewWindow,
-) -> Result<bool, String> {
-    let profile = instances::window_profile(&app_handle, window.label());
-    instances::scope_sync(profile, || Ok(plugin::preinstall_pending(&app_handle)))
-}
-
-#[tauri::command]
-pub async fn open_preinstall_repo(app_handle: AppHandle, id: String) -> Result<(), String> {
-    let url = plugin::repo_url_of(&app_handle, &id)
-        .ok_or_else(|| format!("PREINSTALL_INVALID_ID: {id}"))?;
-    app_handle
-        .opener()
-        .open_url(url, None::<&str>)
-        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

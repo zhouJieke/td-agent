@@ -139,7 +139,7 @@ describe('nightly release assets', () => {
     renameAssets(repo, ...directories)
     for (const [index, suffix] of suffixes.entries()) {
       const directory = directories[index]!
-      const filename = `Deepseek.Harness.Desktop_${version}_${suffix}`
+      const filename = `Td-Agent_${version}_${suffix}`
       expect(readdirSync(directory).sort()).toEqual([filename, 'intermediate'].sort())
       expect(readFileSync(path.join(directory, filename), 'utf8')).toBe(`signed-${suffix}`)
     }
@@ -149,7 +149,7 @@ describe('nightly release assets', () => {
   it('refuses to overwrite an existing downloadable asset', () => {
     const repo = assetRepo('0.22.4')
     const original = path.join(repo, 'DSH Tauri_0.22.4_x64-setup.exe')
-    const target = path.join(repo, 'Deepseek.Harness.Desktop_0.22.4_x64-setup.exe')
+    const target = path.join(repo, 'Td-Agent_0.22.4_x64-setup.exe')
     writeFileSync(original, 'new installer')
     writeFileSync(target, 'already signed installer')
 
@@ -216,10 +216,15 @@ describe('nightly release assets', () => {
       'Deepseek.Harness.Desktop_0.0.0-nightly.20261006.gabc1234_notes.txt',
       'Deepseek.Harness.Desktop_0.22.4_x64-setup.exe',
       'Deepseek.Harness.Desktop_0.0.0-beta.1_x64-setup.exe',
+      'Td-Agent_0.22.4_x64-setup.exe',
+      'Td-Agent_0.0.0-beta.1_x64-setup.exe',
       'Other_0.0.0-nightly.20261006.gabc1234_x64-setup.exe',
     ]
     const suffixes = ['x64-setup.exe', 'x64_en-US.msi', 'aarch64.dmg', 'amd64.AppImage', 'amd64.deb', 'amd64.AppImage.sig']
-    const legacy = suffixes.map(suffix => `Deepseek.Harness.Desktop_0.0.0_${suffix}`)
+    const legacy = suffixes.flatMap(suffix => [
+      `Deepseek.Harness.Desktop_0.0.0_${suffix}`,
+      `Td-Agent_0.0.0-nightly.20261006.gabc1234_${suffix}`,
+    ])
     let nextId = 1
     const releases = new Map([
       ['nightly-20261007', { id: 10, assets: [...preserved, ...legacy].map(name => ({ id: nextId++, name })) }],
@@ -229,7 +234,7 @@ describe('nightly release assets', () => {
       releases.set(tag, { id: 30, assets: preserved.map(name => ({ id: nextId++, name })) })
 
     for (const [day, sha] of [['20261007', 'abc1234'], [tag.slice('nightly-'.length), 'def5678']]) {
-      const manifest = suffixes.map(suffix => `Deepseek.Harness.Desktop_0.0.0-nightly.${day}.g${sha}_${suffix}`)
+      const manifest = suffixes.map(suffix => `Td-Agent_0.0.0-nightly.${day}.g${sha}_${suffix}`)
       for (const file of readdirSync(path.join(assetsDir, 'windows')))
         rmSync(path.join(assetsDir, 'windows', file))
       for (const name of manifest)

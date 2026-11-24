@@ -391,10 +391,7 @@ mod tests {
             repo_url: "https://github.com/dsh-market/dsh-market".into(),
             recommended: true,
             fix: false,
-            default_checked: false,
-            default_unchecked: false,
             version: None,
-            win_only: false,
             package: None,
             internal: false,
         }]
@@ -509,10 +506,7 @@ mod tests {
             repo_url: "https://github.com/dsh-tauri-desk/dsh-tauri".into(),
             recommended: true,
             fix: false,
-            default_checked: false,
-            default_unchecked: false,
             version: None,
-            win_only: false,
             package: None,
             internal: true,
         });

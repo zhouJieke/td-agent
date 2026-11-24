@@ -51,7 +51,7 @@ fn node_base_url(region: Region) -> &'static str {
 ///
 /// 抽成纯函数以便单元测试覆盖所有平台（与宿主操作系统无关），
 /// 生产代码用 `env::consts::OS` / `env::consts::ARCH` 调用。
-fn node_pkg_filename(os: &str, arch: &str) -> Result<String, String> {
+pub(crate) fn node_pkg_filename(os: &str, arch: &str) -> Result<String, String> {
     match (os, arch) {
         ("macos", "aarch64") => Ok(format!("node-{}-darwin-arm64.tar.gz", NODE_VERSION)),
         ("macos", "x86_64") => Ok(format!("node-{}-darwin-x64.tar.gz", NODE_VERSION)),
@@ -74,7 +74,7 @@ pub fn get_node_download_url() -> Result<String, String> {
 }
 
 /// Harness 发行版资产文件名（按平台与架构）
-fn dsh_pkg_asset_filename(os: &str, arch: &str) -> Result<String, String> {
+pub(crate) fn dsh_pkg_asset_filename(os: &str, arch: &str) -> Result<String, String> {
     match (os, arch) {
         ("windows", _) => Ok("deepseek-harness-pkg-windows.zip".to_string()),
         ("macos", "aarch64" | "arm64") => Ok("deepseek-harness-pkg-macos-arm64.zip".to_string()),
@@ -109,6 +109,9 @@ pub fn get_dsh_download_url() -> Result<String, String> {
 /// 为任意 GitHub Release 资产 URL 生成全部镜像兜底地址
 /// （透传原 URL，下载内容一致，仍可做 SHA-256 完整性校验）。
 pub fn mirror_download_urls(asset_url: &str) -> Vec<String> {
+    if !asset_url.starts_with("https://github.com/") {
+        return Vec::new();
+    }
     DSH_MIRROR_PREFIXES
         .iter()
         .map(|prefix| format!("{prefix}{asset_url}"))
@@ -379,21 +382,8 @@ pub fn get_pnpm_binary_path<R: Runtime>(app_handle: &AppHandle<R>) -> PathBuf {
     dependencies::binary_path(app_handle, dependencies::DEP_PNPM)
 }
 
-/// pnpm 官方/镜像下载前缀：国内走 npmmirror registry，其他直连 npmjs.org
-fn pnpm_base_url(region: Region) -> &'static str {
-    match region {
-        Region::Domestic => PNPM_MIRROR_BASE_URL,
-        Region::Overseas => PNPM_BASE_URL,
-    }
-}
-
-/// pnpm 下载地址（纯 JS 发行，全平台同一 URL）
 pub fn get_pnpm_download_url() -> String {
-    format!(
-        "{}pnpm-{}.tgz",
-        pnpm_base_url(detect_region()),
-        PNPM_VERSION
-    )
+    format!("{RUNTIME_DOWNLOAD_BASE_URL}/runtime/pnpm/{PNPM_VERSION}/pnpm-{PNPM_VERSION}.tgz")
 }
 
 /// Windows 免安装 Git 的安装目录。
@@ -409,8 +399,7 @@ pub fn get_mingit_binary_path<R: Runtime>(app_handle: &AppHandle<R>) -> PathBuf 
 }
 
 /// Windows MinGit 官方发行包文件名。
-#[cfg_attr(all(not(windows), not(test)), allow(dead_code))] // 仅 Windows 的 MinGit 任务与单测使用
-fn mingit_pkg_filename(arch: &str) -> Result<String, String> {
+pub(crate) fn mingit_pkg_filename(arch: &str) -> Result<String, String> {
     match arch {
         "x86_64" => Ok(format!("MinGit-{MINGIT_VERSION}-64-bit.zip")),
         "aarch64" => Ok(format!("MinGit-{MINGIT_VERSION}-arm64.zip")),
@@ -418,12 +407,16 @@ fn mingit_pkg_filename(arch: &str) -> Result<String, String> {
     }
 }
 
-/// Windows MinGit 官方发行包下载地址。
 #[cfg_attr(not(windows), allow(dead_code))] // 仅 Windows 的 MinGit 任务使用
 pub fn get_mingit_download_url() -> Result<String, String> {
+    mingit_download_url(env::consts::ARCH)
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn mingit_download_url(arch: &str) -> Result<String, String> {
+    let name = mingit_pkg_filename(arch)?;
     Ok(format!(
-        "{MINGIT_BASE_URL}{}",
-        mingit_pkg_filename(env::consts::ARCH)?
+        "{RUNTIME_DOWNLOAD_BASE_URL}/runtime/git/{MINGIT_VERSION}/{name}"
     ))
 }
 
@@ -1114,9 +1107,14 @@ mod tests {
     }
 
     #[test]
-    fn pnpm_base_url_switches_on_region() {
-        assert_eq!(pnpm_base_url(Region::Overseas), PNPM_BASE_URL);
-        assert_eq!(pnpm_base_url(Region::Domestic), PNPM_MIRROR_BASE_URL);
+    fn shared_runtime_assets_use_published_oss_paths() {
+        assert_eq!(get_pnpm_download_url(), "https://tdcunchu.oss-cn-beijing.aliyuncs.com/td-agent/runtime/pnpm/11.7.0/pnpm-11.7.0.tgz");
+        assert_eq!(mingit_download_url("x86_64").unwrap(), "https://tdcunchu.oss-cn-beijing.aliyuncs.com/td-agent/runtime/git/2.53.0.2/MinGit-2.53.0.2-64-bit.zip");
+        assert_eq!(mingit_download_url("aarch64").unwrap(), "https://tdcunchu.oss-cn-beijing.aliyuncs.com/td-agent/runtime/git/2.53.0.2/MinGit-2.53.0.2-arm64.zip");
+        assert!(mirror_download_urls(
+            "https://tdcunchu.oss-cn-beijing.aliyuncs.com/td-agent/runtime/dsh/core.zip"
+        )
+        .is_empty());
     }
 
     #[test]

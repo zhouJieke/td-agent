@@ -53,7 +53,6 @@ beforeEach(async () => {
       case 'get_runtime_info': return { service_url: 'http://127.0.0.1:31415' }
       case 'runtime_ready': return true
       case 'proxy_health_check': return 'Healthy'
-      case 'get_preinstall_pending': return false
       case 'get_profiles': return [{ id: 'tauri', active: true }]
       case 'get_app_config': return { installed: true }
       case 'read_service_logs': return ''

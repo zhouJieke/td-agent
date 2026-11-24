@@ -21,13 +21,6 @@ export const SHELL_IFRAME = '[data-testid="dsh-shell-iframe"]'
 /** 装配失败页根节点（`src/layout/components/setup.tsx` → `Loadable`）。 */
 export const SETUP_ERROR = '[data-testid="dsh-setup-error"]'
 
-/**
- * 首次装配「安装推荐插件」引导页的跳过按钮。
- *
- * 三处（有变更 / 无变更 / 安装失败）互斥渲染，因此同一 testid 只会命中一个。
- */
-export const SETUP_PREINSTALL_SKIP = '[data-testid="dsh-setup-preinstall-skip"]'
-
 /* ==========================================
  * 浏览器层用例（`plugin` project + Playwright 库 API）
  * ==========================================

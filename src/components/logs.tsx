@@ -6,7 +6,6 @@ import { formatLogLine } from './logs.utils'
 
 /**
  * 日志面板：带边框的「› + 行」日志容器 + 空日志占位。
- * 供 `Panel.Progress` 与 setup-preinstall 的日志控制台共用；
  * 顶部可选 header（如复制按钮）。
  */
 export interface LogsProps {

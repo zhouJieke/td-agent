@@ -22,6 +22,5 @@ export interface ToastUpdateEvent {
 export const hooks = {
   /** `toast.update()` 触发，`ToastProvider` 监听后原地更新对应 queue 的 content */
   'toast.updated': createEventHook<ToastUpdateEvent>(),
-  /** 请求关闭设置对话框（harness / preinstall store 在服务重启、退出前收起弹层） */
   'config.dialog.hidden': createEventHook<void>(),
 }

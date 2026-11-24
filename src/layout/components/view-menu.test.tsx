@@ -43,7 +43,6 @@ vi.mock('@/utils/clipboard', () => ({ writeClipboardText: vi.fn() }))
 vi.mock('@/utils/toast', () => ({ toast: vi.fn() }))
 vi.mock('@/ui/plugin/recovery', () => ({ Recovery: () => null }))
 vi.mock('./setup', () => ({ Setup: () => null }))
-vi.mock('./setup-preinstall', () => ({ PreinstallSetup: () => null }))
 vi.mock('./iframe', () => ({
   Iframe: ({ iframeRef }: { iframeRef: RefObject<HTMLIFrameElement | null> }) => (
     <iframe ref={iframeRef} title="Harness" src="http://127.0.0.1:3081" />

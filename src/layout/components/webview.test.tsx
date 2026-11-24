@@ -27,7 +27,6 @@ vi.mock('@/hooks/use-dsh-shortcuts', () => ({
 vi.mock('@/hooks/use-listen', () => ({ useListen: vi.fn() }))
 vi.mock('@/ui/plugin/recovery', () => ({ Recovery: () => null }))
 vi.mock('./setup', () => ({ Setup: () => null }))
-vi.mock('./setup-preinstall', () => ({ PreinstallSetup: () => null }))
 vi.mock('./navbar', () => ({
   Navbar: (props: NavbarProps) => {
     mocks.navbar(props)
@@ -60,19 +59,16 @@ it('logs the selected shell branch and keeps the navbar bridge with the local se
   mocks.recovery.recovery.required = true
   view.rerender(<Webview />)
   expect(console.warn).toHaveBeenLastCalledWith('[Webview] shell view', expect.objectContaining({ branch: 'recovery' }))
-  mocks.harness.status = 'preinstall'
-  view.rerender(<Webview />)
-  expect(console.warn).toHaveBeenLastCalledWith('[Webview] shell view', expect.objectContaining({ branch: 'preinstall' }))
   mocks.harness.status = 'ready'
   mocks.harness.serviceHealthy = false
   view.rerender(<Webview />)
   expect(navbar().onToggleSidebar).toBeUndefined()
   expect(console.warn).toHaveBeenLastCalledWith('[Webview] shell view', expect.objectContaining({ branch: 'iframe', serviceHealthy: false }))
-  expect(console.warn).toHaveBeenCalledTimes(5)
+  expect(console.warn).toHaveBeenCalledTimes(4)
   mocks.harness.serviceHealthy = true
   view.rerender(<Webview />)
   expect(navbar().onToggleSidebar).toBeInstanceOf(Function)
-  expect(console.warn).toHaveBeenCalledTimes(6)
+  expect(console.warn).toHaveBeenCalledTimes(5)
 })
 
 function navbar() {

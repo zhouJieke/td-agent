@@ -1,7 +1,7 @@
 import type { StartupPhase } from './readiness'
 
 /** 安装/启动流程阶段状态 */
-export type SetupStatus = 'checking' | 'installing' | 'starting' | 'preinstall' | 'ready' | 'error'
+export type SetupStatus = 'checking' | 'installing' | 'starting' | 'ready' | 'error'
 
 /**
  * 侧边栏忙碌标记：标识当前正在执行的服务操作。`repair` 是补丁层修复动作（安全模式/

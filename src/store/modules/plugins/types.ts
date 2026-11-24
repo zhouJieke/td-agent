@@ -1,5 +1,15 @@
-import type { IncompatibleVersion, PolicyBlockedVersion } from '../preinstall/types'
 import type { DshPlugin, PluginErrorInfo } from '@/types'
+
+export interface IncompatibleVersion {
+  name: string
+  version: string
+  runtime_version: string
+}
+
+export interface PolicyBlockedVersion {
+  name: string
+  version: string
+}
 
 export type BlockedRefusal
   = | { kind: 'incompatible', versions: IncompatibleVersion[] }

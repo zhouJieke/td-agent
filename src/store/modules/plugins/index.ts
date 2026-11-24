@@ -1,6 +1,7 @@
 export { plugins } from './store'
 export type {
   BlockedRefusal,
+  IncompatibleVersion,
   Plugin,
   PluginGroup,
   PluginManagerLog,
@@ -14,6 +15,7 @@ export type {
   PluginSearchResult,
   PluginsManagerRuntime,
   PluginsState,
+  PolicyBlockedVersion,
 } from './types'
 export {
   enrichInstalled,

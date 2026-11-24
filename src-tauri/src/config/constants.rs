@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+pub const RUNTIME_DOWNLOAD_BASE_URL: &str = "https://tdcunchu.oss-cn-beijing.aliyuncs.com/td-agent";
+
 /// 捆绑的 Node.js 运行时版本（满足当前 DSH 的 v22.19.0+ 或 v24+ 要求）
 pub const NODE_VERSION: &str = "v22.22.0";
 
@@ -27,6 +29,7 @@ pub const PNPM_VERSION: &str = "11.7.0";
 pub const PNPM_SHA256: &str = "deafa7ec98a1218b6a047289b92fbe2395c1e22d3495bb711653013218ee15ee";
 
 /// pnpm 官方 npm registry tarball 下载地址前缀（纯 JS 发行，全平台同一 URL）
+#[allow(dead_code)]
 pub const PNPM_BASE_URL: &str = "https://registry.npmjs.org/pnpm/-/";
 
 /// Windows 空白环境使用的免安装 MinGit 版本。
@@ -44,9 +47,6 @@ pub const MINGIT_ARM64_SHA256: &str =
 #[cfg_attr(all(not(windows), not(test)), allow(dead_code))] // 仅 Windows 的 MinGit 任务与单测使用
 pub const MINGIT_BASE_URL: &str =
     "https://github.com/git-for-windows/git/releases/download/v2.53.0.windows.2/";
-
-/// pnpm 镜像下载地址前缀（npmmirror registry，302 重定向至 cdn.npmmirror.com）
-pub const PNPM_MIRROR_BASE_URL: &str = "https://registry.npmmirror.com/pnpm/-/";
 
 /// Harness 服务地址与默认端口
 pub const DSH_HOST: &str = "http://127.0.0.1";

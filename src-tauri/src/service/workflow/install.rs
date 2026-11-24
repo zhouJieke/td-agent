@@ -50,10 +50,25 @@ pub async fn install(
     log::debug!("Main window obtained");
     // 依赖任务清单的唯一构造点在下载层，安装流程与映射回写共用同一组任务。
     let tasks = download::tasks();
+    let runtime_manifest = if tasks.iter().any(|task| !task.check_installed(app_handle)) {
+        download::fetch_runtime_manifest(app_handle).await?
+    } else {
+        None
+    };
     // 必须在下载前解析 release 元数据：下载地址和摘要必须属于同一固定 tag。
     // 若先下载 latest、再因 API 限流从 Atom/HTML 解析 tag，latest 在两次请求间
     // 发生切换就会把另一份资产拿来匹配摘要，最终触发 INTEGRITY_CHECK_FAILED。
     let dsh_missing = !download::Dsh.check_installed(app_handle);
+    if dsh_latest.is_none() && dsh_missing {
+        dsh_latest = runtime_manifest
+            .as_ref()
+            .map(|manifest| manifest.dsh_package())
+            .filter(|info| {
+                config::recommended_dsh_version(app_handle).is_none_or(|version| {
+                    download::parse_version_from_tag(&info.tag).as_deref() == Some(version.as_str())
+                })
+            });
+    }
     if dsh_latest.is_none() && dsh_missing {
         for attempt in 0..3 {
             let metadata = match config::recommended_dsh_version(app_handle) {
@@ -142,12 +157,13 @@ pub async fn install(
                 task.title()
             ),
         );
-        // 下载 URL 对 dsh 也是完全确定可算的（DSH_CORE_URL + 平台文件名），
-        // 无需依赖 GitHub API 元数据；api.github.com 限流/被代理拦截时
-        // （mac 首次启动常见）仍能拿到真实下载地址，避免整次安装被瞬时失败卡死。
-        // dsh 核心默认先走 GitHub 官方直连，失败依次切换代理镜像兜底
-        // （下载层会在界面上告知用户）；其余任务保持单一官方源。
-        let (urls, name) = if kind == download::InstallKind::Dsh {
+        let manifest_asset = runtime_manifest
+            .as_ref()
+            .and_then(|manifest| manifest.asset(kind, dsh_latest.as_ref()));
+        let (urls, name) = if let Some(asset) = manifest_asset {
+            let name = asset.url.rsplit('/').next().unwrap_or("").to_string();
+            (vec![asset.url.clone()], name)
+        } else if kind == download::InstallKind::Dsh {
             // 摘要与资产必须来自同一个 release。若前面已取得 release 元数据，
             // 必须使用其中的固定 asset URL；继续请求 `releases/latest` 会在 latest
             // 发布切换或 CDN 缓存不一致时下载另一份文件，最终表现为摘要 mismatch。
@@ -172,27 +188,33 @@ pub async fn install(
         log::debug!("File name: {}", name);
         let buffer = download::download_file_from_sources(&tracker, urls).await?;
         log::info!("Download completed, file size: {} bytes", buffer.len());
-        let expected_digest = match kind {
-            download::InstallKind::Node => {
-                download::fetch_node_sha256(app_handle, task.get_download_url()?.as_str()).await?
-            }
-            download::InstallKind::Dsh => {
-                // 元数据已在安装任务开始前获取，确保下载地址与摘要来自同一 release。
-                dsh_latest
-                    .as_ref()
-                    .and_then(|info| info.digest.clone())
-                    .ok_or_else(|| {
-                        "DSH_INTEGRITY_UNAVAILABLE: trusted release digest is required".to_string()
-                    })?
-            }
-            download::InstallKind::Pnpm => config::PNPM_SHA256.to_string(),
-            #[cfg(windows)]
-            download::InstallKind::Git => config::get_mingit_sha256()?.to_string(),
-            #[cfg(not(windows))]
-            download::InstallKind::Git => {
-                return Err(
-                    "INSTALL_TASK_INVALID: Git task not supported on this platform".to_string(),
-                )
+        let expected_digest = if let Some(asset) = manifest_asset {
+            asset.sha256.clone()
+        } else {
+            match kind {
+                download::InstallKind::Node => {
+                    download::fetch_node_sha256(app_handle, task.get_download_url()?.as_str())
+                        .await?
+                }
+                download::InstallKind::Dsh => {
+                    // 元数据已在安装任务开始前获取，确保下载地址与摘要来自同一 release。
+                    dsh_latest
+                        .as_ref()
+                        .and_then(|info| info.digest.clone())
+                        .ok_or_else(|| {
+                            "DSH_INTEGRITY_UNAVAILABLE: trusted release digest is required"
+                                .to_string()
+                        })?
+                }
+                download::InstallKind::Pnpm => config::PNPM_SHA256.to_string(),
+                #[cfg(windows)]
+                download::InstallKind::Git => config::get_mingit_sha256()?.to_string(),
+                #[cfg(not(windows))]
+                download::InstallKind::Git => {
+                    return Err(
+                        "INSTALL_TASK_INVALID: Git task not supported on this platform".to_string(),
+                    )
+                }
             }
         };
         download::verify_sha256(&buffer, &expected_digest)?;

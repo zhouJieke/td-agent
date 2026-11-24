@@ -35,7 +35,7 @@ vi.mock('@tanstack/react-query', () => ({
     isPending: false,
   }),
 }))
-vi.mock('@/store', () => ({ store: { preinstall: { open: vi.fn(), installing: false }, harness: { restart: mocks.restart } } }))
+vi.mock('@/store', () => ({ store: { harness: { restart: mocks.restart } } }))
 vi.mock('@/utils/toast', () => ({ toast: mocks.toast }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke }))
 vi.mock('@/components/modal', () => ({ Modal: () => null }))
@@ -174,12 +174,12 @@ describe('built-in plugin toggles', () => {
 })
 
 describe('one-click plugin upgrade', () => {
-  it('shows the bulk upgrade right before open preset without enabling advanced options', () => {
+  it('shows bulk upgrade without the retired preset entry or advanced options', () => {
     manager.installed = [plugin({ id: 'updated', internal: false, updateAvailable: true, latest: '2.0.0' })]
     render(<ConfigPlugin />)
-    const preset = screen.getByRole('button', { name: 'preinstall.open_preset' })
     const upgradeAll = screen.getByRole('button', { name: 'plugins.upgrade_all' })
-    expect(upgradeAll.nextElementSibling).toBe(preset)
+    expect(upgradeAll.hasAttribute('disabled')).toBe(false)
+    expect(screen.queryByRole('button', { name: 'preinstall.open_preset' })).toBeNull()
     expect(screen.getByRole('switch', { name: 'plugins.advanced_options' }).getAttribute('aria-checked')).toBe('false')
   })
 

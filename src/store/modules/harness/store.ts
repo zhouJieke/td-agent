@@ -1,5 +1,5 @@
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import type { PolicyBlockedVersion } from '../preinstall'
+import type { PolicyBlockedVersion } from '../plugins'
 import type { ReadinessProbeResult, StartupPhase } from './readiness'
 import type {
   HarnessProcessExitedPayload,
@@ -24,7 +24,6 @@ import { queryKeys } from '@/config/query-keys'
 import { toast } from '@/utils/toast'
 import { harnessUpdater } from '../harness-updater'
 import { parseBlockedRefusal } from '../plugins'
-import { preinstall } from '../preinstall'
 import { recovery } from '../recovery'
 import { setting } from '../setting'
 import {
@@ -92,7 +91,6 @@ let policyApprovalKey: string | undefined
  *
  * 拆分说明（参考 damn-reports 的 store 组织方式）：
  * - 版本更新 → `harness-updater`，下载完成提示 → `download`；
- * - 预装插件引导 → `preinstall`，插件异常修复 → `recovery`；
  * - 无状态的探测/日志/错误装饰 → `utils`，时序常量 → `constants`。
  * 本模块只保留「服务怎么起来、页面怎么挂上」这一条主线。
  */
@@ -462,7 +460,6 @@ export const harness = defineStore({
       this.inotifyLimitHint = ''
       this.patchLayerHint = ''
       this.heapOomHint = ''
-      preinstall.error = ''
       // 服务（重）启动成功：清空插件异常修复态（若曾进入），并重置已「暂不处理」的插件
       recovery.reset()
       iframeReloadGate.reset()
@@ -687,17 +684,6 @@ export const harness = defineStore({
             throw startupError('plugin-install', message, 'failed')
           policyApproval = { versions: refusal.versions, profile }
         }
-        // 预装插件引导：首次安装、老版本升级（无指纹基线）或清单 plugins 节
-        // 内容变更（社区新增推荐插件）时重新进入预设流程，装完/跳过后才拉起服务。
-        // 清单随安装包发布、每次安装被强制覆盖，旧内容不可比对，
-        // 由 Rust 侧记录内容指纹到 app-data（.store.dat），启动时比对是否有变更。
-        if (await invoke<boolean>('get_preinstall_pending')) {
-          this.status = 'preinstall'
-          preinstall.isFirstTime = true
-          await preinstall.load()
-          return
-        }
-
         await this.launchAndWait(token)
 
         if (token !== bootToken)
@@ -737,7 +723,7 @@ export const harness = defineStore({
             actionProps: {
               children: i18next.t('buttons.authorize'),
               onPress: async () => {
-                if (granting || token !== bootToken || this.busyAction || preinstall.installing)
+                if (granting || token !== bootToken || this.busyAction)
                   return
                 granting = true
                 try {
@@ -746,10 +732,7 @@ export const harness = defineStore({
                     toast.close(key)
                     return
                   }
-                  if (!await preinstall.allowPolicyVersions(versions, profile)) {
-                    toast(i18next.t('plugins.authorize_failed'), { variant: 'danger', description: preinstall.error })
-                    return
-                  }
+                  await invoke('allow_plugin_policy_versions', { versions, expectedProfile: profile })
                   toast.close(key)
                   if (token === bootToken)
                     await this.restart()

@@ -30,16 +30,8 @@ pub struct PreinstallPluginInfo {
     pub name: String,
     pub description: String,
     pub repo_url: String,
-    /// 绿色「推荐」chip，默认勾选
     pub recommended: bool,
-    /// 黄色「修复」chip，默认勾选（Windows 极简模式修复项）
     pub fix: bool,
-    /// 无 chip 但默认勾选（不标「推荐」，首次引导仍直接勾上）
-    pub default_checked: bool,
-    /// 显式声明首次引导不默认勾选：仍可标「推荐」chip，但不预选（如 dsh-im）
-    pub default_unchecked: bool,
-    /// 仅 Windows 平台列出
-    pub win_only: bool,
 }
 
 impl PreinstallPluginInfo {
@@ -54,10 +46,7 @@ impl PreinstallPluginInfo {
     }
 }
 
-/// 清单条目 → 统一插件信息：`checked` 是唯一真值，按前端预选语义派生出
-/// 「默认勾选」与「显式不预选」两个标记。
 fn plugin_info(entry: PluginEntry, internal: bool) -> PreinstallPluginInfo {
-    let checked = entry.checked;
     PreinstallPluginInfo {
         id: entry.id,
         spec: entry.spec,
@@ -69,9 +58,6 @@ fn plugin_info(entry: PluginEntry, internal: bool) -> PreinstallPluginInfo {
         repo_url: entry.repo,
         recommended: entry.recommended,
         fix: entry.fix,
-        default_checked: checked && !entry.recommended,
-        default_unchecked: !checked,
-        win_only: entry.win_only,
     }
 }
 
@@ -212,10 +198,7 @@ fn discover_dev_internal_plugins_at(root: &Path) -> Vec<DevPluginCandidate> {
                 repo_url,
                 recommended: false,
                 fix: false,
-                default_checked: false,
-                default_unchecked: false,
                 version: None,
-                win_only: false,
             };
             Some(DevPluginCandidate { info, directory })
         })
@@ -475,62 +458,6 @@ pub(crate) fn presets_from_manifest(
         plugin
     }));
     plugins
-}
-
-/// 读取弃用插件名单（`resources/manifest.jsonc` 的 `plugins.depercated`），返回
-/// 已登记的预设插件 id 集合。
-pub(crate) fn load_deprecated_ids(app_handle: &AppHandle) -> HashSet<String> {
-    config::manifest::read(app_handle)
-        .map(|manifest| manifest.plugins.deprecated.into_iter().collect())
-        .unwrap_or_default()
-}
-
-/// 预装清单中某 id 对应的仓库地址
-pub fn repo_url_of(app_handle: &AppHandle, id: &str) -> Option<String> {
-    load_presets(app_handle)
-        .into_iter()
-        .find(|p| p.id == id)
-        .map(|p| p.repo_url)
-}
-
-/// FNV-1a 64 位哈希（无外部依赖，跨平台稳定）
-fn fnv1a(bytes: &[u8]) -> u64 {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in bytes {
-        hash ^= u64::from(*b);
-        hash = hash.wrapping_mul(0x100_0000_01b3);
-    }
-    hash
-}
-
-/// 当前 `plugins` 节的内容指纹（十六进制 FNV-1a）。
-///
-/// 指纹只覆盖插件节：清单同时承载引擎版本与依赖映射规范，改这些不应把用户
-/// 重新拉回首次引导。清单缺失/不可读返回 None。
-pub(crate) fn current_preset_hash(app_handle: &AppHandle) -> Option<String> {
-    let manifest = config::manifest::read(app_handle)?;
-    let canonical = serde_json::to_string(&manifest.plugins).ok()?;
-    Some(format!("{:016x}", fnv1a(canonical.as_bytes())))
-}
-
-/// 是否需要进入预装插件引导：
-/// - 引导从未完成（首启/中途退出）→ 需要
-/// - 老用户升级无指纹基线（文件在）→ 弹一次建立基线
-/// - 有基线且内容已变更 → 需要
-/// - 文件缺失视为无变化，避免每次启动都弹空引导
-pub(crate) fn preinstall_pending(app_handle: &AppHandle) -> bool {
-    let setting = config::get_store_dat_setting(app_handle);
-    if !setting.preinstall_done {
-        return true;
-    }
-    match (
-        setting.preset_hash.as_deref(),
-        current_preset_hash(app_handle),
-    ) {
-        (None, Some(_)) => true,
-        (Some(prev), Some(cur)) => prev != cur,
-        _ => false,
-    }
 }
 
 #[cfg(test)]
@@ -985,54 +912,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn fnv1a_matches_known_vectors() {
-        // FNV-1a 64-bit 标准测试向量
-        assert_eq!(fnv1a(b""), 0xcbf29ce484222325);
-        assert_eq!(fnv1a(b"a"), 0xaf63dc4c8601ec8c);
-        assert_eq!(fnv1a(b"foobar"), 0x85944171f73967e8);
-    }
-
-    #[test]
-    fn same_content_same_hash_appended_comma_changes_hash() {
-        let a = r#"[{"id":"x","spec":"y","name":"X","description":"","repoUrl":"u"}]"#;
-        let b = r#"[{"id":"x","spec":"y","name":"X","description":"","repoUrl":"u"},]"#;
-        assert_eq!(fnv1a(a.as_bytes()), fnv1a(a.as_bytes()));
-        assert_ne!(fnv1a(a.as_bytes()), fnv1a(b.as_bytes()));
-    }
-
-    #[test]
-    fn pending_decision_matrix() {
-        // 未完成引导 → 一定需要
-        assert!(preinstall_pending_for_test(false, None, Some("h1")));
-        assert!(preinstall_pending_for_test(false, Some("h1"), Some("h1")));
-        // 老用户升级：无基线且文件在 → 弹一次建立基线
-        assert!(preinstall_pending_for_test(true, None, Some("h1")));
-        // 基线一致 → 不弹
-        assert!(!preinstall_pending_for_test(true, Some("h1"), Some("h1")));
-        // 内容变更 → 弹
-        assert!(preinstall_pending_for_test(true, Some("h1"), Some("h2")));
-        // 文件缺失：视为无变化不弹（有基线或老用户都不弹）
-        assert!(!preinstall_pending_for_test(true, Some("h1"), None));
-        assert!(!preinstall_pending_for_test(true, None, None));
-    }
-
-    /// 纯函数版 pending 判定（便于单测，不依赖 AppHandle）
-    fn preinstall_pending_for_test(
-        preinstall_done: bool,
-        recorded: Option<&str>,
-        current: Option<&str>,
-    ) -> bool {
-        if !preinstall_done {
-            return true;
-        }
-        match (recorded, current) {
-            (None, Some(_)) => true,
-            (Some(prev), Some(cur)) => prev != cur,
-            _ => false,
-        }
-    }
-
     /// 写入一个带 `dsh` 对象的开发包 manifest。
     #[cfg(debug_assertions)]
     fn write_dev_manifest(dir: &Path, name: &str) {
@@ -1289,10 +1168,7 @@ mod tests {
                 repo_url: "static".into(),
                 recommended: false,
                 fix: false,
-                default_checked: false,
-                default_unchecked: false,
                 version: None,
-                win_only: false,
             },
             PreinstallPluginInfo {
                 id: "keep-static".into(),
@@ -1304,10 +1180,7 @@ mod tests {
                 repo_url: String::new(),
                 recommended: false,
                 fix: false,
-                default_checked: false,
-                default_unchecked: false,
                 version: None,
-                win_only: false,
             },
         ];
         // 把 dev 扫描根临时指向临时目录，借助 discover 函数合并
@@ -1340,10 +1213,7 @@ mod tests {
             repo_url: String::new(),
             recommended: false,
             fix: false,
-            default_checked: false,
-            default_unchecked: false,
             version: Some(declared.clone()),
-            win_only: false,
         }];
 
         let merged = merge_dev_internal_plugins_at(&root, static_internal);

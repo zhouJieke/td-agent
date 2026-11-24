@@ -666,20 +666,6 @@ export function ConfigPlugin() {
                 </Tooltip.Content>
               </Tooltip>
             </If>
-            <Tooltip delay={0}>
-              <Button
-                size="sm"
-                variant="primary"
-                onPress={store.preinstall.open}
-                isDisabled={store.preinstall.installing}
-              >
-                {t('preinstall.open_preset')}
-              </Button>
-              <Tooltip.Content>
-                <p>{t('preinstall.settings_hint')}</p>
-              </Tooltip.Content>
-            </Tooltip>
-
           </div>
         )}
         description={t('plugins.panel_tooltip')}

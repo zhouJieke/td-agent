@@ -142,11 +142,6 @@ pub(crate) struct InstallTarget {
     pub spec: String,
 }
 
-pub async fn install(app_handle: &AppHandle, ids: &[String]) -> Result<(), String> {
-    let targets = preset_targets(app_handle, ids)?;
-    install_with_cancel(app_handle, &targets, None, new_process_owner()).await
-}
-
 /// 内置插件启动自愈专用入口：取消信号会阻止被结束的 pnpm/dsh 进程再次进入
 /// allowBuilds 重试，确保硬上限之后不会悄悄拉起下一棵进程树。
 pub(crate) async fn install_internal(
@@ -211,11 +206,6 @@ fn preset_targets(app_handle: &AppHandle, ids: &[String]) -> Result<Vec<InstallT
 /// 原始 spec → 安装目标：本地目录 spec 规范成 `link:<绝对路径>` 并读目标包名
 /// （读不到回落目录名），npm 形态剥离版本后缀，git / URL 形态无法静态得知包名，
 /// 回落 spec 本身并放弃产物核验。
-///
-/// 命中资源清单的 spec 走 [`preset_targets`] 同一套解析：同一条目无论从预装引导页
-/// （预设 id）还是从面板 / 市场（原始 spec）进入，都必须解析出相同的安装目标——内置
-/// 插件的捆绑 `link:` 目录与清单版本矩阵只能在这一侧得到。解析失败（内置插件缺
-/// 捆绑产物，属发布缺陷）时退回裸 spec，让 pnpm 报出真实原因而不是静默跳过该条目。
 ///
 /// 本地目录在交给 pnpm 之前先校验：目录与 `package.json` 缺一都会让 pnpm 装出
 /// 一个没有清单的联接，随后的产物核验只会报出「命令成功但没有产物」这种与真实

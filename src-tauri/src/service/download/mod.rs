@@ -3,6 +3,7 @@ mod extractor;
 mod github;
 mod installable;
 mod progress;
+mod runtime_manifest;
 mod utils;
 
 // 导出公共接口
@@ -19,5 +20,6 @@ pub(crate) use core::{remove_dir_with_retry, rename_with_retry};
 // 依赖任务清单与映射回写：安装流程与启动检测共用同一组任务定义。
 pub use installable::{record_mappings, tasks, Dsh, InstallKind, Installable, Nodejs, Pnpm};
 pub use progress::ProgressTracker;
+pub(crate) use runtime_manifest::fetch as fetch_runtime_manifest;
 // GitHub API 限流冷却器：任何访问 api.github.com 的服务都应收敛到这一个入口
 pub use utils::github_api;

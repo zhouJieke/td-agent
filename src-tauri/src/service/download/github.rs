@@ -119,7 +119,7 @@ async fn fetch_tag_commit(client: &reqwest::Client, tag: &str) -> Result<String,
 ///
 /// 当 `/commits/{tag}` 因 api.github.com 限流/网络失败时，用 build-id 兜底作为 commit，
 /// 保证「版本升级」判定不因这一次要调用而整体中断（issue：rc.8 发布后无更新提示）。
-fn commit_fallback_from_tag(tag: &str) -> String {
+pub(super) fn commit_fallback_from_tag(tag: &str) -> String {
     tag.rsplit('-').next().unwrap_or(tag).to_string()
 }
 
@@ -380,6 +380,14 @@ pub async fn fetch_dsh_pkg_version(
     app_handle: &tauri::AppHandle,
     version: &str,
 ) -> Result<LatestDshPkg, String> {
+    if config::recommended_dsh_version(app_handle).as_deref() == Some(version) {
+        if let Some(manifest) = super::fetch_runtime_manifest(app_handle).await? {
+            let info = manifest.dsh_package();
+            if parse_version_from_tag(&info.tag).as_deref() == Some(version) {
+                return Ok(info);
+            }
+        }
+    }
     let release = fetch_dsh_pkg_releases(app_handle)
         .await?
         .into_iter()
@@ -415,6 +423,14 @@ pub async fn fetch_dsh_pkg_asset(
     app_handle: &tauri::AppHandle,
     tag: &str,
 ) -> Result<LatestDshPkg, String> {
+    if parse_version_from_tag(tag) == config::recommended_dsh_version(app_handle) {
+        if let Some(manifest) = super::fetch_runtime_manifest(app_handle).await? {
+            let info = manifest.dsh_package();
+            if info.tag == tag {
+                return Ok(info);
+            }
+        }
+    }
     let client = github_client(app_handle)?;
     let expected_name = config::get_dsh_download_url()?
         .rsplit('/')

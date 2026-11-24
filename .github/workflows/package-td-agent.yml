@@ -1,0 +1,33 @@
+name: Package Td-Agent
+
+on:
+  push:
+    branches:
+      - 'codex/td-agent-package-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-td-agent-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    name: Package macOS
+    uses: ./.github/workflows/build-macos.yml
+    with:
+      source_ref: ${{ github.sha }}
+    secrets:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+  windows:
+    name: Package Windows
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      source_ref: ${{ github.sha }}

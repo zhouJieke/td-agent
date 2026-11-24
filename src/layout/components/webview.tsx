@@ -18,7 +18,6 @@ import { FullSidebarNavbar } from './full-sidebar-navbar'
 import { Iframe } from './iframe'
 import { Navbar } from './navbar'
 import { Setup } from './setup'
-import { PreinstallSetup } from './setup-preinstall'
 import { isFullSidebarWindow } from './window-presentation'
 
 interface NavBridgeMessage {
@@ -42,7 +41,7 @@ export function Webview() {
   const { status, serviceHealthy, serviceRunning, iframeKey, iframeLoaded, iframeAlive, iframeError, startupPhase, busyAction } = useStore(store.harness)
   const { recovery } = useStore(store.recovery)
   const live = status === 'ready' && serviceHealthy
-  const branch = status === 'ready' ? 'iframe' : status === 'preinstall' ? 'preinstall' : status === 'error' && recovery.required ? 'recovery' : 'setup'
+  const branch = status === 'ready' ? 'iframe' : status === 'error' && recovery.required ? 'recovery' : 'setup'
   useWatch([branch, status, serviceHealthy, serviceRunning, iframeKey, iframeLoaded, iframeAlive, iframeError, startupPhase, busyAction], () => {
     console.warn('[Webview] shell view', {
       branch,
@@ -101,8 +100,6 @@ export function Webview() {
             <Recovery fullScreen />
           </If>
         )
-      case 'preinstall':
-        return <PreinstallSetup />
       case 'ready':
         return <Iframe iframeRef={iframeRef} />
       default:

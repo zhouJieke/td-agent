@@ -291,10 +291,7 @@ mod tests {
             repo_url: String::new(),
             recommended: false,
             fix: false,
-            default_checked: false,
-            default_unchecked: false,
             version: None,
-            win_only: false,
             internal,
         }
     }

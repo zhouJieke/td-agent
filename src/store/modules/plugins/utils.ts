@@ -1,5 +1,4 @@
-import type { IncompatibleVersion, PolicyBlockedVersion } from '../preinstall/types'
-import type { BlockedRefusal, Plugin, PluginRef } from './types'
+import type { BlockedRefusal, IncompatibleVersion, Plugin, PluginRef, PolicyBlockedVersion } from './types'
 import type { DshPlugin } from '@/types'
 
 export interface NormalizedRef {

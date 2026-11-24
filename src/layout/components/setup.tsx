@@ -1,6 +1,6 @@
 import type { IconComponent } from './loadable'
 import type { SetupStatus } from '@/store/modules/harness'
-import { ArrowRightFromSquare, CircleCheck, CircleExclamation, CircleInfo, Copy, Magnifier, Rocket, ShieldCheck } from '@gravity-ui/icons'
+import { ArrowRightFromSquare, CircleCheck, CircleExclamation, Copy, Magnifier, Rocket, ShieldCheck } from '@gravity-ui/icons'
 import { invoke } from '@tauri-apps/api/core'
 import { useTranslation } from 'react-i18next'
 import { If, Then } from 'react-if-lite'
@@ -17,7 +17,6 @@ const STATUS_ICONS: Record<SetupStatus, IconComponent> = {
   checking: Magnifier,
   installing: ArrowRightFromSquare,
   starting: Rocket,
-  preinstall: CircleInfo,
   ready: CircleCheck,
   error: CircleExclamation,
 }
