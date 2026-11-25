@@ -19,17 +19,18 @@ async function openPlugins(app: DshPage, touch = false): Promise<void> {
   if (touch) {
     await app.frame.locator('[data-dsh-mobile-sidebar-toggle]').tap()
     await expect.poll(() => app.frame.locator('html[data-dsh-mobile-sidebar-open]').count(), { message: '触屏侧栏必须真实展开' }).toBe(1)
-    const row = app.frame.getByRole('button', { name: '插件扩展', exact: true })
-    await row.tap()
-    await expect.poll(() => row.getAttribute('aria-current'), { message: '触屏点击必须真实激活插件扩展入口' }).toBe('page')
-    await app.frame.locator(OFFICIAL_PAGE).waitFor({ state: 'visible' })
+  }
+  const row = app.frame.locator('button:has([data-dsh-hidden-panel="dsh-tauri-extension"])')
+  await row.waitFor({ state: 'attached' })
+  expect(await row.count(), '插件扩展入口必须保留注册').toBe(1)
+  expect(await row.isVisible(), '插件扩展入口必须隐藏').toBe(false)
+  await row.evaluate(element => (element as HTMLButtonElement).click())
+  await expect.poll(() => row.getAttribute('aria-current'), { message: '保留的插件扩展面板必须仍可被程序化激活' }).toBe('page')
+  await app.frame.locator(OFFICIAL_PAGE).waitFor({ state: 'visible' })
+  if (touch) {
     await app.frame.locator('[data-dsh-mobile-sidebar-shade]').tap()
     await expect.poll(() => app.frame.locator('html[data-dsh-mobile-sidebar-open]').count(), { message: '进入插件面板后必须真实收起触屏侧栏以解除主槽 inert' }).toBe(0)
   }
-  else {
-    await app.frame.getByRole('button', { name: '插件扩展', exact: true }).click()
-  }
-  await app.frame.locator(OFFICIAL_PAGE).waitFor({ state: 'visible' })
 }
 
 describe('extension panel official plugins composition', () => {

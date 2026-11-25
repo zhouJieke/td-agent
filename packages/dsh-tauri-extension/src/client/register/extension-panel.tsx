@@ -129,4 +129,5 @@ export const extensionPanelFeature = defineRegister<ClientContext>((controller, 
     },
   })
   controller.add(panel.dispose)
+  controller.add(hidePanel(ctx, PANEL_ID, PANEL_ID))
 })
