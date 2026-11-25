@@ -1,7 +1,8 @@
 import type { KeyboardEvent, MouseEvent, ReactElement, ReactNode } from 'react'
 import type { Translate } from '../locales/index.types'
 import type { SkillSummary } from '../types'
-import { Card, GraduationCap, Icon } from 'dsh-tauri-ui/client'
+import { Card, GraduationCap, Icon, Tag } from 'dsh-tauri-ui/client'
+import { parseBizTags } from '../store/modules/skill.utils'
 
 interface SkillCardProps {
   t: Translate
@@ -12,8 +13,9 @@ interface SkillCardProps {
   onSelect?: (skill: SkillSummary) => void
 }
 
-/** 技能摘要卡片：只展示技能名称与简介；整卡可点击时打开只读详情。 */
+/** 技能摘要卡片：展示技能名称、简介与业务标签；整卡可点击时打开只读详情。 */
 export function SkillCard({ t, skill, actions, onSelect }: SkillCardProps): ReactElement {
+  const tags = parseBizTags(skill.bizTags)
   const activate = (): void => onSelect?.(skill)
   const handleKeyDown = (event: KeyboardEvent<HTMLLIElement>): void => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -53,6 +55,13 @@ export function SkillCard({ t, skill, actions, onSelect }: SkillCardProps): Reac
       <Card.Description className="line-clamp-2" title={skill.description ?? undefined}>
         {skill.description ?? t('skill.noDescription')}
       </Card.Description>
+      {tags.length === 0
+        ? null
+        : (
+            <div className="flex flex-wrap items-center gap-[6px]">
+              {tags.map(tag => <Tag key={tag} tone="neutral">{tag}</Tag>)}
+            </div>
+          )}
     </Card>
   )
 }

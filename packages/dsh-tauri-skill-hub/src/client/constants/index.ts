@@ -10,7 +10,7 @@ export const LOCALE_EFFECT = `${PLUGIN_ID}: locale`
 export const PANEL_EFFECT = `${PLUGIN_ID}: panel`
 export const SKILL_CREATOR_PREFILL_EFFECT = `${PLUGIN_ID}: skill creator prefill`
 
-export const SKILL_TABS = ['enterprise', 'mine', 'local', 'manage'] as const
+export const SKILL_TABS = ['enterprise', 'local', 'manage'] as const
 
 export const SOURCE_LOCALE_KEYS: Readonly<Record<string, LocaleKey>> = {
   'project-dsh': 'sourceProjectDsh',

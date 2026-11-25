@@ -205,8 +205,6 @@ describe('技能中心独立本地技能页', () => {
     vi.mocked(getSkills).mockResolvedValue({ skills: [] })
     const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
 
-    fireEvent.click(view.getByRole('tab', { name: 'My skills' }))
-    await view.findByText('Skills configured for Employee.')
     expect(view.queryByRole('button', { name: 'Upload skill' })).toBeNull()
     fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))
     await view.findByText('No skills discovered yet')
@@ -241,15 +239,6 @@ describe('技能中心独立本地技能页', () => {
     expect(view.queryByRole('button', { name: 'Upload skill' })).toBeNull()
     expect(getSkills).not.toHaveBeenCalled()
     expect(postSkillsRefresh).not.toHaveBeenCalled()
-  })
-
-  it('我的技能提示仍展示已登录的员工姓名', async () => {
-    const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
-
-    fireEvent.click(view.getByRole('tab', { name: 'My skills' }))
-
-    expect((await view.findByText('Skills configured for Employee.')).textContent)
-      .toBe('Skills configured for Employee.')
   })
 
   it('切换页签不重新确认登录态，本地页立即可用', async () => {
@@ -312,7 +301,7 @@ describe('技能中心独立本地技能页', () => {
     expect((await view.findByText('downloaded-skill')).textContent).toBe('downloaded-skill')
   })
 
-  it('下载和删除后企业及个人列表同步更新按钮状态', async () => {
+  it('下载和删除后企业列表同步更新按钮状态', async () => {
     let rows = [localSkill('demo', 'user-dsh')]
     vi.mocked(getSkills).mockImplementation(async () => ({ skills: rows }))
     vi.mocked(deleteSkill).mockImplementation(async () => {
@@ -325,17 +314,9 @@ describe('技能中心独立本地技能页', () => {
       .mockResolvedValueOnce(installed(['demo']))
       .mockResolvedValueOnce(installed([]))
     store.skill.setCommon([summary('demo')])
-    store.skill.setMine({
-      userId: 'E1',
-      skillNames: ['demo'],
-      skills: [{ summary: summary('demo'), versions: [] }],
-      failed: [],
-    })
     const view = render(<SkillHubPanel t={locale.text} createSkill={createSkill} />)
 
     fireEvent.click(view.getByRole('button', { name: 'Download skill demo' }))
-    expect((await view.findByRole('button', { name: 'Downloaded skill demo' })).hasAttribute('disabled')).toBe(true)
-    fireEvent.click(view.getByRole('tab', { name: 'My skills' }))
     expect((await view.findByRole('button', { name: 'Downloaded skill demo' })).hasAttribute('disabled')).toBe(true)
 
     fireEvent.click(view.getByRole('tab', { name: 'Local skills' }))

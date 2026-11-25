@@ -8,7 +8,6 @@ import { fetchInstalledSkills, loadSkillHub } from '../service/skill'
 import { store } from '../store'
 import { toTab } from '../store/modules/skill.utils'
 import { LocalSkills } from './local-skills'
-import { MineView } from './mine-view'
 import { SkillCatalog } from './skill-catalog'
 import { SkillDetailModal } from './skill-detail-modal'
 
@@ -75,12 +74,10 @@ function feedbackText(feedback: SkillFeedback, t: Translate): string {
 
 export function SkillHubPanel({ t, createSkill }: { t: Translate, createSkill: () => Promise<void> }): ReactElement {
   const state = useStore(store.skill)
-  const displayName = state.profile?.employeeName ?? state.employee?.employeeName ?? ''
-  const activeTab = state.tab === 'mine' || state.tab === 'local' ? state.tab : 'enterprise'
+  const activeTab = state.tab === 'local' ? 'local' : 'enterprise'
   const warning = state.feedback?.kind === 'failed'
     || ((state.feedback?.kind === 'downloaded' || state.feedback?.kind === 'updated') && state.feedback.status !== 'ready')
-  const listReady = state.loadedTabs.includes(state.tab)
-    || (activeTab === 'mine' ? state.mine !== null : state.common.length > 0)
+  const listReady = state.loadedTabs.includes(state.tab) || state.common.length > 0
   useWatchImmediate([state.tab], () => {
     void loadSkillHub()
   })
@@ -123,7 +120,6 @@ export function SkillHubPanel({ t, createSkill }: { t: Translate, createSkill: (
                       value={activeTab}
                       options={[
                         { value: 'enterprise', label: t('tab.enterprise') },
-                        { value: 'mine', label: t('tab.mine') },
                         { value: 'local', label: t('tab.local') },
                       ]}
                       onChange={(next) => {
@@ -140,23 +136,14 @@ export function SkillHubPanel({ t, createSkill }: { t: Translate, createSkill: (
                       ? <LocalSkills t={t} createSkill={createSkill} showDirectoryAndImport={SHOW_LOCAL_SKILL_DIRECTORY_AND_IMPORT} />
                       : !listReady
                           ? <Text tone="tertiary" size="sm">{t('loading')}</Text>
-                          : activeTab === 'mine'
-                            ? (
-                                <MineView
-                                  t={t}
-                                  mine={state.mine}
-                                  hint={t('mine.hint', { name: displayName })}
-                                  emptyText={t('mine.empty')}
-                                />
-                              )
-                            : (
-                                <SkillCatalog
-                                  t={t}
-                                  hint={t('enterprise.hint')}
-                                  skills={state.common}
-                                  emptyText={t('enterprise.empty')}
-                                />
-                              )}
+                          : (
+                              <SkillCatalog
+                                t={t}
+                                hint={t('enterprise.hint')}
+                                skills={state.common}
+                                emptyText={t('enterprise.empty')}
+                              />
+                            )}
                   </div>
                 </>
               )}

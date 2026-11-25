@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
-import type { SkillSummary, UserSkillDetails } from '../types'
+import type { SkillSummary } from '../types'
 import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { locale } from '../locales'
 import { downloadSkill, fetchInstalledSkills, updateSkill } from '../service/skill'
 import { store } from '../store'
-import { MineView } from './mine-view'
 import { SkillCatalog } from './skill-catalog'
 import { SkillHubPanel } from './skill-hub-panel'
 
@@ -71,36 +70,6 @@ describe('技能列表下载按钮', () => {
     expect(vi.mocked(downloadSkill).mock.calls).toEqual([['alpha'], ['beta']])
   })
 
-  it('我的技能的每一项都可按技能名下载', () => {
-    const mine: UserSkillDetails = {
-      userId: 'E1',
-      skillNames: ['personal', 'temporarily-unavailable'],
-      skills: [{ summary: summary('personal'), versions: [] }],
-      failed: [{ name: 'temporarily-unavailable', reason: '详情暂不可用' }],
-    }
-    const view = render(<MineView t={locale.text} mine={mine} hint="" emptyText="" />)
-
-    fireEvent.click(view.getByRole('button', { name: 'Download skill personal' }))
-    fireEvent.click(view.getByRole('button', { name: 'Download skill temporarily-unavailable' }))
-
-    expect(vi.mocked(downloadSkill).mock.calls).toEqual([['personal'], ['temporarily-unavailable']])
-  })
-
-  it('技能详情全部获取失败时仍提供下载入口，不误显示未配置技能', () => {
-    const mine: UserSkillDetails = {
-      userId: 'E1',
-      skillNames: ['personal'],
-      skills: [],
-      failed: [{ name: 'personal', reason: '详情暂不可用' }],
-    }
-    const view = render(<MineView t={locale.text} mine={mine} hint="" emptyText="No configured skills" />)
-
-    fireEvent.click(view.getByRole('button', { name: 'Download skill personal' }))
-
-    expect(downloadSkill).toHaveBeenCalledExactlyOnceWith('personal')
-    expect(view.queryByText('No configured skills')).toBeNull()
-  })
-
   it('下载中只禁用对应技能的按钮', async () => {
     const view = render(<SkillCatalog t={locale.text} hint="" emptyText="" skills={[summary('alpha'), summary('beta')]} />)
 
@@ -110,47 +79,25 @@ describe('技能列表下载按钮', () => {
     expect(view.getByRole('button', { name: 'Download skill beta' }).hasAttribute('disabled')).toBe(false)
   })
 
-  it('企业和个人列表中的同名已安装技能显示已下载且不能点击', () => {
-    store.skill.finishInstalledLoad(store.skill.startInstalledLoad(), ['shared', 'unavailable'])
-    const mine: UserSkillDetails = {
-      userId: 'E1',
-      skillNames: ['shared', 'unavailable'],
-      skills: [{ summary: summary('shared'), versions: [] }],
-      failed: [{ name: 'unavailable', reason: '详情暂不可用' }],
-    }
-    const enterprise = render(<SkillCatalog t={locale.text} hint="" emptyText="" skills={[summary('shared'), summary('new')]} />)
-    const personal = render(<MineView t={locale.text} mine={mine} hint="" emptyText="" />)
-    const commonButton = within(enterprise.container).getByRole('button', { name: 'Downloaded skill shared' })
-    const personalButton = within(personal.container).getByRole('button', { name: 'Downloaded skill shared' })
-    const failedButton = within(personal.container).getByRole('button', { name: 'Downloaded skill unavailable' })
+  it('同名已安装技能显示已下载且不能点击', () => {
+    store.skill.finishInstalledLoad(store.skill.startInstalledLoad(), ['shared'])
+    const view = render(<SkillCatalog t={locale.text} hint="" emptyText="" skills={[summary('shared'), summary('new')]} />)
+    const commonButton = view.getByRole('button', { name: 'Downloaded skill shared' })
 
     expect(commonButton.querySelector('svg')).not.toBeNull()
     expect(commonButton.hasAttribute('disabled')).toBe(true)
-    expect(personalButton.hasAttribute('disabled')).toBe(true)
-    expect(failedButton.hasAttribute('disabled')).toBe(true)
     fireEvent.click(commonButton)
-    fireEvent.click(personalButton)
-    fireEvent.click(failedButton)
     expect(downloadSkill).not.toHaveBeenCalled()
-    expect(within(enterprise.container).getByRole('button', { name: 'Download skill new' }).hasAttribute('disabled')).toBe(false)
+    expect(view.getByRole('button', { name: 'Download skill new' }).hasAttribute('disabled')).toBe(false)
   })
 
-  it('企业和个人列表中有新版本的已安装技能提供更新入口', () => {
+  it('有新版本的已安装技能提供更新入口', () => {
     store.skill.finishInstalledLoad(store.skill.startInstalledLoad(), ['shared'], { shared: '1.0.0' }, ['shared'])
-    const mine: UserSkillDetails = {
-      userId: 'E1',
-      skillNames: ['shared'],
-      skills: [{ summary: summary('shared', '1.1.0'), versions: [] }],
-      failed: [],
-    }
-    const enterprise = render(<SkillCatalog t={locale.text} hint="" emptyText="" skills={[summary('shared', '1.1.0')]} />)
-    const personal = render(<MineView t={locale.text} mine={mine} hint="" emptyText="" />)
+    const view = render(<SkillCatalog t={locale.text} hint="" emptyText="" skills={[summary('shared', '1.1.0')]} />)
 
-    expect(within(enterprise.container).getByRole('button', { name: 'Downloaded skill shared' }).hasAttribute('disabled')).toBe(true)
-    expect(within(personal.container).getByRole('button', { name: 'Downloaded skill shared' }).hasAttribute('disabled')).toBe(true)
-    fireEvent.click(within(enterprise.container).getByRole('button', { name: 'Update skill shared' }))
+    expect(view.getByRole('button', { name: 'Downloaded skill shared' }).hasAttribute('disabled')).toBe(true)
+    fireEvent.click(view.getByRole('button', { name: 'Update skill shared' }))
     expect(updateSkill).toHaveBeenCalledExactlyOnceWith({ name: 'shared', latestVersion: '1.1.0', installedVersion: '1.0.0' })
-    expect(within(personal.container).getByRole('button', { name: 'Update skill shared' }).hasAttribute('disabled')).toBe(false)
   })
 
   it.each([
@@ -206,22 +153,14 @@ describe('技能列表下载按钮', () => {
     expect(view.queryByRole('button', { name: 'Update skill demo' })).toBeNull()
   })
 
-  it('更新进行中时两个列表都禁用同名技能的更新入口', async () => {
+  it('更新进行中时禁用同名技能的更新入口', async () => {
     store.skill.finishInstalledLoad(store.skill.startInstalledLoad(), ['shared'], { shared: '1.0.0' }, ['shared'])
-    const mine: UserSkillDetails = {
-      userId: 'E1',
-      skillNames: ['shared'],
-      skills: [{ summary: summary('shared', '1.1.0'), versions: [] }],
-      failed: [],
-    }
-    const enterprise = render(<SkillCatalog t={locale.text} hint="" emptyText="" skills={[summary('shared', '1.1.0')]} />)
-    const personal = render(<MineView t={locale.text} mine={mine} hint="" emptyText="" />)
+    const view = render(<SkillCatalog t={locale.text} hint="" emptyText="" skills={[summary('shared', '1.1.0')]} />)
 
     act(() => store.skill.startDownload('shared'))
 
     await waitFor(() => {
-      expect(within(enterprise.container).getByRole('button', { name: 'Updating skill shared' }).hasAttribute('disabled')).toBe(true)
-      expect(within(personal.container).getByRole('button', { name: 'Updating skill shared' }).hasAttribute('disabled')).toBe(true)
+      expect(view.getByRole('button', { name: 'Updating skill shared' }).hasAttribute('disabled')).toBe(true)
     })
   })
 

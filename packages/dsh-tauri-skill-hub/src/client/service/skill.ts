@@ -20,8 +20,9 @@ function fail(error: unknown): ActionResult {
 }
 
 /**
- * Query：面板装配总入口。已登录时不再重复探测登录态，只按当前页签拉取该页所需的接口，
- * 已加载过的页签直接复用 store 中的数据，切换页签时列表不会重新刷新。
+ * Query：面板装配总入口。已登录时不再重复探测登录态，只按当前页签拉取该页所需的接口。
+ * 每次装配（进入面板或切换页签）都无视 `loadedTabs` 缓存强制重拉当前页签，
+ * 使后台（nacos）的增删在切换页签后即可反映；重拉期间保留旧数据，列表不会闪空。
  */
 export async function loadSkillHub(): Promise<void> {
   if (store.skill.employee === null || !store.skill.authChecked) {
@@ -32,7 +33,10 @@ export async function loadSkillHub(): Promise<void> {
   const employee = store.skill.employee
   if (employee === null || store.skill.tab === 'local')
     return
-  await Promise.all([fetchSkillTab(employee.employeeNumber, store.skill.tab), fetchInstalledSkills()])
+  await Promise.all([
+    fetchInstalledSkills(),
+    fetchSkillTab(employee.employeeNumber, store.skill.tab, true),
+  ])
 }
 
 export async function fetchInstalledSkills(): Promise<void> {
@@ -57,7 +61,7 @@ export async function fetchInstalledSkills(): Promise<void> {
 
 /**
  * Query：按页签拉取该页所需的最小接口集合。
- * 企业页只要公用技能，我的技能页只要个人名单与档案，管理页才需要全量目录与员工列表。
+ * 企业页只要公用技能，管理页才需要全量目录与员工列表。
  * 传输层错误落 `store.skill.error` 由面板内联渲染；员工与档案失败降级为空值不阻断。
  */
 export async function fetchSkillTab(userId: string, tab: SkillTab, force = false): Promise<void> {
@@ -70,18 +74,6 @@ export async function fetchSkillTab(userId: string, tab: SkillTab, force = false
       if (isStale(authRequestId, userId))
         return
       store.skill.setCommon(common.items)
-    }
-    else if (tab === 'mine') {
-      const [mine, profile] = await Promise.all([
-        fetchUserSkills(userId),
-        fetchUserProfile(userId).catch(() => null),
-      ])
-      if (isStale(authRequestId, userId))
-        return
-      store.skill.setMine(mine)
-      store.skill.setProfile(profile)
-      if (store.skill.manageUserId === userId)
-        store.skill.setManageMine(mine)
     }
     else if (tab === 'manage') {
       const [catalog, employees, mine, profile] = await Promise.all([
