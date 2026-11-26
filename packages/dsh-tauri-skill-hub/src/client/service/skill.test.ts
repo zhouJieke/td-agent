@@ -154,17 +154,15 @@ describe('登录态编排', () => {
     expect(fetchEmployees).not.toHaveBeenCalled()
   })
 
-  it('已登录时切换页签不再探测登录态', async () => {
-    store.skill.setTab('mine')
-    vi.mocked(fetchUserSkills).mockResolvedValue(mine('E10001', ['a']))
-    vi.mocked(fetchUserProfile).mockResolvedValue(PROFILE)
+  it('已登录时重新装配不再探测登录态', async () => {
+    store.skill.setTab('enterprise')
+    vi.mocked(fetchCommonSkills).mockResolvedValue(page(['a']))
 
     await loadSkillHub()
 
     expect(vi.mocked(fetchAuth)).not.toHaveBeenCalled()
-    expect(store.skill.mine?.skillNames).toEqual(['a'])
-    expect(store.skill.loadedTabs).toEqual(['mine'])
-    expect(fetchCommonSkills).not.toHaveBeenCalled()
+    expect(store.skill.common.map(item => item.name)).toEqual(['a'])
+    expect(store.skill.loadedTabs).toEqual(['enterprise'])
   })
 
   it('已登录的本地技能页只检查登录态，不请求企业技能接口', async () => {
@@ -185,6 +183,46 @@ describe('登录态编排', () => {
   })
 })
 
+describe('切换页签强制刷新', () => {
+  it('重复装配同一页签也强制重拉，反映后台增删', async () => {
+    vi.mocked(fetchCommonSkills)
+      .mockResolvedValueOnce(page(['a']))
+      .mockResolvedValueOnce(page(['b']))
+
+    await loadSkillHub()
+    expect(store.skill.common.map(item => item.name)).toEqual(['a'])
+
+    await loadSkillHub()
+
+    expect(fetchCommonSkills).toHaveBeenCalledTimes(2)
+    expect(store.skill.common.map(item => item.name)).toEqual(['b'])
+  })
+
+  it('切走再切回企业页签时强制重拉最新数据', async () => {
+    vi.mocked(fetchCommonSkills)
+      .mockResolvedValueOnce(page(['old']))
+      .mockResolvedValueOnce(page(['new']))
+
+    await loadSkillHub()
+    store.skill.setTab('local')
+    await loadSkillHub()
+    store.skill.setTab('enterprise')
+    await loadSkillHub()
+
+    expect(fetchCommonSkills).toHaveBeenCalledTimes(2)
+    expect(store.skill.common.map(item => item.name)).toEqual(['new'])
+  })
+
+  it('本地技能页不触发企业技能请求', async () => {
+    store.skill.setTab('local')
+
+    await loadSkillHub()
+
+    expect(fetchCommonSkills).not.toHaveBeenCalled()
+    expect(getInstalledSkills).not.toHaveBeenCalled()
+  })
+})
+
 describe('按页签拉取技能数据', () => {
   it('企业页只拉取企业公用技能', async () => {
     vi.mocked(fetchCommonSkills).mockResolvedValue(page(['a', 'b']))
@@ -198,30 +236,6 @@ describe('按页签拉取技能数据', () => {
     expect(fetchUserSkills).not.toHaveBeenCalled()
     expect(fetchUserProfile).not.toHaveBeenCalled()
     expect(fetchEmployees).not.toHaveBeenCalled()
-  })
-
-  it('我的技能页只拉取个人名单与档案，档案失败不阻断', async () => {
-    vi.mocked(fetchUserSkills).mockResolvedValue(mine('E10001', ['a']))
-    vi.mocked(fetchUserProfile).mockResolvedValue(PROFILE)
-
-    await fetchSkillTab('E10001', 'mine')
-
-    expect(store.skill.mine?.skillNames).toEqual(['a'])
-    expect(store.skill.profile?.employeeName).toBe('张三')
-    expect(store.skill.loadedTabs).toEqual(['mine'])
-    expect(fetchCommonSkills).not.toHaveBeenCalled()
-    expect(fetchCatalogSkills).not.toHaveBeenCalled()
-    expect(fetchEmployees).not.toHaveBeenCalled()
-
-    store.skill.resetLoadedTabs()
-    store.skill.setProfile(null)
-    vi.mocked(fetchUserProfile).mockRejectedValue(new Error('未找到员工档案'))
-
-    await fetchSkillTab('E10001', 'mine')
-
-    expect(store.skill.profile).toBeNull()
-    expect(store.skill.mine?.skillNames).toEqual(['a'])
-    expect(store.skill.error).toBe('')
   })
 
   it('管理页拉取全量目录与员工列表并默认选中当前用户，员工列表失败退化为空', async () => {

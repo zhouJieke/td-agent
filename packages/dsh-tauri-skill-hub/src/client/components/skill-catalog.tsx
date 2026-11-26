@@ -16,9 +16,9 @@ interface SkillCatalogProps {
   emptyText: string
 }
 
-/** 只读目录页：检索词是视图状态，落在 store 里以便切页签时复位。 */
+/** 只读目录页：检索词是视图状态，落在 store 里以便切页签时复位；同步订阅避免中文组字被回写打断。 */
 export function SkillCatalog({ t, hint, skills, emptyText }: SkillCatalogProps): ReactElement {
-  const keyword = useStore(store.skill).keyword
+  const keyword = useStore(store.skill, { sync: true }).keyword
   const matched = filterSummaries(skills, keyword)
 
   return (
