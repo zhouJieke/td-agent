@@ -281,27 +281,6 @@ pub fn install_macos_menu(app: &tauri::AppHandle<Wry>) -> tauri::Result<()> {
         true,
         Some("CmdOrCtrl+,"),
     )?;
-    let profiles = MenuItem::with_id(
-        app,
-        "desktop-profiles",
-        crate::config::i18n::t("menu.profiles"),
-        true,
-        None::<&str>,
-    )?;
-    let plugins = MenuItem::with_id(
-        app,
-        "desktop-plugins",
-        crate::config::i18n::t("menu.plugins"),
-        true,
-        None::<&str>,
-    )?;
-    let harness = MenuItem::with_id(
-        app,
-        "desktop-harness",
-        crate::config::i18n::t("menu.harness"),
-        true,
-        None::<&str>,
-    )?;
     let restart = MenuItem::with_id(
         app,
         "desktop-restart",
@@ -309,7 +288,6 @@ pub fn install_macos_menu(app: &tauri::AppHandle<Wry>) -> tauri::Result<()> {
         true,
         None::<&str>,
     )?;
-    let run_separator = PredefinedMenuItem::separator(app)?;
     let is_fullscreen = app
         .get_webview_window("main")
         .and_then(|window| window.is_fullscreen().ok())
@@ -328,7 +306,7 @@ pub fn install_macos_menu(app: &tauri::AppHandle<Wry>) -> tauri::Result<()> {
         "desktop-run-menu",
         crate::config::i18n::t("menu.run"),
         true,
-        &[&profiles, &plugins, &harness, &run_separator, &restart],
+        &[&restart],
     )?;
     let view_commands = MACOS_VIEW_COMMANDS
         .iter()
@@ -1699,9 +1677,6 @@ pub fn builder() -> tauri::Builder<tauri::Wry> {
                 }
             }
             "desktop-config"
-            | "desktop-profiles"
-            | "desktop-plugins"
-            | "desktop-harness"
             | "desktop-about"
             | "desktop-copy-run-logs"
             | "desktop-toggle-devtools"

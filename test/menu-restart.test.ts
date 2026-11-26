@@ -6,10 +6,10 @@ const i18nSource = readSource('src-tauri/src/config/i18n.rs')
 const navbarSource = readSource('src/layout/components/navbar.tsx')
 
 describe('menu restart backend contract', () => {
-  it('places desktop-restart after the configuration tabs in the Run submenu', () => {
+  it('keeps desktop-restart as the single item in the Run submenu', () => {
     const runMenu = builderSource.match(/"desktop-run-menu",[\s\S]*?&\[([^\]]+)\]/)
     expect(runMenu).not.toBeNull()
-    expect(runMenu![1]).toMatch(/&harness,\s*&run_separator,\s*&restart/)
+    expect(runMenu![1].trim()).toBe('&restart')
   })
 
   it('emits macos-menu-action for desktop-restart in on_menu_event', () => {

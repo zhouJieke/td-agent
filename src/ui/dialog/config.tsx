@@ -1,25 +1,18 @@
 import type { PropsWithOverlays } from '@overlastic/react'
-import type { DshPlugin } from '@/types'
-import { Brush, Cpu, HardDrive, LogoWindows, PersonPencil, Puzzle } from '@gravity-ui/icons'
+import { Brush, HardDrive, LogoWindows } from '@gravity-ui/icons'
 import { cn, Modal } from '@heroui/react'
 import { useDisclosure } from '@overlastic/react'
 import { useListener } from '@reause/core'
-import { useQuery } from '@tanstack/react-query'
-import { invoke } from '@tauri-apps/api/core'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Case, If, Switch } from 'react-if-lite'
+import { Case, Switch } from 'react-if-lite'
 import { hooks } from '@/config/hooks'
-import { queryKeys } from '@/config/query-keys'
 import { ConfigAppearance } from '@/ui/config/appearance'
-import { ConfigCore } from '@/ui/config/core'
 import { ConfigDataDir } from '@/ui/config/data-dir'
 import { ConfigDebug } from '@/ui/config/debug'
-import { ConfigPlugin } from '@/ui/config/plugin'
-import { ConfigProfile } from '@/ui/config/profile'
 
 /** 配置面板标识（左侧导航与顶部「配置」菜单共用同一组值） */
-export type ConfigTab = 'appearance' | 'application' | 'profiles' | 'plugins' | 'harness' | 'dataDir'
+export type ConfigTab = 'appearance' | 'application' | 'dataDir'
 
 export interface ConfigDialogProps extends PropsWithOverlays {
   /** 打开时定位到的面板；缺省为「应用」 */
@@ -29,20 +22,10 @@ export interface ConfigDialogProps extends PropsWithOverlays {
 export function ConfigDialog(props: ConfigDialogProps) {
   const disclosure = useDisclosure({ props })
   const { t } = useTranslation()
-  // 异常插件数：在「插件」Tab 上给出红点/角标，方便用户直接感知出问题的插件。
-  // 与「插件」面板共用同一份查询缓存（根布局订阅后端事件写入）。
-  const { data: plugins = [] } = useQuery({
-    queryKey: queryKeys.plugins,
-    queryFn: () => invoke<DshPlugin[]>('get_dsh_plugins'),
-  })
-  const abnormalCount = plugins.filter(p => p.error != null).length
 
-  const navs: { label: string, value: ConfigTab, icon: typeof Cpu }[] = [
+  const navs: { label: string, value: ConfigTab, icon: typeof LogoWindows }[] = [
     { label: t('config.application'), value: 'application', icon: LogoWindows },
     { label: t('config.appearance'), value: 'appearance', icon: Brush },
-    { label: t('config.profiles'), value: 'profiles', icon: PersonPencil },
-    { label: t('config.plugins'), value: 'plugins', icon: Puzzle },
-    { label: t('config.harness'), value: 'harness', icon: Cpu },
     { label: t('config.dataDir'), value: 'dataDir', icon: HardDrive },
   ]
 
@@ -80,11 +63,6 @@ export function ConfigDialog(props: ConfigDialogProps) {
                       >
                         <item.icon className="w-5 h-5 mr-2" />
                         <span>{item.label}</span>
-                        <If cond={item.value === 'plugins' && abnormalCount > 0}>
-                          <span data-testid="dsh-config-nav-plugins-badge" className="ml-auto flex size-5 items-center justify-center rounded-full bg-danger text-[10px] font-semibold leading-none text-white">
-                            {abnormalCount}
-                          </span>
-                        </If>
                       </button>
                     )
                   })}
@@ -97,15 +75,6 @@ export function ConfigDialog(props: ConfigDialogProps) {
                   </Case>
                   <Case cond="appearance">
                     <ConfigAppearance />
-                  </Case>
-                  <Case cond="profiles">
-                    <ConfigProfile />
-                  </Case>
-                  <Case cond="plugins">
-                    <ConfigPlugin />
-                  </Case>
-                  <Case cond="harness">
-                    <ConfigCore />
                   </Case>
                   <Case cond="dataDir">
                     <ConfigDataDir />

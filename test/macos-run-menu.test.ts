@@ -78,22 +78,18 @@ describe('macOS native menu', () => {
       expect(builderSource).toContain(`PredefinedMenuItem::${item}(app, Some(&crate::config::i18n::t("menu.${item}")))`)
   })
 
-  it('places Profiles, Plugins, Core and Restart in the Run submenu', () => {
+  it('keeps Restart as the only item in the Run submenu', () => {
     expect(submenuItems('desktop-run-menu')).toEqual([
-      '&profiles',
-      '&plugins',
-      '&harness',
-      '&run_separator',
       '&restart',
     ])
     expect(builderSource).toMatch(/"desktop-run-menu",\s*crate::config::i18n::t\("menu.run"\)/)
+    for (const action of ['desktop-profiles', 'desktop-plugins', 'desktop-harness']) {
+      expect(builderSource).not.toContain(`"${action}"`)
+    }
   })
 
   it.each([
     ['desktop-config', 'application', 'menu.settings', '设置…', 'Settings…'],
-    ['desktop-profiles', 'profiles', 'menu.profiles', '档案管理…', 'Manage Profiles…'],
-    ['desktop-plugins', 'plugins', 'menu.plugins', '插件管理…', 'Manage Plugins…'],
-    ['desktop-harness', 'harness', 'menu.harness', '核心管理…', 'Manage Core…'],
   ])('routes %s from its native item to the %s configuration tab', (action, tab, key, zh, en) => {
     expect(builderSource).toMatch(new RegExp(`MenuItem::with_id\\(\\s*app,\\s*"${action}",\\s*crate::config::i18n::t\\("${key}"\\)`))
     const eventHandler = builderSource.slice(builderSource.indexOf('.on_menu_event(|app, event|'))
@@ -158,9 +154,6 @@ describe('macOS native menu', () => {
 
     for (const action of [
       'desktop-config',
-      'desktop-profiles',
-      'desktop-plugins',
-      'desktop-harness',
       'desktop-about',
       'desktop-copy-run-logs',
       'desktop-restart',

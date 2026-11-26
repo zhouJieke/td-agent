@@ -54,9 +54,6 @@ type HelpAction = 'toggle-devtools' | 'task-manager' | 'keyboard-shortcuts' | 'c
 const CONFIG_TABS = [
   { id: 'application', labelKey: 'config.application' },
   { id: 'appearance', labelKey: 'config.appearance' },
-  { id: 'profiles', labelKey: 'config.profiles' },
-  { id: 'plugins', labelKey: 'config.plugins' },
-  { id: 'harness', labelKey: 'config.harness' },
   { id: 'dataDir', labelKey: 'config.dataDir' },
 ] as const
 
@@ -315,15 +312,6 @@ export function Navbar({ sidebarCollapsed = false, onToggleSidebar, onNewChat, o
         break
       case 'desktop-config':
         handleOpenConfig('application')
-        break
-      case 'desktop-profiles':
-        handleOpenConfig('profiles')
-        break
-      case 'desktop-plugins':
-        handleOpenConfig('plugins')
-        break
-      case 'desktop-harness':
-        handleOpenConfig('harness')
         break
       case 'desktop-about':
         handleOpenAbout()
