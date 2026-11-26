@@ -14,7 +14,7 @@ interface ManageViewProps {
 
 /** 管理页：选择员工并整份覆盖保存其技能名单。 */
 export function ManageView({ t }: ManageViewProps): ReactElement {
-  const state = useStore(store.skill)
+  const state = useStore(store.skill, { sync: true })
   const [selected, setSelected] = useState<string[]>(() => [...state.manageMine?.skillNames ?? []])
   const [lastMine, setLastMine] = useState(state.manageMine)
   const [pending, setPending] = useState(false)

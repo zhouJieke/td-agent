@@ -11,7 +11,7 @@ import { MarkdownPreview } from './markdown'
 import { policyTag } from './skills-tab.utils'
 
 export function LocalSkills({ t, createSkill, showDirectoryAndImport }: { t: Translate, createSkill: () => Promise<void>, showDirectoryAndImport: boolean }): ReactElement {
-  const state = useStore(store.localSkills)
+  const state = useStore(store.localSkills, { sync: true })
   const fileRef = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState(false)
   useMount(() => {
