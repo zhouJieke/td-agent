@@ -11,6 +11,8 @@ afterEach(() => {
 function activate() {
   const listeners: ((table: IndexInjectRow[]) => void)[] = []
   const on = vi.fn((event: string, listener: (table: IndexInjectRow[]) => void) => {
+    if (event === 'system-prompt/assemble')
+      return () => {}
     expect(event).toBe('webserver/index-inject')
     listeners.push(listener)
     return () => {
