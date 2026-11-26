@@ -36,7 +36,6 @@ export const LOCALE_EFFECT = `${PLUGIN_ID}: locale`
 export const SEAT_EFFECT = `${PLUGIN_ID}: shell.overlay seat`
 export const SECTIONS_EFFECT = `${PLUGIN_ID}: settings sections projection`
 export const SETTINGS_EFFECT = `${PLUGIN_ID}: settings panel`
-export const OBSTRUCTIONS_EFFECT = `${PLUGIN_ID}: settings obstructions`
 export const SETTINGS_OPEN_EFFECT = `${PLUGIN_ID}: settings deep-link`
 export const HERO_WORKSPACE_EFFECT = `${PLUGIN_ID}: hero workspace picker`
 export const NEW_SESSION_EFFECT = `${PLUGIN_ID}: sidebar new session`
@@ -48,10 +47,6 @@ export const TURN_NAVIGATION_SELECTOR = `:is(nav[aria-label="${TURN_NAVIGATION_L
 export const TURN_NAVIGATION_SLOT_SELECTOR = `div:has(> ${TURN_NAVIGATION_SELECTOR})`
 
 export const SETTINGS_TRIGGER_PRIORITY = -1
-
-export const SETTINGS_UNDERLAY_SLOT_KEYS = ['sidebar', 'main', 'rightbar'] as const
-export const SETTINGS_EXTERNAL_OVERLAY_SELECTORS = ['[data-dsh-better-sidebar]', '[data-dsh-panel]'] as const
-export const SIDEBAR_WIDTH_PROPERTY = '--dsh-sidebar-width'
 
 export const RAIL_WIDTH_MIN = 264
 export const RAIL_WIDTH_MAX = 420

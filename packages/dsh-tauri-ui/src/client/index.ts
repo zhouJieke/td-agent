@@ -1,7 +1,7 @@
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { ClientContext } from 'dsh-tauri/client'
 import { PLUGIN_ID } from '../shared/constants'
-import { HERO_WORKSPACE_EFFECT, LOCALE_EFFECT, NEW_SESSION_EFFECT, OBSTRUCTIONS_EFFECT, SECTIONS_EFFECT, SETTINGS_EFFECT, SETTINGS_OPEN_EFFECT, STYLES_EFFECT, UNGROUPED_NEW_SESSION_EFFECT } from './constants'
+import { HERO_WORKSPACE_EFFECT, LOCALE_EFFECT, NEW_SESSION_EFFECT, SECTIONS_EFFECT, SETTINGS_EFFECT, SETTINGS_OPEN_EFFECT, STYLES_EFFECT, UNGROUPED_NEW_SESSION_EFFECT } from './constants'
 import { locale } from './locales'
 import { registerBranding } from './register/branding'
 import { composerResumeFeature } from './register/composer-resume'
@@ -9,7 +9,6 @@ import { registerContinueNotice } from './register/continue-notice'
 import { registerDesktopSettings } from './register/desktop-settings'
 import { heroWorkspaceFeature } from './register/hero-workspace'
 import { sidebarNewSessionFeature, ungroupedNewSessionFeature } from './register/new-session'
-import { registerSettingsObstructions } from './register/obstructions'
 import { registerSettingsSections } from './register/sections'
 import { registerSettings } from './register/settings'
 import { registerSettingsOpen } from './register/settings-open'
@@ -42,7 +41,6 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(registerStyles, STYLES_EFFECT)
   ctx.effect(registerSettingsSections, SECTIONS_EFFECT)
   ctx.effect(registerSettings, SETTINGS_EFFECT)
-  ctx.effect(registerSettingsObstructions, OBSTRUCTIONS_EFFECT)
   ctx.effect(heroWorkspaceFeature, HERO_WORKSPACE_EFFECT)
   ctx.effect(sidebarNewSessionFeature, NEW_SESSION_EFFECT)
   ctx.effect(registerSettingsOpen, SETTINGS_OPEN_EFFECT)

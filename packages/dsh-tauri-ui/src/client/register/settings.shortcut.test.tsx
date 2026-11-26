@@ -5,6 +5,8 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useSyncExternalStore } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { store } from '../store'
+import globalStyle, { GLOBAL_STYLE_ID } from '../styles/global.cssr'
+import { mountStyle } from '../utils/style'
 import { registerSettings } from './settings'
 
 const modal = vi.hoisted(() => ({ available: true, useModalLayer: vi.fn(), mount: vi.fn() }))
@@ -214,6 +216,30 @@ function activate(owner?: unknown) {
 }
 
 describe('patched settings shortcut store route', () => {
+  it('点击返回应用后恢复侧栏和主内容的可见性', () => {
+    const underlay = document.createElement('div')
+    underlay.innerHTML = '<div id="app-sidebar"><div data-slot="sidebar">Sessions</div></div><div id="app-main"><div data-slot="main">Home</div></div>'
+    document.body.append(underlay)
+    disposers.push(() => underlay.remove())
+    disposers.push(mountStyle(globalStyle, GLOBAL_STYLE_ID))
+    const host = activate()
+    render(<host.Overlays />)
+    const sidebar = underlay.querySelector<HTMLElement>('#app-sidebar')!
+    const main = underlay.querySelector<HTMLElement>('#app-main')!
+
+    for (let index = 0; index < 5; index++) {
+      act(() => store.settings.openAt())
+      expect(getComputedStyle(sidebar).display).toBe('none')
+      expect(getComputedStyle(main).display).toBe('none')
+
+      fireEvent.click(screen.getByRole('button', { name: 'back' }))
+
+      expect(screen.queryByRole('dialog')).toBeNull()
+      expect(getComputedStyle(sidebar).display).toBe('block')
+      expect(getComputedStyle(main).display).toBe('block')
+    }
+  })
+
   it('opens the replacement from the existing command and resets the hidden shell for reopening', () => {
     const owner = createOfficialShell()
     const host = activate(owner.handle)
