@@ -6,6 +6,7 @@ import { useModalLayer } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SlotOutlet } from '@deepseek-ai/dsh-client-ui-renderer'
 import { clamp, cn, isEmpty, useEventListener, useStore } from 'dsh-tauri/client'
 import { useEffect, useRef, useState } from 'react'
+import { PLUGIN_ID } from '../../shared/constants'
 import { Icon } from '../components/icon'
 import { ArrowLeft, Cubes3Overlap, Database, Gear, LayoutSplitSideContentRight, PersonPencil, Puzzle, Smartphone, Tray } from '../components/icons'
 import { Input } from '../components/official'
@@ -18,6 +19,7 @@ import {
 
 import { locale } from '../locales'
 import { store } from '../store'
+import settingsUnderlayStyle from '../styles/settings-underlay.cssr'
 
 export interface SettingsSidebarProps {
   useSessions: SelectorHook<SessionListState>
@@ -108,6 +110,7 @@ export function SettingsSidebar(_props: SettingsSidebarProps): ReactElement | nu
 
   return (
     <>
+      <style data-plugin={PLUGIN_ID}>{settingsUnderlayStyle.render()}</style>
       <div
         ref={dialogRef}
         style={ui.chatContentWidth === undefined ? undefined : { '--dsh-chat-content-width': ui.chatContentWidth } as CSSProperties}

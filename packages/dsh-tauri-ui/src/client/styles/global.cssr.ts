@@ -7,14 +7,6 @@ const { c } = cssr
 const INPUT_DOCK_SELECTOR = '[data-slot="conversation.input.dock"]:has(> :nth-child(3 of :not([data-dsh-tauri-worktree-mode-anchor])))'
 
 export default c([
-  c('html:has([data-slot-sidebar="dsh-tauri-ui"])', {
-    '--dsh-sidebar-width': '0 !important',
-  }, [
-    c(':has(> [data-slot="sidebar"]), :has(> [data-slot="main"]), :has(> [data-slot="rightbar"]), [data-dsh-better-sidebar], [data-dsh-panel]', {
-      display: 'none !important',
-      width: '0 !important',
-    }),
-  ]),
   c(`:where(${INPUT_DOCK_SELECTOR})`, {
     display: 'flex !important',
     flexDirection: 'column',

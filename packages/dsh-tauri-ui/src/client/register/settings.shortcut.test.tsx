@@ -216,9 +216,9 @@ function activate(owner?: unknown) {
 }
 
 describe('patched settings shortcut store route', () => {
-  it('点击返回应用后恢复侧栏和主内容的可见性', () => {
+  it('设置开合保留主界面布局，返回应用后立即恢复可见性', () => {
     const underlay = document.createElement('div')
-    underlay.innerHTML = '<div id="app-sidebar"><div data-slot="sidebar">Sessions</div></div><div id="app-main"><div data-slot="main">Home</div></div>'
+    underlay.innerHTML = '<style>html{--dsh-sidebar-width:280px}#app-sidebar{width:280px}#app-main{display:flex;width:840px}</style><div id="app-sidebar"><div data-slot="sidebar">Sessions</div></div><div id="app-main"><div data-slot="main">Home</div></div>'
     document.body.append(underlay)
     disposers.push(() => underlay.remove())
     disposers.push(mountStyle(globalStyle, GLOBAL_STYLE_ID))
@@ -229,14 +229,26 @@ describe('patched settings shortcut store route', () => {
 
     for (let index = 0; index < 5; index++) {
       act(() => store.settings.openAt())
-      expect(getComputedStyle(sidebar).display).toBe('none')
-      expect(getComputedStyle(main).display).toBe('none')
+      const underlayStyle = screen.getByRole('dialog').previousElementSibling!
+      expect(underlayStyle.tagName).toBe('STYLE')
+      expect(underlayStyle.getAttribute('data-plugin')).toBe('dsh-tauri-ui')
+      expect(getComputedStyle(sidebar).display).toBe('block')
+      expect(getComputedStyle(sidebar).width).toBe('280px')
+      expect(getComputedStyle(sidebar).visibility).toBe('hidden')
+      expect(getComputedStyle(main).display).toBe('flex')
+      expect(getComputedStyle(main).width).toBe('840px')
+      expect(getComputedStyle(main).visibility).toBe('hidden')
+      expect(getComputedStyle(document.documentElement).getPropertyValue('--dsh-sidebar-width')).toBe('280px')
 
       fireEvent.click(screen.getByRole('button', { name: 'back' }))
 
       expect(screen.queryByRole('dialog')).toBeNull()
+      expect(underlayStyle.isConnected).toBe(false)
       expect(getComputedStyle(sidebar).display).toBe('block')
-      expect(getComputedStyle(main).display).toBe('block')
+      expect(getComputedStyle(sidebar).visibility).toBe('visible')
+      expect(getComputedStyle(main).display).toBe('flex')
+      expect(getComputedStyle(main).width).toBe('840px')
+      expect(getComputedStyle(main).visibility).toBe('visible')
     }
   })
 
