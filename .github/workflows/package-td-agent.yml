@@ -12,6 +12,7 @@ on:
         options:
           - all
           - macos
+          - macos-aarch64
           - windows
         default: all
 
@@ -25,9 +26,10 @@ concurrency:
 jobs:
   macos:
     name: Package macOS
-    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'macos'
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'macos' || inputs.platform == 'macos-aarch64'
     uses: ./.github/workflows/build-macos.yml
     with:
+      platform_filter: ${{ inputs.platform == 'macos-aarch64' && 'macos-aarch64' || 'all' }}
       source_ref: ${{ github.sha }}
     secrets:
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
