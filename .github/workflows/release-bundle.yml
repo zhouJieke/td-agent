@@ -305,7 +305,7 @@ jobs:
               [ -f "$file" ] || continue
               base="$(basename "$file")"
               ext="${base##*.}"
-              cp "$file" "upload/Td-Agent_Bundle_${VERSION}${suffix}.${ext}"
+              cp "$file" "upload/问小达_Bundle_${VERSION}${suffix}.${ext}"
             done
           done
           find upload -type f -print | sort

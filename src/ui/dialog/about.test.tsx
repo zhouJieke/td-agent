@@ -12,7 +12,7 @@ const { desktopUpdater } = vi.hoisted(() => ({
       publishedAt: '2026-10-07T18:09:41Z',
       copyright: 'Copyright test',
       repo: 'https://github.com/dsh-tauri/deepseek-harness-desktop',
-      poweredBy: 'Td-Agent',
+      poweredBy: '问小达',
     },
     loadAbout: vi.fn(),
   },
@@ -48,7 +48,7 @@ afterEach(() => {
 describe('desktop about native payload', () => {
   it('renders the product name returned by the native command', async () => {
     openDialog()
-    expect((await screen.findByText('Td-Agent')).textContent).toBe('Td-Agent')
+    expect((await screen.findByText('问小达')).textContent).toBe('问小达')
   })
 
   it('renders the release date returned by the native command', async () => {

@@ -1,4 +1,4 @@
-export const BRAND_NAME = 'Td-Agent'
+export const BRAND_NAME = '问小达'
 export const BRAND_MARK_PATH = 'M10 18h24v7h-8v23h-8V25h-8ZM35 18h6c10 0 15 5.5 15 15s-5 15-15 15h-6Zm8 8v14c3.5-.8 5-3.1 5-7s-1.5-6.2-5-7Z'
 export const BRAND_COLOR = '#6154e8'
 export const BRAND_ACCENT = '#77eddb'

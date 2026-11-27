@@ -17,8 +17,8 @@ function assetRepo(version: string) {
   mkdirSync(path.join(repo, 'src-tauri'))
   writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ version }))
   writeFileSync(path.join(repo, 'src-tauri/Cargo.toml'), `[package]\nversion = "${version}"\n`)
-  writeFileSync(path.join(repo, 'src-tauri/tauri.conf.json'), JSON.stringify({ productName: 'DSH Tauri', version }))
-  writeFileSync(path.join(repo, 'src-tauri/tauri.nightly.conf.json'), JSON.stringify({ productName: 'DSH Tauri Nightly' }))
+  writeFileSync(path.join(repo, 'src-tauri/tauri.conf.json'), JSON.stringify({ productName: '问小达', version }))
+  writeFileSync(path.join(repo, 'src-tauri/tauri.nightly.conf.json'), JSON.stringify({ productName: '问小达 Nightly' }))
   return repo
 }
 
@@ -123,8 +123,8 @@ describe('nightly release notes', () => {
 
 describe('nightly release assets', () => {
   it.each([
-    { product: 'DSH Tauri', version: '0.22.4' },
-    { product: 'DSH Tauri Nightly', version: '0.0.0-nightly.20261007.gabc1234' },
+    { product: '问小达', version: '0.22.4' },
+    { product: '问小达 Nightly', version: '0.0.0-nightly.20261007.gabc1234' },
   ])('normalizes $product bundles without changing their bytes or architecture suffixes', ({ product, version }) => {
     const repo = assetRepo(version)
     const suffixes = ['x64-setup.exe', 'x64_en-US.msi', 'x64_zh-CN.msi', 'aarch64.dmg', 'x64.dmg', 'amd64.AppImage', 'amd64.deb', 'amd64.AppImage.sig']
@@ -139,7 +139,7 @@ describe('nightly release assets', () => {
     renameAssets(repo, ...directories)
     for (const [index, suffix] of suffixes.entries()) {
       const directory = directories[index]!
-      const filename = `Td-Agent_${version}_${suffix}`
+      const filename = `问小达_${version}_${suffix}`
       expect(readdirSync(directory).sort()).toEqual([filename, 'intermediate'].sort())
       expect(readFileSync(path.join(directory, filename), 'utf8')).toBe(`signed-${suffix}`)
     }
@@ -147,9 +147,9 @@ describe('nightly release assets', () => {
   })
 
   it('refuses to overwrite an existing downloadable asset', () => {
-    const repo = assetRepo('0.22.4')
-    const original = path.join(repo, 'DSH Tauri_0.22.4_x64-setup.exe')
-    const target = path.join(repo, 'Td-Agent_0.22.4_x64-setup.exe')
+    const repo = assetRepo('0.0.0-nightly.20261007.gabc1234')
+    const original = path.join(repo, '问小达 Nightly_0.0.0-nightly.20261007.gabc1234_x64-setup.exe')
+    const target = path.join(repo, '问小达_0.0.0-nightly.20261007.gabc1234_x64-setup.exe')
     writeFileSync(original, 'new installer')
     writeFileSync(target, 'already signed installer')
 
@@ -224,6 +224,8 @@ describe('nightly release assets', () => {
     const legacy = suffixes.flatMap(suffix => [
       `Deepseek.Harness.Desktop_0.0.0_${suffix}`,
       `Td-Agent_0.0.0-nightly.20261006.gabc1234_${suffix}`,
+      `同小达_0.0.0-nightly.20261006.gabc1234_${suffix}`,
+      `问小达_0.0.0-nightly.20261006.gabc1234_${suffix}`,
     ])
     let nextId = 1
     const releases = new Map([
@@ -234,7 +236,7 @@ describe('nightly release assets', () => {
       releases.set(tag, { id: 30, assets: preserved.map(name => ({ id: nextId++, name })) })
 
     for (const [day, sha] of [['20261007', 'abc1234'], [tag.slice('nightly-'.length), 'def5678']]) {
-      const manifest = suffixes.map(suffix => `Td-Agent_0.0.0-nightly.${day}.g${sha}_${suffix}`)
+      const manifest = suffixes.map(suffix => `问小达_0.0.0-nightly.${day}.g${sha}_${suffix}`)
       for (const file of readdirSync(path.join(assetsDir, 'windows')))
         rmSync(path.join(assetsDir, 'windows', file))
       for (const name of manifest)
