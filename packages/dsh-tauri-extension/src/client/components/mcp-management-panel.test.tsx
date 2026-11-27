@@ -135,7 +135,10 @@ describe('独立 MCP 管理页面', () => {
     await screen.findByText('高德地图 MCP')
     expect(screen.getByText('1 MCPs').textContent).toBe('1 MCPs')
     expect(screen.getByText('amap-maps-streamableHTTP').textContent).toBe('amap-maps-streamableHTTP')
-    expect(screen.getByText('streamable-http').textContent).toBe('streamable-http')
+    expect(within(screen.getByRole('tabpanel')).queryByText('streamable-http')).toBeNull()
+    const install = screen.getByRole('button', { name: 'Install' })
+    expect(install.textContent).toBe('')
+    expect(install.querySelector('svg')).not.toBeNull()
     expect(invoke).toHaveBeenCalledExactlyOnceWith('desktop_auth_request', { method: 'GET', path: '/api/employee-mcps?pageNo=1&pageSize=20', body: null })
     expect(screen.getByRole('button', { name: 'Refresh enterprise catalog' }).hasAttribute('disabled')).toBe(false)
     expect(screen.getByRole('button', { name: 'Add custom MCP' }).hasAttribute('disabled')).toBe(false)
@@ -237,7 +240,9 @@ describe('独立 MCP 管理页面', () => {
     expect(postMcpToggle).toHaveBeenLastCalledWith({ id: 'employee-mcp-amap-maps-streamableHTTP', disabled: false, scope: 'profile' })
     await waitFor(() => expect(postMcpCheck).toHaveBeenCalledTimes(2))
     fireEvent.click(screen.getByRole('tab', { name: 'Enterprise MCPs' }))
-    expect((await screen.findByRole('button', { name: 'Installed' })).hasAttribute('disabled')).toBe(true)
+    await screen.findByText('No enterprise MCPs found. Try another keyword.')
+    expect(within(screen.getByRole('tabpanel')).queryByText('amap-maps-streamableHTTP')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Install' })).toBeNull()
     fireEvent.click(screen.getByRole('tab', { name: 'Installed 1' }))
     fireEvent.click(screen.getByRole('button', { name: 'Uninstall' }))
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Uninstall this MCP?' })).getByRole('button', { name: 'Uninstall' }))
@@ -258,6 +263,37 @@ describe('独立 MCP 管理页面', () => {
     expect(postMcp).not.toHaveBeenCalled()
     expect(install.hasAttribute('disabled')).toBe(false)
     expect(screen.getByRole('tab', { name: 'Enterprise MCPs' }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  it.each([
+    { scope: 'global' as const, disabled: false },
+    { scope: 'profile' as const, disabled: true },
+  ])('企业目录隐藏 $scope 范围已安装项，保留自定义同名项的安装入口', async ({ scope, disabled }) => {
+    vi.mocked(getMcp).mockResolvedValue({ servers: [
+      { id: 'employee-mcp-amap-maps-streamableHTTP', serverName: 'installed-maps', transport: 'stdio', command: 'node', disabled, scope },
+      { id: 'mcp-docs', serverName: '文档助手 MCP', transport: 'stdio', command: 'node', disabled: false, scope: 'profile' },
+    ], restartNeeded: false })
+    vi.mocked(invoke).mockImplementation(async (_command, args) => ({
+      code: 0,
+      data: (args as { path: string }).path.endsWith('/meta')
+        ? []
+        : { ...enterprisePage, totalCount: 2, items: [...enterprisePage.items, { id: 'docs', name: '文档助手 MCP', transport: 'stdio' }] },
+    }))
+    render(<McpTab t={locale.text} />)
+    await screen.findByText('installed-maps')
+    fireEvent.click(screen.getByRole('tab', { name: 'Enterprise MCPs' }))
+
+    const enterprise = within(screen.getByRole('tabpanel'))
+    await enterprise.findByText('docs')
+    expect(enterprise.queryByText('高德地图 MCP')).toBeNull()
+    expect(enterprise.queryByText('amap-maps-streamableHTTP')).toBeNull()
+    expect(enterprise.getByText('文档助手 MCP').textContent).toBe('文档助手 MCP')
+    expect(enterprise.getAllByRole('button', { name: 'Install' })).toHaveLength(1)
+    expect(enterprise.getByRole('button', { name: 'Install' }).hasAttribute('disabled')).toBe(false)
+    fireEvent.click(screen.getByRole('tab', { name: 'Installed 2' }))
+    const installed = within(screen.getByRole('tabpanel'))
+    expect(installed.getByText('installed-maps').textContent).toBe('installed-maps')
+    expect(installed.getByRole('switch', { name: 'Enable or disable MCP: installed-maps' }).getAttribute('aria-checked')).toBe(String(!disabled))
   })
 
   it('开关或卸载失败保留原状态，卸载弹窗允许重试', async () => {

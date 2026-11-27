@@ -40,7 +40,7 @@ export function SkillCatalog({ t, hint, skills, emptyText }: SkillCatalogProps):
         t={t}
         skills={matched}
         emptyText={isEmpty(keyword) ? emptyText : t('list.emptyMatch')}
-        actions={skill => <SkillDownloadAction t={t} name={skill.name} latestVersion={skill.labels.latest} />}
+        actions={skill => <SkillDownloadAction t={t} name={skill.name} latestVersion={skill.labels.latest} className="bg-hover text-primary" />}
         onSelect={openSkillDetail}
       />
     </div>

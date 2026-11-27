@@ -54,7 +54,7 @@ function useSkillDownload({ t, name, latestVersion }: SkillDownloadProps) {
   }
 }
 
-export function SkillDownloadAction({ t, name, latestVersion }: SkillDownloadProps): ReactElement {
+export function SkillDownloadAction({ t, name, latestVersion, className }: SkillDownloadProps & { className?: string }): ReactElement {
   const d = useSkillDownload({ t, name, latestVersion })
   const { canUpdate, knownLocal, localVersion, targetVersion } = d
 
@@ -62,6 +62,7 @@ export function SkillDownloadAction({ t, name, latestVersion }: SkillDownloadPro
     <>
       <Action
         variant="toolbar"
+        className={className}
         icon={<Icon as={d.installed ? Check : d.unavailable ? TriangleExclamation : Plus} />}
         aria-label={d.label}
         title={d.label}
@@ -71,6 +72,7 @@ export function SkillDownloadAction({ t, name, latestVersion }: SkillDownloadPro
       {canUpdate && targetVersion !== null && (
         <Action
           variant="toolbar"
+          className={className}
           icon={<Icon as={ArrowRotateRight} />}
           aria-label={d.updateLabel}
           title={d.updateLabel}

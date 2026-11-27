@@ -47,7 +47,7 @@ vi.mock('dsh-tauri-ui/client', () => {
     TerminalLine: Empty,
     TrashBin: Empty,
     Button: ({ children, disabled, onClick }: { children?: ReactNode, disabled?: boolean, onClick?: () => void }) => <button disabled={disabled} onClick={onClick}>{children}</button>,
-    Card: Object.assign(({ children }: { children?: ReactNode }) => <article>{children}</article>, { List: Content, Title: Content, TitleRow: Content, Description: Content }),
+    Card: Object.assign(({ children }: { children?: ReactNode }) => <article>{children}</article>, { List: Content, Content, Title: Content, TitleRow: Content, Description: Content }),
     Icon: Empty,
     Input: Empty,
     SegmentedControl: Empty,
