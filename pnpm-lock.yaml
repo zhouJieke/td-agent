@@ -1015,9 +1015,6 @@ importers:
 
   packages/dsh-tauri-bundle:
     dependencies:
-      '@changfenhuang/dsh-genui':
-        specifier: catalog:plugins
-        version: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/changfenhuang-dsh-genui-0.16.0.tgz(d19b0a5ab8169e9f297e9a20b8e0ff92)
       '@max-null/dsh-chinese-thinking':
         specifier: catalog:plugins
         version: https://tdcunchu.oss-cn-beijing.aliyuncs.com/agent/max-null-dsh-chinese-thinking-0.3.1.tgz(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-system-prompt@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5)(@deepseek-ai/dsh-llm@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5))(@deepseek-ai/dsh-scope@0.2.1-rc.2(@deepseek-ai/cordis@4.0.5)))
