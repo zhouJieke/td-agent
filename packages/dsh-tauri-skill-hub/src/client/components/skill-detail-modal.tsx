@@ -1,17 +1,18 @@
 import type { ReactElement } from 'react'
 import type { Translate } from '../locales/index.types'
-import { Action, Button, Checkbox, Icon, Modal, SegmentedControl, Text, Textarea, Xmark } from 'dsh-tauri-ui/client'
+import { Action, Checkbox, Icon, Modal, SegmentedControl, Text, Textarea, Xmark } from 'dsh-tauri-ui/client'
 import { useStore } from 'dsh-tauri/client'
 import { useState } from 'react'
 import { closeSkillDetail } from '../service/skill'
 import { store } from '../store'
 import { MarkdownPreview } from './markdown'
-import { SkillDownloadHints } from './skill-download'
+import { SkillDownloadHints, SkillInstallButton } from './skill-download'
 import { SkillIcon } from './skill-icon'
 
 export function SkillDetailModal({ t }: { t: Translate }): ReactElement {
   const [preview, setPreview] = useState(true)
-  const detail = useStore(store.skill).detail
+  const state = useStore(store.skill)
+  const detail = state.detail
 
   return (
     <Modal
@@ -19,13 +20,16 @@ export function SkillDetailModal({ t }: { t: Translate }): ReactElement {
       open={detail !== null}
       onClose={closeSkillDetail}
       title={t('viewSkill')}
-      className="w-[min(760px,100%)]! rounded-[28px]! p-0!"
+      className="w-[min(640px,100%)]! rounded-[28px]! p-0!"
     >
       {detail !== null && (
         <div className="flex min-h-0 flex-col gap-[24px] p-[24px]" style={{ maxHeight: 'calc(100dvh - 48px)' }}>
           <header className="flex shrink-0 items-start gap-[20px]">
             <SkillIcon name={detail.name} />
-            <h2 className="m-0 min-w-0 flex-1 break-words text-primary text-[24px] leading-[32px] font-semibold">{detail.name}</h2>
+            <div className="flex h-[48px] min-w-0 flex-1 flex-col items-start justify-between">
+              <h2 className="m-0 max-w-full truncate text-primary text-[20px] leading-[22px] font-semibold" title={detail.name}>{detail.name}</h2>
+              <SkillInstallButton t={t} name={detail.name} latestVersion={detail.latestVersion} />
+            </div>
             <Action variant="round" icon={<Icon as={Xmark} size={20} />} aria-label={t('close')} title={t('close')} onClick={closeSkillDetail} />
           </header>
 
@@ -47,7 +51,7 @@ export function SkillDetailModal({ t }: { t: Translate }): ReactElement {
                     </div>
                   </>
                 )
-              : detail.contentLoading
+              : detail.contentLoading || state.installedNames.includes(detail.name)
                 ? null
                 : <Text tone="tertiary" size="sm">{t('skill.detailNoLocal')}</Text>}
             {detail.contentLoading && <Text tone="tertiary" size="sm">{t('loading')}</Text>}
@@ -72,10 +76,6 @@ export function SkillDetailModal({ t }: { t: Translate }): ReactElement {
               </div>
             )}
           </div>
-
-          <footer className="flex shrink-0 items-center justify-end">
-            <Button variant="ghost" onClick={closeSkillDetail}>{t('close')}</Button>
-          </footer>
         </div>
       )}
     </Modal>

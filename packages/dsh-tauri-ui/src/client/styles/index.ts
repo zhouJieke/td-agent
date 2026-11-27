@@ -520,6 +520,9 @@ const TAILWINDCSS_GENERATED = `
   .w-\\[calc\\(100\\%_-_2_\\*_var\\(--dsh-composer-side-clearance\\)_-_4_\\*_var\\(--dsh-composer-dock-inset\\)\\)\\] {
     width: calc(100% - 2 * var(--dsh-composer-side-clearance) - 4 * var(--dsh-composer-dock-inset));
   }
+  .w-\\[min\\(640px\\,100\\%\\)\\]\\! {
+    width: min(640px, 100%) !important;
+  }
   .w-\\[min\\(680px\\,100\\%\\)\\]\\! {
     width: min(680px, 100%) !important;
   }

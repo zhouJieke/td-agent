@@ -41,17 +41,45 @@ function useSkillDownload({ t, name, latestVersion }: SkillDownloadProps) {
   return {
     busy,
     canUpdate,
+    checking,
     confirmUnknown,
     knownLocal,
     label,
     installed,
     localVersion,
+    pending,
     setConfirmUnknown,
     targetVersion,
     unavailable,
     updatable,
     updateLabel,
   }
+}
+
+export function SkillInstallButton({ t, name, latestVersion }: SkillDownloadProps): ReactElement {
+  const d = useSkillDownload({ t, name, latestVersion })
+  const text = d.installed
+    ? 'skill.installed'
+    : d.pending
+      ? 'skill.installing'
+      : d.unavailable
+        ? 'skill.statusUnavailable'
+        : d.checking
+          ? 'skill.checking'
+          : 'skill.install'
+
+  return (
+    <Button
+      variant="add"
+      className="h-[22px] rounded-sm px-[16px] text-[12px] leading-[18px]"
+      aria-label={d.label}
+      title={d.label}
+      disabled={d.busy || d.installed}
+      onClick={() => void downloadSkill(name)}
+    >
+      {t(text)}
+    </Button>
+  )
 }
 
 export function SkillDownloadAction({ t, name, latestVersion, className }: SkillDownloadProps & { className?: string }): ReactElement {

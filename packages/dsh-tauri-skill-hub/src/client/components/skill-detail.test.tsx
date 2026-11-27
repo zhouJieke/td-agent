@@ -142,7 +142,8 @@ describe('企业技能只读详情', () => {
     const dialog = await view.findByRole('dialog', { name: 'View skill' })
 
     const closes = within(dialog).getAllByRole('button', { name: 'Close' })
-    fireEvent.click(closes[closes.length - 1])
+    expect(closes).toHaveLength(1)
+    fireEvent.click(closes[0])
 
     expect(store.skill.detail).toBeNull()
     await waitFor(() => expect(view.queryByLabelText('Description')).toBeNull())
