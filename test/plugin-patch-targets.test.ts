@@ -5,6 +5,7 @@ import { readSource } from './setup/read-source'
 const OFFICIAL_ROW_TARGETS = [
   'dsh-tauri → ui-sidebar-browser',
   'dsh-tauri → session-log-deepseek',
+  'dsh-tauri → ui-settings-session-log',
   'dsh-tauri-model → ui-settings-models',
   'dsh-tauri-scheduler → schedule',
   'dsh-tauri-scheduler → ui-schedule',
