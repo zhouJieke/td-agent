@@ -42,3 +42,4 @@ jobs:
     uses: ./.github/workflows/build-windows.yml
     with:
       source_ref: ${{ github.sha }}
+      build_msi: false

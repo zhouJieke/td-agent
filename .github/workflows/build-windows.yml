@@ -6,6 +6,10 @@ on:
       source_ref:
         required: true
         type: string
+      build_msi:
+        required: false
+        type: boolean
+        default: true
       version:
         description: 注入的版本号；为空时沿用仓库内版本，仅夜间构建使用
         required: false
@@ -76,15 +80,18 @@ jobs:
         run: pnpm tauri build ${{ inputs.version != '' && '--config src-tauri/tauri.nightly.conf.json' || '' }} --config release-msi-version.tmp.json --no-bundle
 
       - name: Bundle MSI installers
+        if: inputs.build_msi
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm tauri bundle ${{ inputs.version != '' && '--config src-tauri/tauri.nightly.conf.json' || '' }} --config release-msi-version.tmp.json --bundles msi
 
       - name: Normalize MSI names
+        if: inputs.build_msi
         run: node scripts/rename-release-assets.mjs src-tauri/target/release/bundle/msi
 
       - name: Upload MSI installers
+        if: inputs.build_msi
         uses: actions/upload-artifact@v6
         with:
           name: release-windows-msi
