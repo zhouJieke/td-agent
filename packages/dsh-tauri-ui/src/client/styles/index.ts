@@ -520,6 +520,9 @@ const TAILWINDCSS_GENERATED = `
   .w-\\[calc\\(100\\%_-_2_\\*_var\\(--dsh-composer-side-clearance\\)_-_4_\\*_var\\(--dsh-composer-dock-inset\\)\\)\\] {
     width: calc(100% - 2 * var(--dsh-composer-side-clearance) - 4 * var(--dsh-composer-dock-inset));
   }
+  .w-\\[min\\(640px\\,100\\%\\)\\]\\! {
+    width: min(640px, 100%) !important;
+  }
   .w-\\[min\\(680px\\,100\\%\\)\\]\\! {
     width: min(680px, 100%) !important;
   }
@@ -820,6 +823,9 @@ const TAILWINDCSS_GENERATED = `
   }
   .rounded-\\[18px\\] {
     border-radius: 18px;
+  }
+  .rounded-\\[28px\\]\\! {
+    border-radius: 28px !important;
   }
   .rounded-full {
     border-radius: calc(infinity * 1px);
@@ -1252,6 +1258,9 @@ const TAILWINDCSS_GENERATED = `
   }
   .text-\\[16px\\] {
     font-size: 16px;
+  }
+  .text-\\[18px\\] {
+    font-size: 18px;
   }
   .text-\\[20px\\] {
     font-size: 20px;

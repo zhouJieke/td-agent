@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apply } from './index'
 import { registerBranding } from './register/branding'
 import { registerContinueNotice } from './register/continue-notice'
+import { registerMessageFeedback } from './register/message-feedback'
 import { registerSettings } from './register/settings'
 
 vi.mock('./components', () => ({}))
@@ -10,6 +11,7 @@ vi.mock('./components/segmented-control', () => ({}))
 vi.mock('./hooks/use-mount-style', () => ({}))
 vi.mock('./locales', () => ({ locale: { registerLocale: vi.fn() } }))
 vi.mock('./register/branding', () => ({ registerBranding: vi.fn() }))
+vi.mock('./register/message-feedback', () => ({ registerMessageFeedback: vi.fn() }))
 vi.mock('./register/composer-resume', () => ({ composerResumeFeature: vi.fn() }))
 vi.mock('./register/continue-notice', () => ({ registerContinueNotice: vi.fn() }))
 vi.mock('./register/desktop-settings', () => ({ registerDesktopSettings: vi.fn() }))
@@ -35,8 +37,9 @@ describe('ui client settings effect registration', () => {
     apply({ effect } as unknown as Parameters<typeof apply>[0])
 
     expect(effect).toHaveBeenCalledWith(registerSettings, 'dsh-tauri-ui: settings panel')
-    expect(effect).toHaveBeenCalledTimes(12)
+    expect(effect).toHaveBeenCalledTimes(13)
     expect(effect).toHaveBeenCalledWith(registerBranding, 'dsh-tauri-ui: branding')
+    expect(effect).toHaveBeenCalledWith(registerMessageFeedback, 'dsh-tauri-ui: message feedback')
     expect(effect).toHaveBeenCalledWith(registerContinueNotice, 'dsh-tauri-ui: continue notice')
     expect(effect).toHaveBeenCalledWith(expect.any(Function), 'dsh-tauri-ui: styles')
     expect(effect.mock.calls.some(([, name]) => name.includes('mobile'))).toBe(false)

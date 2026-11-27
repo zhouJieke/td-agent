@@ -22,7 +22,7 @@ export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..
 export const APP_PORT = 3081
 
 /** 应用主窗口标题（`src-tauri/src/desktop/builder.rs:484`）。 */
-export const APP_TITLE = 'Td-Agent'
+export const APP_TITLE = '问小达'
 
 /**
  * 主窗口的 webview label，同时也是 WebDriver 的 window handle

@@ -1,5 +1,10 @@
 - id: ui-sidebar-browser
   disabled: true
+- id: session-log-deepseek
+  config:
+    enabled: false
+- id: ui-settings-session-log
+  disabled: true
 - insert:
     - id: dsh-tauri
       name: dsh-tauri

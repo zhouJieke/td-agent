@@ -1,19 +1,17 @@
 import type { KeyboardEvent, MouseEvent, ReactElement, ReactNode } from 'react'
 import type { Translate } from '../locales/index.types'
 import type { SkillSummary } from '../types'
-import { Card, GraduationCap, Icon, Tag } from 'dsh-tauri-ui/client'
+import { Card, Tag } from 'dsh-tauri-ui/client'
 import { parseBizTags } from '../store/modules/skill.utils'
+import { SkillIcon } from './skill-icon'
 
 interface SkillCardProps {
   t: Translate
   skill: SkillSummary
-  /** 行尾操作区，由管理页传入；只读页面不传。 */
   actions?: ReactNode
-  /** 传入后整卡可点击，打开只读详情弹窗。 */
   onSelect?: (skill: SkillSummary) => void
 }
 
-/** 技能摘要卡片：展示技能名称、简介与业务标签；整卡可点击时打开只读详情。 */
 export function SkillCard({ t, skill, actions, onSelect }: SkillCardProps): ReactElement {
   const tags = parseBizTags(skill.bizTags)
   const activate = (): void => onSelect?.(skill)
@@ -40,25 +38,25 @@ export function SkillCard({ t, skill, actions, onSelect }: SkillCardProps): Reac
   return (
     <Card
       variant={onSelect === undefined ? 'default' : 'link'}
-      className="flex flex-col gap-[6px] px-[14px] py-[12px]"
+      className="mx-0 flex flex-col gap-[10px] rounded-[18px] border border-border-l2 bg-layer-3 px-[16px] py-[12px] transition-colors focus-visible:shadow-focus-ring focus-visible:outline-none"
       {...interaction}
     >
-      <div className="flex items-center gap-[10px]">
-        <Card.Icon className="h-[36px] w-[36px] shrink-0 rounded-full">
-          <Icon as={GraduationCap} size={18} />
-        </Card.Icon>
-        <Card.Title className="min-w-0 flex-1" title={skill.name}>
-          {skill.name}
-        </Card.Title>
+      <div className="flex items-start gap-[14px]">
+        <SkillIcon name={skill.name} />
+        <Card.Content className="gap-[6px]">
+          <Card.Title className="text-[15px] leading-[22px]" title={skill.name}>
+            {skill.name}
+          </Card.Title>
+          <Card.Description className="text-secondary leading-[20px]" title={skill.description ?? undefined}>
+            {skill.description ?? t('skill.noDescription')}
+          </Card.Description>
+        </Card.Content>
         {actions === undefined ? null : <Card.End>{actions}</Card.End>}
       </div>
-      <Card.Description className="line-clamp-2" title={skill.description ?? undefined}>
-        {skill.description ?? t('skill.noDescription')}
-      </Card.Description>
       {tags.length === 0
         ? null
         : (
-            <div className="flex flex-wrap items-center gap-[6px]">
+            <div className="mt-auto flex flex-wrap items-center gap-[6px]">
               {tags.map(tag => <Tag key={tag} tone="neutral">{tag}</Tag>)}
             </div>
           )}

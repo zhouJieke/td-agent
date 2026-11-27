@@ -389,7 +389,7 @@ jobs:
             const path = require('node:path');
             const files = fs.readdirSync(path.join(process.env.RUNNER_TEMP, 'release-assets'), { recursive: true, withFileTypes: true });
             const keep = new Set(files.filter(file => file.isFile()).map(file => file.name));
-            const nightlyAsset = /^(?:Td-Agent|Deepseek\.Harness\.Desktop)_0\.0\.0(?:-nightly(?:\.[0-9A-Za-z-]+)*)?_[^/\\]+\.(?:exe|msi|dmg|AppImage|deb)(?:\.sig)?$/;
+            const nightlyAsset = /^(?:问小达|同小达|Td-Agent|Deepseek\.Harness\.Desktop)_0\.0\.0(?:-nightly(?:\.[0-9A-Za-z-]+)*)?_[^/\\]+\.(?:exe|msi|dmg|AppImage|deb)(?:\.sig)?$/;
             for (const tag of [process.env.NIGHTLY_TAG, 'nightly']) {
               const { data: release } = await github.rest.repos.getReleaseByTag({ ...context.repo, tag });
               const assets = await github.paginate(github.rest.repos.listReleaseAssets, { ...context.repo, release_id: release.id, per_page: 100 });

@@ -1,8 +1,7 @@
 import { spawnSync } from 'node:child_process'
-import { copyFileSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import process from 'node:process'
-import { brandSvg } from '../assets/branding'
 
 const root = resolve(import.meta.dirname, '..')
 const cli = join(root, 'node_modules/@tauri-apps/cli/tauri.js')
@@ -15,15 +14,18 @@ function run(args: string[]) {
     throw new Error(`ICON_GENERATION_FAILED: exit ${result.status}`)
 }
 
-for (const [file, options] of [
-  ['favicon.svg', {}],
-  ['deepseek-harness-desktop-tauri.svg', {}],
-  ['deepseek-harness-desktop-tauri-nightly.svg', { nightly: true }],
-  ['deepseek-harness-desktop-tauri-square.svg', { square: true }],
-] as const) {
-  writeFileSync(join(root, 'public', file), brandSvg(options))
+for (const file of [
+  'favicon.svg',
+  'deepseek-harness-desktop-tauri.svg',
+  'deepseek-harness-desktop-tauri-nightly.svg',
+  'deepseek-harness-desktop-tauri-square.svg',
+]) {
+  copyFileSync(join(root, 'assets/brand-logo.svg'), join(root, 'public', file))
 }
-writeFileSync(join(root, 'assets/macos-tray.svg'), brandSvg({ template: true }))
+
+const uiOutput = join(root, '.temp/desktop-icons/ui')
+run([cli, 'icon', 'public/favicon.svg', '--output', uiOutput, '--png', '512'])
+copyFileSync(join(uiOutput, '512x512.png'), join(root, 'assets/brand-mark.png'))
 
 for (const variant of ['stable', 'nightly']) {
   const suffix = variant === 'nightly' ? '-nightly' : ''

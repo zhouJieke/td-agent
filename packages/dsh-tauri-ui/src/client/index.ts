@@ -8,6 +8,7 @@ import { composerResumeFeature } from './register/composer-resume'
 import { registerContinueNotice } from './register/continue-notice'
 import { registerDesktopSettings } from './register/desktop-settings'
 import { heroWorkspaceFeature } from './register/hero-workspace'
+import { registerMessageFeedback } from './register/message-feedback'
 import { sidebarNewSessionFeature, ungroupedNewSessionFeature } from './register/new-session'
 import { registerSettingsSections } from './register/sections'
 import { registerSettings } from './register/settings'
@@ -37,6 +38,7 @@ const CONTINUE_NOTICE_EFFECT = `${PLUGIN_ID}: continue notice`
 
 export function apply(ctx: ClientContext): void {
   ctx.effect(registerBranding, `${PLUGIN_ID}: branding`)
+  ctx.effect(registerMessageFeedback, `${PLUGIN_ID}: message feedback`)
   ctx.effect(locale.registerLocale, LOCALE_EFFECT)
   ctx.effect(registerStyles, STYLES_EFFECT)
   ctx.effect(registerSettingsSections, SECTIONS_EFFECT)

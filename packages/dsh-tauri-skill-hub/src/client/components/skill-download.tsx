@@ -41,11 +41,13 @@ function useSkillDownload({ t, name, latestVersion }: SkillDownloadProps) {
   return {
     busy,
     canUpdate,
+    checking,
     confirmUnknown,
     knownLocal,
     label,
     installed,
     localVersion,
+    pending,
     setConfirmUnknown,
     targetVersion,
     unavailable,
@@ -54,7 +56,33 @@ function useSkillDownload({ t, name, latestVersion }: SkillDownloadProps) {
   }
 }
 
-export function SkillDownloadAction({ t, name, latestVersion }: SkillDownloadProps): ReactElement {
+export function SkillInstallButton({ t, name, latestVersion }: SkillDownloadProps): ReactElement {
+  const d = useSkillDownload({ t, name, latestVersion })
+  const text = d.installed
+    ? 'skill.installed'
+    : d.pending
+      ? 'skill.installing'
+      : d.unavailable
+        ? 'skill.statusUnavailable'
+        : d.checking
+          ? 'skill.checking'
+          : 'skill.install'
+
+  return (
+    <Button
+      variant="add"
+      className="h-[26px] rounded-[8px] px-[16px] text-[13px] leading-[20px] font-medium"
+      aria-label={d.label}
+      title={d.label}
+      disabled={d.busy || d.installed}
+      onClick={() => void downloadSkill(name)}
+    >
+      {t(text)}
+    </Button>
+  )
+}
+
+export function SkillDownloadAction({ t, name, latestVersion, className }: SkillDownloadProps & { className?: string }): ReactElement {
   const d = useSkillDownload({ t, name, latestVersion })
   const { canUpdate, knownLocal, localVersion, targetVersion } = d
 
@@ -62,6 +90,7 @@ export function SkillDownloadAction({ t, name, latestVersion }: SkillDownloadPro
     <>
       <Action
         variant="toolbar"
+        className={className}
         icon={<Icon as={d.installed ? Check : d.unavailable ? TriangleExclamation : Plus} />}
         aria-label={d.label}
         title={d.label}
@@ -71,6 +100,7 @@ export function SkillDownloadAction({ t, name, latestVersion }: SkillDownloadPro
       {canUpdate && targetVersion !== null && (
         <Action
           variant="toolbar"
+          className={className}
           icon={<Icon as={ArrowRotateRight} />}
           aria-label={d.updateLabel}
           title={d.updateLabel}

@@ -23,14 +23,12 @@ for (const [source, output] of [
   ['deepseek-harness-desktop-tauri.svg', ''],
   ['deepseek-harness-desktop-tauri-nightly.svg', 'nightly'],
 ]) {
-  const svg = readFileSync(join(root, 'public', source), 'utf8').match(/<svg[^>]*>([\s\S]*)<\/svg>/)?.[1]
-  if (!svg)
-    throw new Error(`ICON_SOURCE_INVALID: public/${source}`)
   const work = join(temp, output || 'stable')
   mkdirSync(work, { recursive: true })
+  const svg = readFileSync(join(root, 'public', source), 'utf8')
+    .replace('<svg ', '<svg x="100" y="100" width="824" height="824" ')
   const master = join(work, 'macos.svg')
-  // issue #88：1024px Apple 网格保留 824px 内容和 100px 透明边距，避免 Dock 图标过大。
-  writeFileSync(master, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><g transform="translate(100 100) scale(12.875)">${svg}</g></svg>\n`)
+  writeFileSync(master, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">${svg}</svg>\n`)
   generate(master, work)
   copyFileSync(join(work, 'icon.icns'), join(root, 'src-tauri', 'icons', output, 'icon.icns'))
 }

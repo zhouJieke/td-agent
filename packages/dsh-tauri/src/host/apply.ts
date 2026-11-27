@@ -2,6 +2,7 @@ import type { ConnectionHost, HostContext } from './types'
 import process from 'node:process'
 import { PLUGIN_ID } from '../shared/constants'
 import { MEDIA_RECORDER_SHIM_SCRIPT } from './media-recorder-shim'
+import { desktopIdentity } from './prompts/desktop-identity'
 import { server } from './server'
 import { gate } from './service/gate'
 
@@ -22,6 +23,7 @@ export function apply(ctx: HostContext): void {
   ctx.effect(() => gate.attach(ctx as unknown as ConnectionHost), GATE_EFFECT)
   ctx.effect(() => server(ctx), ROUTES_EFFECT)
   if (process.env.DSH_TAURI_EMBEDDED === '1') {
+    ctx.on('system-prompt/assemble', desktopIdentity)
     ctx.effect(() => ctx.on('webserver/index-inject', (table) => {
       table.push({ kind: 'script', placement: 'head', text: ACCOUNT_MARKER_SCRIPT })
     }), ACCOUNT_EFFECT)

@@ -438,6 +438,7 @@ export function McpTab({ t }: McpTabProps): ReactElement {
   const visibleCards = cards.filter(card => card.searchText.includes(query))
   const loaded = servers !== null && loadError === ''
   const installedIds = new Set((servers ?? []).map(row => row.id))
+  const enterpriseCards = (enterprisePage?.items ?? []).filter(item => !installedIds.has(`${EMPLOYEE_MCP_ID_PREFIX}${item.id}`))
 
   return (
     <div className="box-border flex flex-col gap-[24px] font-sans text-primary text-[13px] leading-[1.5]">
@@ -493,39 +494,42 @@ export function McpTab({ t }: McpTabProps): ReactElement {
 
       <If cond={tab === 'enterprise'}>
         <section id={`${tabsId}-enterprise-panel`} role="tabpanel" aria-labelledby={`${tabsId}-enterprise`} aria-busy={enterpriseLoading} className="flex flex-col gap-[16px]">
-          <If cond={enterpriseLoading}>
+          <If cond={enterpriseLoading || servers === null}>
             <Text size="sm" tone="tertiary" role="status">{t('loading')}</Text>
           </If>
           <If cond={enterpriseError !== ''}>
             <Text tone="error" role="alert">{failText(t, new Error(enterpriseError === 'EMPLOYEE_MCP_INVALID_RESPONSE' ? t('enterpriseMcpInvalidResponse') : enterpriseError))}</Text>
           </If>
-          <If cond={enterprisePage !== null}>
-            <If cond={enterprisePage?.items.length === 0}>
+          <If cond={enterprisePage !== null && servers !== null}>
+            <If cond={enterpriseCards.length === 0}>
               <div className="flex flex-col items-center gap-[12px] rounded-xl border border-dashed border-border-l3 bg-layer-1 px-[24px] py-[64px] text-center">
                 <span className="inline-flex h-[56px] w-[56px] items-center justify-center rounded-xl bg-module-platform text-tertiary"><Icon as={PlugConnection} size={26} /></span>
                 <Text>{t('enterpriseMcpEmpty')}</Text>
               </div>
             </If>
-            <Card.List className="grid grid-cols-[repeat(2,minmax(0,1fr))] items-stretch gap-[16px] max-[680px]:grid-cols-[minmax(0,1fr)]">
-              {enterprisePage?.items.map(item => (
-                <Card key={item.id} className="mx-0 flex flex-col gap-[20px] rounded-xl border-border-l2 bg-layer-1 p-[20px] transition-colors hover:border-border-l3">
-                  <div className="flex items-center gap-[12px] min-w-0">
-                    <McpIcon name={item.name} transport={item.transport} iconUrl={item.iconUrl} />
-                    <div className="flex min-w-0 flex-col gap-[4px]">
-                      <Card.Title className="font-medium text-[15px]" title={item.name}>{item.name}</Card.Title>
-                      <Card.Description className="text-[12px]" title={item.id}>{item.id}</Card.Description>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between gap-[8px] border-0 border-t border-solid border-border-l2 pt-[12px]">
-                    <Tag variant="version" tone="neutral">{item.transport}</Tag>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={busy || !loaded || globalError !== '' || installedIds.has(`${EMPLOYEE_MCP_ID_PREFIX}${item.id}`)}
-                      onClick={() => void doInstall(item.id)}
-                    >
-                      {t(installing === item.id ? 'mcpInstalling' : installedIds.has(`${EMPLOYEE_MCP_ID_PREFIX}${item.id}`) ? 'mcpAlreadyInstalled' : 'installMcp')}
-                    </Button>
+            <Card.List
+              className="grid items-stretch gap-[16px]"
+              style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))' }}
+            >
+              {enterpriseCards.map(item => (
+                <Card key={item.id} className="mx-0 flex flex-col gap-[10px] rounded-[18px] border border-border-l2 bg-layer-3 px-[16px] py-[12px] transition-colors">
+                  <div className="flex items-start gap-[14px]">
+                    <McpIcon name={item.name} transport={item.transport} iconUrl={item.iconUrl} className="h-[48px] w-[48px] rounded-[14px]" />
+                    <Card.Content className="gap-[6px]">
+                      <Card.Title className="text-[15px] leading-[22px]" title={item.name}>{item.name}</Card.Title>
+                      <Card.Description className="text-secondary leading-[20px]" title={item.id}>{item.id}</Card.Description>
+                    </Card.Content>
+                    <Card.End>
+                      <Action
+                        variant="toolbar"
+                        className="bg-hover text-primary"
+                        icon={<Icon as={Plus} />}
+                        aria-label={t(installing === item.id ? 'mcpInstalling' : 'installMcp')}
+                        title={t(installing === item.id ? 'mcpInstalling' : 'installMcp')}
+                        disabled={busy || !loaded || globalError !== '' || installedIds.has(`${EMPLOYEE_MCP_ID_PREFIX}${item.id}`)}
+                        onClick={() => void doInstall(item.id)}
+                      />
+                    </Card.End>
                   </div>
                 </Card>
               ))}
@@ -561,28 +565,31 @@ export function McpTab({ t }: McpTabProps): ReactElement {
             </div>
           </If>
           <If cond={loaded && visibleCards.length > 0}>
-            <Card.List className="grid grid-cols-[repeat(2,minmax(0,1fr))] items-stretch gap-[16px] max-[680px]:grid-cols-[minmax(0,1fr)]">
+            <Card.List
+              className="grid items-stretch gap-[16px]"
+              style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))' }}
+            >
               {visibleCards.map(({ row, key, description, credentials, displayName, iconUrl, waiting }) => (
-                <Card key={key} className="mx-0 flex flex-col gap-[16px] rounded-xl border-border-l2 bg-layer-1 p-[20px] transition-colors hover:border-border-l3">
-                  <div className="flex items-center gap-[12px] min-w-0">
+                <Card key={key} className="mx-0 flex flex-col gap-[10px] rounded-[18px] border border-border-l2 bg-layer-3 px-[16px] py-[12px] transition-colors">
+                  <div className="flex items-start gap-[14px]">
                     {row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX)
                       ? (
-                          <McpIcon name={displayName} transport={row.transport} iconUrl={iconUrl} />
+                          <McpIcon name={displayName} transport={row.transport} iconUrl={iconUrl} className="h-[48px] w-[48px] rounded-[14px]" />
                         )
                       : (
-                          <span aria-hidden="true" className="inline-flex h-[40px] w-[40px] flex-none items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--dsw-alias-state-business-primary)_8%,transparent)] text-business"><Icon as={row.transport === 'stdio' ? TerminalLine : PlugConnection} size={22} /></span>
+                          <span aria-hidden="true" className="inline-flex h-[48px] w-[48px] flex-none items-center justify-center rounded-[14px] bg-[color-mix(in_srgb,var(--dsw-alias-state-business-primary)_8%,transparent)] text-business"><Icon as={row.transport === 'stdio' ? TerminalLine : PlugConnection} size={26} /></span>
                         )}
-                    <div className="flex min-w-0 flex-1 flex-col gap-[4px]">
+                    <Card.Content className="gap-[6px]">
                       <Card.TitleRow>
-                        <Card.Title className="font-medium text-[15px]" title={displayName}>{displayName}</Card.Title>
+                        <Card.Title className="min-w-0 flex-1 text-[15px] leading-[22px]" title={displayName}>{displayName}</Card.Title>
                         <Tag tone={row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX) ? 'info' : 'quiet'}>{t(row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX) ? 'enterpriseConnector' : 'localConnector')}</Tag>
                       </Card.TitleRow>
-                    </div>
+                      {row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX) ? null : <Card.Description className="text-secondary leading-[20px] break-all" title={description}>{description}</Card.Description>}
+                    </Card.Content>
                     <span className="flex-none">
                       <Switch checked={!row.disabled} onChange={() => void doToggle(row)} label={`${t('toggleMcp')}: ${row.serverName}`} title={`${t('toggleMcpHint')} · ${t(row.disabled ? 'disabled' : 'enabled')}`} disabled={busy || row.shadowed === true} />
                     </span>
                   </div>
-                  {row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX) ? null : <Card.Description className="rounded-lg bg-module-platform px-[10px] py-[8px] font-mono text-[11px] leading-[18px] text-secondary line-clamp-1 break-all" title={description}>{description}</Card.Description>}
                   <If cond={!row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX) && credentials.length > 0}>
                     <div className="flex min-w-0 flex-col gap-[8px]">
                       <div className="flex items-center justify-between gap-[8px]">
@@ -598,38 +605,35 @@ export function McpTab({ t }: McpTabProps): ReactElement {
                         </Button>
                       </div>
                       {credentials.length > 0 && (
-                            <dl className="m-0 flex min-w-0 flex-col gap-[8px]">
-                              {credentials.map(({ source, name, value }) => (
-                                <div key={`${source}:${name}`} className="flex min-w-0 flex-col gap-[4px]">
-                                  <dt className="flex min-w-0 items-center gap-[6px] text-[12px] text-secondary">
-                                    <span className="flex-none">{source}</span>
-                                    <span className="min-w-0 truncate font-mono">{name}</span>
-                                  </dt>
-                                  <dd className="m-0 line-clamp-1 overflow-hidden rounded-lg bg-module-platform px-[10px] py-[8px] font-mono text-[11px] leading-[18px] text-secondary">{revealedCredentials.includes(key) ? value : '••••••••'}</dd>
-                                </div>
-                              ))}
-                            </dl>
-                          )}
+                        <dl className="m-0 flex min-w-0 flex-col gap-[8px]">
+                          {credentials.map(({ source, name, value }) => (
+                            <div key={`${source}:${name}`} className="flex min-w-0 flex-col gap-[4px]">
+                              <dt className="flex min-w-0 items-center gap-[6px] text-[12px] text-secondary">
+                                <span className="flex-none">{source}</span>
+                                <span className="min-w-0 truncate font-mono">{name}</span>
+                              </dt>
+                              <dd className="m-0 line-clamp-1 overflow-hidden rounded-lg bg-module-platform px-[10px] py-[8px] font-mono text-[11px] leading-[18px] text-secondary">{revealedCredentials.includes(key) ? value : '••••••••'}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      )}
                     </div>
                   </If>
                   <If cond={row.shadowed === true}>
                     <Text tone="error" size="xs">{t('shadowedByGlobal')}</Text>
                   </If>
-                  <div className="flex items-center justify-between gap-[8px] border-0 border-t border-solid border-border-l2 pt-[12px] mt-auto">
-                    <Tag variant="version" tone="neutral" className="min-w-0 max-w-full truncate">{row.transport}</Tag>
-                    <div className="flex flex-none items-center gap-[4px]">
-                      {row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX) ? null : <Action variant="model" aria-label={t('edit')} title={t('edit')} disabled={busy} onClick={() => openEdit(row)}><Icon as={Gear} size={16} /></Action>}
-                      <Action variant="model" className="hover:not-disabled:text-error" aria-label={t('uninstallMcp')} title={t('uninstallMcp')} disabled={busy} onClick={() => setConfirmRow(row)}><Icon as={TrashBin} size={16} /></Action>
-                      <Button
-                        variant="outline"
-                        className="flex-none whitespace-nowrap rounded-lg px-[10px] text-[12px]"
-                        size="sm"
-                        disabled={busy || row.disabled || row.shadowed === true || checking !== null || authorizing !== null || waiting}
-                        onClick={() => void (requiresAuth[key] ? authorize(row) : checkConnectivity(row))}
-                      >
-                        {authorizing === key ? t('authorizationRunning') : waiting ? t('checkRunning') : t(requiresAuth[key] ? 'authorizeLabel' : 'checkLabel')}
-                      </Button>
-                    </div>
+                  <div className="mt-auto flex items-center justify-end gap-[4px] border-0 border-t border-solid border-border-l2 pt-[12px]">
+                    {row.id.startsWith(EMPLOYEE_MCP_ID_PREFIX) ? null : <Action variant="toolbar" className="bg-hover text-primary" aria-label={t('edit')} title={t('edit')} disabled={busy} onClick={() => openEdit(row)}><Icon as={Gear} size={16} /></Action>}
+                    <Action variant="toolbar" className="bg-hover text-primary hover:not-disabled:text-error" aria-label={t('uninstallMcp')} title={t('uninstallMcp')} disabled={busy} onClick={() => setConfirmRow(row)}><Icon as={TrashBin} size={16} /></Action>
+                    <Button
+                      variant="outline"
+                      className="h-[28px] flex-none whitespace-nowrap rounded-sm px-[10px] text-[12px]"
+                      size="sm"
+                      disabled={busy || row.disabled || row.shadowed === true || checking !== null || authorizing !== null || waiting}
+                      onClick={() => void (requiresAuth[key] ? authorize(row) : checkConnectivity(row))}
+                    >
+                      {authorizing === key ? t('authorizationRunning') : waiting ? t('checkRunning') : t(requiresAuth[key] ? 'authorizeLabel' : 'checkLabel')}
+                    </Button>
                   </div>
                 </Card>
               ))}

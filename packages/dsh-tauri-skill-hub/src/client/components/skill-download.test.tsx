@@ -6,6 +6,7 @@ import { locale } from '../locales'
 import { downloadSkill, fetchInstalledSkills, updateSkill } from '../service/skill'
 import { store } from '../store'
 import { SkillCatalog } from './skill-catalog'
+import { SkillDetailModal } from './skill-detail-modal'
 import { SkillHubPanel } from './skill-hub-panel'
 
 vi.mock('../service/skill', () => ({
@@ -46,6 +47,7 @@ beforeEach(() => {
   store.skill.setMine(null)
   store.skill.setError('')
   store.skill.setKeyword('')
+  store.skill.setDetail(null)
   store.skill.dismissFeedback()
   store.skill.finishInstalledLoad(store.skill.startInstalledLoad(), [])
   for (const name of store.skill.downloading)
@@ -192,6 +194,57 @@ describe('技能列表下载按钮', () => {
     expect(view.getByRole('button', { name: 'Installation status unavailable for skill alpha' }).hasAttribute('disabled')).toBe(true)
     fireEvent.click(view.getByRole('button', { name: 'Retry' }))
     expect(fetchInstalledSkills).toHaveBeenCalledOnce()
+  })
+})
+
+describe('技能详情安装按钮', () => {
+  beforeEach(() => {
+    store.skill.setDetail({
+      name: 'alpha',
+      description: 'Alpha description',
+      whenToUse: '',
+      modelInvocable: false,
+      userInvocable: false,
+      content: '',
+      local: false,
+      contentLoading: false,
+    })
+  })
+
+  it('详情中的安装按钮按当前技能名调用已有下载流程', () => {
+    const view = render(<SkillDetailModal t={locale.text} />)
+    const dialog = within(view.getByRole('dialog', { name: 'View skill' }))
+    const install = dialog.getByRole('button', { name: 'Download skill alpha' })
+
+    expect(install.textContent).toBe('Install')
+    expect(install.hasAttribute('disabled')).toBe(false)
+    fireEvent.click(install)
+    expect(downloadSkill).toHaveBeenCalledExactlyOnceWith('alpha')
+  })
+
+  it.each([
+    { status: 'pending', label: 'Downloading skill alpha', text: 'Installing…' },
+    { status: 'installed', label: 'Downloaded skill alpha', text: 'Installed' },
+    { status: 'checking', label: 'Checking installation of skill alpha', text: 'Checking…' },
+    { status: 'unavailable', label: 'Installation status unavailable for skill alpha', text: 'Status unavailable' },
+  ])('详情安装状态为 $status 时展示对应文案并禁止重复安装', ({ status, label, text }) => {
+    if (status === 'pending')
+      store.skill.startDownload('alpha')
+    if (status === 'installed')
+      store.skill.markInstalled('alpha')
+    if (status === 'checking')
+      store.skill.startInstalledLoad()
+    if (status === 'unavailable')
+      store.skill.failInstalledLoad(store.skill.startInstalledLoad(), 'permission denied')
+    const view = render(<SkillDetailModal t={locale.text} />)
+    const button = within(view.getByRole('dialog', { name: 'View skill' })).getByRole('button', { name: label })
+
+    expect(button.textContent).toBe(text)
+    expect(button.hasAttribute('disabled')).toBe(true)
+    if (status === 'installed')
+      expect(view.queryByText('This skill is not installed locally; showing name and description only.')).toBeNull()
+    fireEvent.click(button)
+    expect(downloadSkill).not.toHaveBeenCalled()
   })
 })
 

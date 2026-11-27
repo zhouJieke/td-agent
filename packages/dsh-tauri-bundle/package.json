@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "@changfenhuang/dsh-genui": "catalog:plugins",
     "@max-null/dsh-chinese-thinking": "catalog:plugins",
     "@nanmicoder/dsh-agent-teams": "catalog:plugins",
     "@xmanrui/dsh-im": "catalog:plugins",

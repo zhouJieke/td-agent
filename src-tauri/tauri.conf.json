@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Td-Agent",
-  "version": "0.24.6-beta.1",
+  "productName": "问小达",
+  "version": "1.0.0",
   "identifier": "dsh-tauri",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -76,7 +76,7 @@
         "componentRefs": ["CleanupLegacyShortcuts"]
       }
     },
-    "shortDescription": "Td-Agent AI desktop workspace",
-    "longDescription": "Td-Agent is a native AI desktop workspace powered by DeepSeek Harness (dsh), with one-click local setup."
+    "shortDescription": "问小达 AI desktop workspace",
+    "longDescription": "问小达 is a native AI desktop workspace powered by DeepSeek Harness (dsh), with one-click local setup."
   }
 }

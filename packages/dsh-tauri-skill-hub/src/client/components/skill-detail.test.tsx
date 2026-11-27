@@ -100,10 +100,16 @@ describe('企业技能只读详情', () => {
 
     const dialog = await view.findByRole('dialog', { name: 'View skill' })
     expect((await within(dialog).findByText('Alpha guide')).tagName).toBe('H1')
-    expect((within(dialog).getByLabelText('Description') as HTMLInputElement).disabled).toBe(true)
-    expect((within(dialog).getByLabelText('When to use (optional)') as HTMLInputElement).value).toBe('Use for review')
+    expect(within(dialog).getByRole('heading', { level: 2, name: 'alpha' }).textContent).toBe('alpha')
+    expect(within(dialog).getByRole('region', { name: 'Description' }).textContent).toBe('alpha description')
+    expect(within(within(dialog).getByRole('region', { name: 'When to use (optional)' })).getByText('Use for review').textContent).toBe('Use for review')
+    expect(within(dialog).queryByRole('textbox', { name: 'Description' })).toBeNull()
     expect((within(dialog).getByRole('checkbox', { name: 'User-invocable (/)' }) as HTMLInputElement).checked).toBe(false)
     expect(within(dialog).queryByRole('button', { name: 'Save' })).toBeNull()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Plain text' }))
+    const source = within(dialog).getByRole('textbox') as HTMLTextAreaElement
+    expect(source.value).toBe('# Alpha guide')
+    expect(source.readOnly).toBe(true)
   })
 
   it('本地未安装时只展示名称与简介', async () => {
@@ -136,7 +142,8 @@ describe('企业技能只读详情', () => {
     const dialog = await view.findByRole('dialog', { name: 'View skill' })
 
     const closes = within(dialog).getAllByRole('button', { name: 'Close' })
-    fireEvent.click(closes[closes.length - 1])
+    expect(closes).toHaveLength(1)
+    fireEvent.click(closes[0])
 
     expect(store.skill.detail).toBeNull()
     await waitFor(() => expect(view.queryByLabelText('Description')).toBeNull())

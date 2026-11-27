@@ -2,8 +2,7 @@ import { PLUGIN_ID } from './shared/constants'
 
 export const name = PLUGIN_ID
 
-/** 宿主服务依赖：`connection`（注入载体标记时覆写它的两道桌面鉴权闸门）、`webServer`/`workspaceRegistry`（归档推送流）。 */
-export const inject = ['connection', 'webServer', 'workspaceRegistry']
+export const inject = ['connection', 'webServer', 'workspaceRegistry', 'systemPrompt']
 
 export { apply } from './host/apply'
 export * from './host/config/constants'

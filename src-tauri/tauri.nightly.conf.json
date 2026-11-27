@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Td-Agent Nightly",
+  "productName": "问小达 Nightly",
   "identifier": "dsh-tauri-nightly",
   "mainBinaryName": "deepseek-harness-desktop-nightly",
   "plugins": {

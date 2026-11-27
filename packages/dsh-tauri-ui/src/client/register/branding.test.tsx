@@ -43,14 +43,14 @@ describe('desktop branding', () => {
     const dispose = registerBranding.call(ctx)
 
     const name = core.entriesOfSlot('sidebar.brand.name')[0]
-    expect(renderToStaticMarkup(createElement(name.component as ComponentType))).toContain('Td-Agent')
+    expect(renderToStaticMarkup(createElement(name.component as ComponentType))).toContain('问小达')
     for (const [slot, size] of [['sidebar.brand.mark', 24], ['conversation.hero.brand.mark', 34]] as const) {
       const winner = core.entriesOfSlot(slot)[0]
       expect(winner.component).not.toBe(original)
       const markup = renderToStaticMarkup(createElement(winner.component as ComponentType<{ size: number }>, { size }))
       expect(markup).toContain(`width:${size}px;height:${size}px`)
-      expect(markup).toContain('viewBox="0 0 64 64"')
-      expect(markup).toContain('fill="#6154e8"')
+      expect(markup).toContain('<img ')
+      expect(markup).toContain('assets/brand-mark.png')
       expect(markup).not.toContain('<animate')
     }
 
