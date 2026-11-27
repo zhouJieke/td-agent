@@ -71,7 +71,7 @@ export function SkillInstallButton({ t, name, latestVersion }: SkillDownloadProp
   return (
     <Button
       variant="add"
-      className="h-[22px] rounded-sm px-[16px] text-[12px] leading-[18px]"
+      className="h-[26px] rounded-[8px] px-[16px] text-[13px] leading-[20px] font-medium"
       aria-label={d.label}
       title={d.label}
       disabled={d.busy || d.installed}

@@ -27,7 +27,7 @@ export function SkillDetailModal({ t }: { t: Translate }): ReactElement {
           <header className="flex shrink-0 items-start gap-[20px]">
             <SkillIcon name={detail.name} />
             <div className="flex h-[48px] min-w-0 flex-1 flex-col items-start justify-between">
-              <h2 className="m-0 max-w-full truncate text-primary text-[20px] leading-[22px] font-semibold" title={detail.name}>{detail.name}</h2>
+              <h2 className="m-0 max-w-full truncate text-primary text-[18px] leading-[20px] font-semibold" title={detail.name}>{detail.name}</h2>
               <SkillInstallButton t={t} name={detail.name} latestVersion={detail.latestVersion} />
             </div>
             <Action variant="round" icon={<Icon as={Xmark} size={20} />} aria-label={t('close')} title={t('close')} onClick={closeSkillDetail} />

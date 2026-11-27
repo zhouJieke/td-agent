@@ -1256,6 +1256,9 @@ const TAILWINDCSS_GENERATED = `
   .text-\\[16px\\] {
     font-size: 16px;
   }
+  .text-\\[18px\\] {
+    font-size: 18px;
+  }
   .text-\\[20px\\] {
     font-size: 20px;
   }
