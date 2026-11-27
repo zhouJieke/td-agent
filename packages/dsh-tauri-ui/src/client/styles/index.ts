@@ -821,6 +821,9 @@ const TAILWINDCSS_GENERATED = `
   .rounded-\\[18px\\] {
     border-radius: 18px;
   }
+  .rounded-\\[28px\\]\\! {
+    border-radius: 28px !important;
+  }
   .rounded-full {
     border-radius: calc(infinity * 1px);
   }
@@ -1036,9 +1039,6 @@ const TAILWINDCSS_GENERATED = `
   }
   .p-\\[12px\\] {
     padding: 12px;
-  }
-  .p-\\[20px\\] {
-    padding: 20px;
   }
   .p-\\[24px\\] {
     padding: 24px;
@@ -1799,13 +1799,6 @@ const TAILWINDCSS_GENERATED = `
     &:hover {
       @media (hover: hover) {
         border-color: var(--dsw-alias-border-l2);
-      }
-    }
-  }
-  .hover\\:border-border-l3 {
-    &:hover {
-      @media (hover: hover) {
-        border-color: var(--dsw-alias-border-l3);
       }
     }
   }

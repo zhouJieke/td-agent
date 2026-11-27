@@ -1,10 +1,9 @@
 import type { KeyboardEvent, MouseEvent, ReactElement, ReactNode } from 'react'
 import type { Translate } from '../locales/index.types'
 import type { SkillSummary } from '../types'
-import { Card, GraduationCap, Icon, Tag } from 'dsh-tauri-ui/client'
+import { Card, Tag } from 'dsh-tauri-ui/client'
 import { parseBizTags } from '../store/modules/skill.utils'
-
-const ICON_COLORS = ['#537da8', '#ad764c', '#7462c4', '#43867f', '#b76686', '#63854d'] as const
+import { SkillIcon } from './skill-icon'
 
 interface SkillCardProps {
   t: Translate
@@ -15,7 +14,6 @@ interface SkillCardProps {
 
 export function SkillCard({ t, skill, actions, onSelect }: SkillCardProps): ReactElement {
   const tags = parseBizTags(skill.bizTags)
-  const iconColor = ICON_COLORS[Array.from(skill.name).reduce((sum, character) => sum + character.codePointAt(0)!, 0) % ICON_COLORS.length]
   const activate = (): void => onSelect?.(skill)
   const handleKeyDown = (event: KeyboardEvent<HTMLLIElement>): void => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -44,13 +42,7 @@ export function SkillCard({ t, skill, actions, onSelect }: SkillCardProps): Reac
       {...interaction}
     >
       <div className="flex items-start gap-[14px]">
-        <Card.Icon
-          className="h-[48px] w-[48px] shrink-0 rounded-[14px] border-none text-white"
-          style={{ backgroundColor: iconColor }}
-          aria-hidden="true"
-        >
-          <Icon as={GraduationCap} size={26} />
-        </Card.Icon>
+        <SkillIcon name={skill.name} />
         <Card.Content className="gap-[6px]">
           <Card.Title className="text-[15px] leading-[22px]" title={skill.name}>
             {skill.name}
