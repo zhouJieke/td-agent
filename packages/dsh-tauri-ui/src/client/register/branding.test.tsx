@@ -49,8 +49,8 @@ describe('desktop branding', () => {
       expect(winner.component).not.toBe(original)
       const markup = renderToStaticMarkup(createElement(winner.component as ComponentType<{ size: number }>, { size }))
       expect(markup).toContain(`width:${size}px;height:${size}px`)
-      expect(markup).toContain('viewBox="0 0 64 64"')
-      expect(markup).toContain('fill="#6154e8"')
+      expect(markup).toContain('<img ')
+      expect(markup).toContain('assets/brand-mark.png')
       expect(markup).not.toContain('<animate')
     }
 

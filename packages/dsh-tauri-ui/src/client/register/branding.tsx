@@ -1,7 +1,8 @@
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ClientContext } from 'dsh-tauri/client'
 import { defineRegister } from 'dsh-tauri/client'
-import { BRAND_ACCENT, BRAND_COLOR, BRAND_MARK_PATH, BRAND_NAME } from '../../../../../assets/branding'
+import brandMark from '../../../../../assets/brand-mark.png'
+import { BRAND_NAME } from '../../../../../assets/branding'
 import { PLUGIN_ID } from '../../shared/constants'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -16,11 +17,7 @@ const NAME_SLOT = 'sidebar.brand.name'
 
 function BrandMark({ size = 24, className }: { size?: number, className?: string }) {
   return (
-    <svg className={className} aria-hidden="true" viewBox="0 0 64 64" style={{ display: 'block', width: size, height: size, flexShrink: 0, animation: 'none' }}>
-      <rect width="64" height="64" rx="15" fill={BRAND_COLOR} />
-      <path d={BRAND_MARK_PATH} fill="#ffffff" fillRule="evenodd" />
-      <circle cx="51" cy="11" r="3" fill={BRAND_ACCENT} />
-    </svg>
+    <img src={brandMark} className={className} alt="" aria-hidden="true" style={{ display: 'block', width: size, height: size, flexShrink: 0, animation: 'none' }} />
   )
 }
 
